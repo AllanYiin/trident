@@ -11,9 +11,9 @@ import copyreg
 from contextlib import closing, contextmanager
 
 try:
-   import _pickle as pickle
+    import _pickle as pickle
 except:
-   import pickle
+    import pickle
 
 import pathlib
 import inspect
@@ -21,6 +21,7 @@ import tensorflow as tf
 from trident.backend.tensorflow_ops import *
 from trident.data.utils import unpickle, pickle_it
 from trident.context import split_path, make_dir_if_need, sanitize_path
+
 __all__ = ['save', 'load', 'load_pthtar']
 
 string_classes = (str, bytes)
@@ -229,7 +230,7 @@ def storage_to_tensor_type(storage):
 
 def _is_path(name_or_buffer):
     return isinstance(name_or_buffer, str) or \
-           (sys.version_info[0] == 3 and isinstance(name_or_buffer, pathlib.Path))
+        (sys.version_info[0] == 3 and isinstance(name_or_buffer, pathlib.Path))
 
 
 class _opener(object):
@@ -548,7 +549,8 @@ def load_pthtar(f, pickle_module=pickle, **pickle_load_args):
     with _open_file_like(f, 'rb') as opened_file:
         deserialize_obj = None
         if '.tar' in opened_file.name:
-            with closing(tarfile.open(fileobj=opened_file, mode='r:', format=tarfile.PAX_FORMAT)) as tar, mkdtemp() as tmpdir:
+            with closing(tarfile.open(fileobj=opened_file, mode='r:',
+                                      format=tarfile.PAX_FORMAT)) as tar, mkdtemp() as tmpdir:
                 members = tar.getmembers()
                 tar.extract(members[0], path=tmpdir)
                 deserialize_obj = load(os.path.join(tmpdir, members[0].name), 'rb')
@@ -652,7 +654,7 @@ def load(f, map_location=None, pickle_module=pickle, **pickle_load_args):
                 #                   " silence this warning)", UserWarning)
                 #     return jit.load(f)
                 return _load(opened_zipfile, map_location, pickle_module, **pickle_load_args)
-        result= _legacy_load(opened_file, map_location, pickle_module, **pickle_load_args)
+        result = _legacy_load(opened_file, map_location, pickle_module, **pickle_load_args)
         # inp=result.input_shape
         # for module in result.modules():
         #     module._input_shape=None
@@ -799,7 +801,7 @@ def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
             location = _maybe_decode_ascii(location)
             if root_key not in deserialized_objects:
                 obj = data_type(size)
-                #obj._torch_load_uninitialized = True
+                # obj._torch_load_uninitialized = True
                 deserialized_objects[root_key] = restore_location(obj, location)
             storage = deserialized_objects[root_key]
             if view_metadata is not None:
@@ -846,7 +848,7 @@ def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
     unpickler.persistent_load = persistent_load
     result = unpickler.load()
 
-    #deserialized_storage_keys = pickle_module.load(f, **pickle_load_args)
+    # deserialized_storage_keys = pickle_module.load(f, **pickle_load_args)
 
     # offset = f.tell() if f_should_read_directly else None
     # for key in deserialized_storage_keys:
@@ -926,8 +928,3 @@ def _load(zip_file, map_location, pickle_module, **pickle_load_args):
     result = unpickler.load()
 
     return result
-
-
-
-
-

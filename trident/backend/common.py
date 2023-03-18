@@ -2,46 +2,57 @@
 import builtins
 import collections
 import copy
-import json
 import datetime
 import functools
 import importlib
 import inspect
+import json
 import linecache
 import math
 import numbers
 import operator
 import os
-from time import sleep
 import platform
 import re
 import shlex
 import string
 import struct
-import webbrowser
 import subprocess
 import sys
 import time
 import traceback
 import types
+import webbrowser
 from enum import Enum
+from importlib import import_module
 from pydoc import locate
-from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType, Dict
+from time import sleep
+from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType, Dict, List
 
 import numpy as np
 
-__all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabled', 'set_autocast_enabled', 'get_backend', 'get_plateform', 'get_image_backend', 'get_trident_dir',
-           'epsilon', 'floatx', 'import_or_install','compile_and_install_module','is_instance',
-           'check_keys', 'make_sure', 'if_none', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
-           'get_time_suffix', 'get_file_modified_time', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
-           'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'TensorShape', 'unpack_singleton', 'enforce_singleton',
-           'OrderedDict', 'map_function_arguments', 'ClassfierType', 'PaddingMode', 'Signature', 'is_iter', 'get_string_actual_length',
-           'Interpolation', 'is_numpy', 'find_minimal_edit_distance_key', 'jaccard_similarity', 'text_similarity', 'levenshtein', 'is_alphabet', 'is_punctuation',
+from trident.context import make_dir_if_need
+
+__all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabled', 'set_autocast_enabled',
+           'get_backend', 'get_plateform', 'get_image_backend', 'get_trident_dir',
+           'epsilon', 'floatx', 'import_or_install', 'compile_and_install_module', 'is_instance',
+           'check_keys', 'make_sure', 'if_none', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent',
+           'format_time',
+           'get_time_suffix', 'get_file_modified_time', 'get_function', 'get_class', 'get_terminal_size', 'gcd',
+           'get_divisors', 'isprime',
+           'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'TensorShape', 'unpack_singleton',
+           'enforce_singleton',
+           'OrderedDict', 'map_function_arguments', 'ClassfierType', 'PaddingMode', 'Signature', 'is_iter',
+           'get_string_actual_length',
+           'Interpolation', 'is_numpy', 'find_minimal_edit_distance_key', 'jaccard_similarity', 'text_similarity',
+           'levenshtein', 'is_alphabet', 'is_punctuation',
            'remove_nonprintable',
 
            'GetImageMode', 'ShortcutMode', 'adaptive_format', 'num_cpus',
-           'get_args_spec', 'get_gpu_memory_map', 'get_memory_profile', 'red_color', 'green_color', 'cyan_color', 'blue_color', 'orange_color',
-           'gray_color', 'yellow_color','magenta_color','violet_color','open_browser','launchTensorBoard','launchMLFlow','seg_as_sentence']
+           'get_args_spec', 'get_gpu_memory_map', 'get_memory_profile', 'red_color', 'green_color', 'cyan_color',
+           'blue_color', 'orange_color',
+           'gray_color', 'yellow_color', 'magenta_color', 'violet_color', 'open_browser', 'launchTensorBoard',
+           'launchMLFlow', 'seg_as_sentence']
 
 # In some cases, these basic types are shadowed by corresponding
 # top-level values.  The underscore variants let us refer to these
@@ -51,7 +62,8 @@ import six
 from trident import context
 import warnings
 
-from math import e , nan , inf , pi
+from math import e, nan, inf, pi
+
 __all__.extend(['e', 'pi', 'nan', 'inf'])
 
 warnings.simplefilter("ignore")
@@ -60,9 +72,6 @@ _float = builtins.float
 _bool = builtins.bool
 
 _SESSION = context._context()
-
-
-
 
 
 def if_none(a, b):
@@ -225,7 +234,8 @@ def snake2camel(string1):
         return ''.join(x.capitalize() or '_' for x in string1.split('_'))
 
 
-def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Iterable] = None, value_type=None, name=None):
+def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Iterable] = None, value_type=None,
+                    name=None):
     valid_value_type = ['loss', 'metric']
     percentage_name = ['accuracy', 'rate', 'ratio', 'iou', 'recall', 'rmse', 'similarity', 'fitness', 'utility']
 
@@ -247,7 +257,9 @@ def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Itera
         if value_type != 'loss' and all([1.2 >= s >= 0.001 or -0.001 >= s >= -1.2 or s == 0 for s in prev_value]):
             return '{0:.3%}'.format(num)
         elif len(prev_value) > 0:
-            digit = int(np.array([builtins.abs(builtins.min(math.log10(builtins.abs(s)), 0)) + 3 if s != 0 else 0 for s in prev_value]).mean())
+            digit = int(np.array(
+                [builtins.abs(builtins.min(math.log10(builtins.abs(s)), 0)) + 3 if s != 0 else 0 for s in
+                 prev_value]).mean())
             if digit > 8:
                 return '{0:{1}}'.format(num, '.3e')
             elif digit < 4:
@@ -268,7 +280,7 @@ def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Itera
                 return '{0:,}'.format(num)
             elif 1.5 >= num >= 0.001 or -0.001 >= num >= -1.5 or num == 0:
                 return '{0:.3%}'.format(num)
-            elif 10000>num  or num >= -10000:
+            elif 10000 > num or num >= -10000:
                 return '{0:{1}}'.format(num, '.3f')
             else:
                 return '{0:{1}}'.format(num, '.3e')
@@ -298,7 +310,8 @@ def get_string_actual_length(input_string: str):
     """
 
     return builtins.sum(
-        [len(input_string[i].encode("UTF-8")) if len(input_string[i].encode("UTF-8")) == 3 else len(input_string[i].encode("UTF-8")) for i in range(len(input_string))])
+        [len(input_string[i].encode("UTF-8")) if len(input_string[i].encode("UTF-8")) == 3 else len(
+            input_string[i].encode("UTF-8")) for i in range(len(input_string))])
 
 
 def PrintException():
@@ -331,6 +344,7 @@ class DeviceType(object):
 
     type: str  # THPDevice_type
     index: _int  # THPDevice_index
+
 
 #
 # class dtype:
@@ -509,7 +523,7 @@ class TensorShape(object):
                 dims = [d for d in dims]
             self._dims = [d for d in dims]
         elif isinstance(dims, (tuple, list)):  # Most common case.
-            self._dims = [d if isinstance(d, numbers.Integral) else None  for d in dims]
+            self._dims = [d if isinstance(d, numbers.Integral) else None for d in dims]
         elif isinstance(dims, TensorShape):
             self._dims = dims.dims
         else:
@@ -530,7 +544,7 @@ class TensorShape(object):
                                 "could not be converted to a dimension. A shape should "
                                 "either be single dimension (e.g. 10), or an iterable of "
                                 "dimensions (e.g. [1, 10, None])."
-                                    .format(dims, d)), e)
+                                .format(dims, d)), e)
 
     def __repr__(self):
         if self._dims is not None:
@@ -579,14 +593,18 @@ class TensorShape(object):
 
     def is_fully_defined(self):
         """Returns True iff `self` is fully defined in every dimension."""
+
         return (self._dims is not None and all(dim is not None for dim in self.dims))
 
-    def numel(self):
+    def numel(self, batch_size:_int=1):
         """Returns the total number of elements, or none for incomplete shapes."""
         if self.is_fully_defined():
             return functools.reduce(operator.mul, self.tolist(), 1)
         else:
-            return None
+            dims=[k for k in self._dims]
+            if dims[0] is None:
+                dims[0]=batch_size
+            return np.prod(np.array(dims))
 
     def copy(self):
         return copy.deepcopy(self)
@@ -698,7 +716,7 @@ class TensorShape(object):
                     return False
         return True
 
-    def get_dummy_tensor(self,batch_size=2):
+    def get_dummy_tensor(self, batch_size=2):
         shape = [d for d in self._dims]
         if shape[0] is None:
             shape[0] = batch_size
@@ -749,7 +767,8 @@ class OrderedDict(collections.OrderedDict):
         return list(super().items())
 
     def __repr__(self):
-        return '{ ' + (', '.join(['{0}: {1}'.format(k, v if v is not None else 'none') for k, v in self.item_list])) + ' }'
+        return '{ ' + (
+            ', '.join(['{0}: {1}'.format(k, v if v is not None else 'none') for k, v in self.item_list])) + ' }'
 
 
 class Signature(object):
@@ -801,7 +820,8 @@ class Signature(object):
             return '{0}'.format(k)
         elif isinstance(v, (list, tuple)):
             return '{0}: Tensor[{1}]'.format(k, v)
-        elif v.__class__.__name__ == "TensorSpec" and (v.dtype is int or v.dtype is float or v.dtype is str or v.dtype is bool):
+        elif v.__class__.__name__ == "TensorSpec" and (
+                v.dtype is int or v.dtype is float or v.dtype is str or v.dtype is bool):
             return '{0}: {1} '.format(k, v.dtype.__name__) + ('={0}'.format(v.default) if v.optional else '')
         elif v.__class__.__name__ == "TensorSpec" and v.object_type is None:
             return '{0}: Tensor[{1}] '.format(k, v._shape_tuple)
@@ -815,8 +835,10 @@ class Signature(object):
 
     def __repr__(self):
         # ElementTimes(x: Tensor[13]) -> Tensor[13]
-        input_str = ', '.join([self._get_kvsting(k, v) for k, v in self.inputs.item_list]) if len(self.inputs.item_list) > 0 else ''
-        output_str = ', '.join([self._get_kvsting(k, v) for k, v in self.outputs.item_list]) if len(self.outputs.item_list) > 0 else ''
+        input_str = ', '.join([self._get_kvsting(k, v) for k, v in self.inputs.item_list]) if len(
+            self.inputs.item_list) > 0 else ''
+        output_str = ', '.join([self._get_kvsting(k, v) for k, v in self.outputs.item_list]) if len(
+            self.outputs.item_list) > 0 else ''
         return '{0}( {1}) -> {2} '.format(self.name, input_str, output_str)
 
 
@@ -838,6 +860,7 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+
 def compile_and_install_module(module_name: str, source_code: str) -> types.ModuleType:
     """Compile source code and install it as a module.
 
@@ -853,6 +876,7 @@ def compile_and_install_module(module_name: str, source_code: str) -> types.Modu
 
     # Imports should work now
     return import_module(module_name)
+
 
 def import_or_install(package_name: str, install_package_name: str = None) -> None:
     """Import [package_name] if possibile, or install [install_package_name] and then import it
@@ -874,21 +898,21 @@ def import_or_install(package_name: str, install_package_name: str = None) -> No
     except ImportError:
         if install_package_name is None:
             install_package_name = package_name
-        if os.system('PIP --version') ==0:
+        if os.system('PIP --version') == 0:
             # No error from running PIP in the Command Window, therefor PIP.exe is in the %PATH%
             os.system('PIP install {0}  --upgrade'.format(install_package_name))
             importlib.import_module(package_name)
         else:
             # Error, PIP.exe is NOT in the Path!! So I'll try to find it.
             pip_location_attempt_1 = sys.executable.replace("python.exe", "") + "pip.exe"
-            pip_location_attempt_2 = sys.executable.replace("python.exe", "") + "scripts\pip.exe"
+            pip_location_attempt_2 = sys.executable.replace("python.exe", "") + "scripts\\pip.exe"
             if os.path.exists(pip_location_attempt_1):
                 # The Attempt #1 File exists!!!
-                os.system(pip_location_attempt_1 + " install " + install_package_name+'  --upgrade')
+                os.system(pip_location_attempt_1 + " install " + install_package_name + '  --upgrade')
                 importlib.import_module(package_name)
             elif os.path.exists(pip_location_attempt_2):
                 # The Attempt #2 File exists!!!
-                os.system(pip_location_attempt_2 + " install " + install_package_name+'  --upgrade')
+                os.system(pip_location_attempt_2 + " install " + install_package_name + '  --upgrade')
                 importlib.import_module(package_name)
             else:
                 # Neither Attempts found the PIP.exe file, So i Fail...
@@ -1240,11 +1264,13 @@ def find_minimal_edit_distance_key(keys, lookup_keys):
             section_keys_annotation.append((len(set(subdata)), number_parts))
             for n in avaiable_section:
                 sublookup = [item[n] for item in section_lookup_keys]
-                lookup_number_parts = OrderedDict([(item, int(only_keep_number(item))) for item in sublookup if len(only_keep_number(item))])
+                lookup_number_parts = OrderedDict(
+                    [(item, int(only_keep_number(item))) for item in sublookup if len(only_keep_number(item))])
                 lookup_section_distinct = len(set(sublookup))
 
                 if section_distinct == lookup_section_distinct:
-                    if len(lookup_number_parts) == len(set(number_parts)) == section_distinct and len(set(lookup_number_parts.value_list)) == lookup_section_distinct:
+                    if len(lookup_number_parts) == len(set(number_parts)) == section_distinct and len(
+                            set(lookup_number_parts.value_list)) == lookup_section_distinct:
                         if len(set(number_parts)) == len(set(lookup_number_parts.value_list)) == 1:
                             section_dict[k][str(subdata[0])] = sublookup[0]
                             avaiable_section.remove(n)
@@ -1255,13 +1281,15 @@ def find_minimal_edit_distance_key(keys, lookup_keys):
 
                             for item in subdata:
                                 idx = sorted_number_parts.index(int(only_keep_number(item)))
-                                section_dict[k][str(item)] = lookup_number_parts.key_list[lookup_number_parts.value_list.index(sorted_lookup_number_parts[idx])]
+                                section_dict[k][str(item)] = lookup_number_parts.key_list[
+                                    lookup_number_parts.value_list.index(sorted_lookup_number_parts[idx])]
                             avaiable_section.remove(n)
                             break
                     elif len(lookup_number_parts) == len(set(number_parts)) == 0:
                         tmp_lookup_subdata = copy.deepcopy(sublookup)
                         for item in subdata:
-                            candidates_keys = [text_similarity(list(item), key.split('.')) for key in tmp_lookup_subdata]
+                            candidates_keys = [text_similarity(list(item), key.split('.')) for key in
+                                               tmp_lookup_subdata]
                             candidates_keys = np.array(candidates_keys)
                             candidate_idx = np.argmax(candidates_keys)
                             section_dict[k][str(item)] = tmp_lookup_subdata[candidate_idx]
@@ -1348,7 +1376,9 @@ def get_time_suffix():
         timestamp string , usually use when save a file.
 
     """
-    prefix = str(datetime.datetime.fromtimestamp(time.time())).replace(' ', '').replace(':', '').replace('-', '').replace('.', '')
+    prefix = str(datetime.datetime.fromtimestamp(time.time())).replace(' ', '').replace(':', '').replace('-',
+                                                                                                         '').replace(
+        '.', '')
     return prefix
 
 
@@ -1578,12 +1608,11 @@ def nearest_prime(n):
 
 
 def num_cpus():
-    "Get number of cpus"
+    """Get number of cpus"""
     try:
         return len(os.sched_getaffinity(0))
     except AttributeError:
         return os.cpu_count()
-
 
 
 def get_gpu_memory_map():
@@ -1594,29 +1623,31 @@ def get_gpu_memory_map():
     """
     result = subprocess.check_output(
         [
-            'nvidia-smi', '--query-gpu=timestamp,index,name,utilization.gpu,memory.used,memory.free,memory.total,temperature.gpu',
+            'nvidia-smi',
+            '--query-gpu=timestamp,index,name,utilization.gpu,memory.used,memory.free,memory.total,temperature.gpu',
             '--format=csv,nounits'
         ], encoding='utf-8')
     gpu_memory = [x.split(',') for x in result.strip().split('\n')]
 
-    header=[h.strip() for h in gpu_memory[0]]
-    memory_map_list=[]
-    for n in range(1,len(gpu_memory)):
+    header = [h.strip() for h in gpu_memory[0]]
+    memory_map_list = []
+    for n in range(1, len(gpu_memory)):
         memory_map = OrderedDict()
-        for i,(k,v) in enumerate(zip(header,gpu_memory[n])):
-            if i==0:
-                memory_map[k]=datetime.datetime.strptime(v, "%Y/%m/%d %H:%M:%S.%f")
+        for i, (k, v) in enumerate(zip(header, gpu_memory[n])):
+            if i == 0:
+                memory_map[k] = datetime.datetime.strptime(v, "%Y/%m/%d %H:%M:%S.%f")
             elif i == 1:
-                memory_map[k] =int(v)
+                memory_map[k] = int(v)
             elif i == 3:
-                memory_map[k] =float(v)
+                memory_map[k] = float(v)
             elif i > 3:
                 memory_map[k] = float(v)
             else:
                 memory_map[k] = v
-        memory_map['memory usage'] =memory_map[memory_map.key_list[-4]]/memory_map[memory_map.key_list[-2]]
+        memory_map['memory usage'] = memory_map[memory_map.key_list[-4]] / memory_map[memory_map.key_list[-2]]
         memory_map_list.append(memory_map)
     return memory_map_list
+
 
 def get_memory_profile(mode):
     """
@@ -1762,6 +1793,7 @@ def gray_color(text, bolder=False):
     else:
         return '\033[37m{0}\033[0;0m'.format(text)
 
+
 def violet_color(text, bolder=False):
     if bolder:
         return u'\033[1;35m%s\033[0m' % text
@@ -1774,7 +1806,6 @@ def magenta_color(text, bolder=False):
         return u'\033[1;35m%s\033[0m' % text
     else:
         return '\033[35m{0}\033[0;0m'.format(text)
-
 
 
 def get_args_spec(fn):
@@ -1802,22 +1833,25 @@ def is_instance(instance, check_class):
         mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
         mro_list2 = [b.__qualname__ for b in instance.__class__.__mro__]
         return check_class in mro_list or check_class in mro_list2
-    elif isinstance(check_class,tuple):
-        return any([ is_instance(instance, cc) for cc in check_class])
+    elif isinstance(check_class, tuple):
+        return any([is_instance(instance, cc) for cc in check_class])
     else:
         if not inspect.isclass(check_class):
-            print(red_color('Input check_class {0} should a class, but {1}'.format(check_class,type(check_class))))
+            print(red_color('Input check_class {0} should a class, but {1}'.format(check_class, type(check_class))))
         return False
 
 
-def open_browser(url,delay=0):
+def open_browser(url, delay=0):
     sleep(delay)
     webbrowser.open_new(url)
 
+
 def launchTensorBoard():
     make_dir_if_need(os.path.join(_SESSION.working_directory, 'Logs'))
-    print('tensorboard --logdir {0} --port {1}'.format(os.path.join(_SESSION.working_directory, 'Logs'),_SESSION.tensorboard_port))
-    os.system('tensorboard --logdir {0} --port {1}'.format(os.path.join(_SESSION.working_directory, 'Logs'),_SESSION.tensorboard_port))
+    print('tensorboard --logdir {0} --port {1}'.format(os.path.join(_SESSION.working_directory, 'Logs'),
+                                                       _SESSION.tensorboard_port))
+    os.system('tensorboard --logdir {0} --port {1}'.format(os.path.join(_SESSION.working_directory, 'Logs'),
+                                                           _SESSION.tensorboard_port))
     return
 
 
@@ -1827,6 +1861,7 @@ def launchMLFlow():
     os.system('mlflow ui')
     return
 
+
 _alphabets = "([A-Za-z])"
 _numbers = "([0-9])"
 _prefixes = "(Mr|St|Mrs|Ms|Dr)[.]"
@@ -1834,6 +1869,7 @@ _suffixes = "(Inc|Ltd|Jr|Sr|Co)"
 _starters = "(Mr|Mrs|Ms|Dr|He\s|She\s|It\s|They\s|Their\s|Our\s|We\s|But\s|However\s|That\s|This\s|Wherever)"
 _acronyms = "([A-Z][.][A-Z][.](?:[A-Z][.])?)"
 _websites = "[.](com|net|org|io|gov)"
+
 
 def seg_as_sentence(txt):
     txt = re.sub(_prefixes, "\\1<prd>", txt)
@@ -1852,7 +1888,7 @@ def seg_as_sentence(txt):
     if "\"" in txt: txt = txt.replace(".\"", "\".")
     if "!" in txt: txt = txt.replace("!\"", "\"!")
     if "?" in txt: txt = txt.replace("?\"", "\"?")
-    txt = re.sub('(\.\.\.)([^”’])', "<prd><prd><prd><stop>", txt)
+    txt = re.sub("(\.\.\.)([^”’])", "<prd><prd><prd><stop>", txt)
     txt = txt.replace(".", ".<stop>")
     txt = txt.replace("?", "?<stop>")
     txt = txt.replace("!", "!<stop>")
@@ -1864,3 +1900,21 @@ def seg_as_sentence(txt):
     txt = txt.rstrip()
     sentences = txt.split("<stop>")
     return sentences
+
+
+def normalize_axes(axes: Union[List[_int], Tuple[_int, ...]], ndim: _int) -> Tuple[_int, ...]:
+    """ A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
+
+  Args:
+      axes: tuple
+      ndim:
+
+  Returns: axes_tuple
+
+  Examples:
+      >>>  print(normalize_axes((-2,-1),ndim=4))
+      (2 ,3)
+
+
+  """
+    return tuple(ax if ax >= 0 else ndim + ax for ax in axes)

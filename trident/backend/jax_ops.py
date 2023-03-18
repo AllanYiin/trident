@@ -1,5 +1,5 @@
 import os
-
+import builtins
 os.environ['TRIDENT_BACKEND'] = 'jax'
 from typing import List, Tuple, Union, Sequence
 from functools import wraps
@@ -8,20 +8,22 @@ import numbers
 import collections
 import jax
 import jax.numpy as jnp
+import jaxlib
 from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, \
-    TensorShape, get_session_value
+    TensorShape, get_session_value,is_instance
 from trident.backend import dtype as Dtype
 from trident import context
 
 __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor',
-           'tensor_to_shape','to','cuda','cpu',
+           'tensor_to_shape', 'to', 'cuda', 'cpu', 'copy', 'detach',
            'ndim', 'numel', 'cast', 'str2dtype', 'int_shape', 'logical_and', 'logical_or',
            'logical_xor', 'logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'topk', 'maximum', 'minimum',
            'floor',
-           'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add',
+           'ceil', 'round', 'dot', 'sign', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add',
            'subtract',
-           'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'where',
+           'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sinh', 'cosh', 'tanh',
+           'asinh', 'acosh', 'atanh', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'pad', 'identity', 'sigmoid', 'relu',
            'relu6', 'leaky_relu', 'celu',
@@ -37,11 +39,22 @@ from math import e, nan, inf, pi
 
 __all__.extend(['e', 'pi', 'nan', 'inf'])
 
-jax.config.update('jax_array', True)
-
-Tensor =jax.experimental.array.Array#jaxlib.xla_extension.DeviceArray
+print(jax.default_backend())
+Tensor = jaxlib.xla_extension.DeviceArray
+if 'tpu' in jax.default_backend():
+    arr = jnp.array(np.random.normal(0, 1, (3, 3)))
+    print(arr.__class__)
+else:
+    try:
+        jax.config.update('jax_array', True)
+        Tensor =jax.experimental.array.Array
+    except:
+        Tensor = jaxlib.xla_extension.DeviceArray
 
 ctx = context._context()
+
+_bool = builtins.bool
+_int = builtins.int
 
 
 def numpy_compatible(func):
@@ -70,8 +83,7 @@ def numpy_compatible(func):
             y = builtins_funcs(*args, **kwargs)
             return y
         elif all([isinstance(arg, numbers.Number) for arg in args]) and (
-                len(kwargs) == 0 or all([isinstance(kv[1], numbers.Number) for kv in kwargs.items()])) and get_function(
-            func.__name__, ['math', 'numpy', 'trident.backend.numpy_ops']) is not None:
+                len(kwargs) == 0 or all([isinstance(kv[1], numbers.Number) for kv in kwargs.items()])) and get_function(func.__name__, ['math', 'numpy', 'trident.backend.numpy_ops']) is not None:
             mathfuncs = get_function(func.__name__, ['math', 'numpy', 'trident.backend.numpy_ops'])
             y = mathfuncs(*args, **kwargs)
             return y
@@ -80,7 +92,7 @@ def numpy_compatible(func):
         #     y = numpy_func(*args, **kwargs)
         #     return y
         # elif isinstance(x, list) and all([isinstance(arg, Tensor) for arg in x])  and func.__name__ in ['concate','stack','vstack','hstack']:
-        #     tensor_func = get_function(func.__name__, ['trident.backend.pytorch_ops'])
+        #     tensor_func = get_function(func.__name__, ['trident.backend.jax_ops'])
         #     y = tensor_func(*args, **kwargs)
         #     return y
         #
@@ -241,7 +253,7 @@ def is_tpu_available():
 #         #     y = numpy_func(*args, **kwargs)
 #         #     return y
 #         # elif isinstance(x, list) and all([isinstance(arg, Tensor) for arg in x])  and func.__name__ in ['concate','stack','vstack','hstack']:
-#         #     tensor_func = get_function(func.__name__, ['trident.backend.pytorch_ops'])
+#         #     tensor_func = get_function(func.__name__, ['trident.backend.jax_ops'])
 #         #     y = tensor_func(*args, **kwargs)
 #         #     return y
 #         #
@@ -289,7 +301,7 @@ def is_tpu_available():
 #
 #     return wrapper
 
-def is_tensor(x):
+def is_tensor(x:Tensor)->_bool:
     """Checks whether `x` is exactly a tensor
 
     If `is_tensor(x)` returns `True`, that `x` is a EagerTensor .
@@ -315,7 +327,7 @@ def is_tensor(x):
     return False
 
 
-def is_tensor_like(x):
+def is_tensor_like(x:Tensor)->_bool:
     """Checks whether `x` is a "tensor-like".
 
     If `is_tensor_like(x)` returns `True`, it is safe to assume that `x` is a tensor or can be converted to a tensor using `ops.convert_to_tensor(x)`.
@@ -345,14 +357,14 @@ def to_numpy(x) -> np.ndarray:
     """Convert whatever to numpy array
 
      Args:
-        x: List, tuple, PyTorch tensor or numpy array
+        x: List, tuple, jax tensor or numpy array
 
      Returns:
         Numpy array
 
      Examples:
           >>> to_numpy(5)
-          array([5])
+          array(5))
           >>> to_numpy([1,2,3])
           array([1, 2, 3])
           >>> to_numpy((2,4),(1,3))
@@ -367,10 +379,9 @@ def to_numpy(x) -> np.ndarray:
         return np.array(x.dims)
     elif isinstance(x, np.ndarray):
         return x
-    elif isinstance(x, (list, tuple, numbers.Number)):
-        return np.array(x)
     elif isinstance(x, (list, tuple)):
-        return np.asarray(x)
+        x = [to_numpy(item) if is_tensor(item) else item for item in x]
+        return np.stack(x, 0)
     elif is_tensor(x):
         return np.array(x)
     # elif context.executing_eage
@@ -397,25 +408,25 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
 
     Examples:
         >>> to_tensor(2)
-        <jax.Tensor: shape=(), dtype=int64, numpy=2>
+        Array(2.0000e+00, dtype=float32)
         >>> to_tensor([1.0,2.0,3.0],requires_grad=True)
-        <jax.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        Array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)
         >>> to_tensor([1.0,2.0,3.0],requires_grad=False)
-        <jax.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        Array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)
         >>> to_tensor([1.0,2.0,3.0])
-        <jax.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        Array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)
         >>> to_tensor((1.0,2.0,3.0))
-        <jax.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        Array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)
         >>> to_tensor(np.arange(0,5))
-        <jax.Tensor: shape=(5,), dtype=int64, numpy=array([0, 1, 2, 3, 4], dtype=int64)>
+        Array([0, 1, 2, 3, 4], dtype=int32)
 
     """
     if x is None:
         return x
     if device is not None and ('cuda' in device.lower() or 'gpu' in device.lower()):
-        device = '/gpu:0'
+        device = 'gpu:0'
     else:
-        device = "/cpu:0"
+        device = "cpu:0"
     input_dtype = dtype
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
@@ -443,12 +454,11 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
             x = jnp.array(x, dtype=jnp.float32)
         return x
     else:
-        x= jnp.array(x)
+        x = jnp.array(x)
         if 'complex' in str(x.dtype):
             return x
         else:
             return jnp.array(x, dtype=jnp.float32)
-
 
 
 def tensor_to_shape(x: Tensor, need_exclude_batch_axis=True, is_singleton=False) -> TensorShape:
@@ -540,13 +550,12 @@ def str2dtype(dtype_str: (str, jnp.dtype)):
 
     """
 
-
     if isinstance(dtype_str, jnp.dtype):
         return dtype_str
     elif isinstance(dtype_str, jax._src.numpy.lax_numpy._ScalarMeta):
         return dtype_str
 
-    if dtype_str :
+    if dtype_str:
         return dtype_str
     elif isinstance(dtype_str, str):
         if 'float64' in dtype_str.lower() or 'double' in dtype_str.lower():
@@ -608,30 +617,33 @@ def cast(x: Tensor, cast_dtype):
     """
 
     cast_dtype = str2dtype(cast_dtype)
-    if isinstance(x, (jnp.ndarray, jax.xla.DeviceArray)) and isinstance(cast_dtype, (jnp.dtype,jax._src.numpy.lax_numpy._ScalarMeta)):
-        return jnp.array(x,dtype=cast_dtype)
+    if isinstance(x, (jnp.ndarray, jax.xla.DeviceArray)) and isinstance(cast_dtype, (
+            jnp.dtype, jax._src.numpy.lax_numpy._ScalarMeta)):
+        return jnp.array(x, dtype=cast_dtype)
     elif isinstance(x, np.ndarray) and isinstance(cast_dtype, np.dtype):
-        return jnp.array(x,dtype=cast_dtype)
+        return jnp.array(x, dtype=cast_dtype)
     else:
         return x
 
 
-
-
-def float(x:Tensor):
+def float(x: Tensor)->Tensor:
     return jnp.array(x, jnp.float32)
 
-def int(x:Tensor):
-    return jnp.array(x,jnp.int32)
 
-def long(x:Tensor):
-    return jnp.array(x,jnp.int64)
+def int(x: Tensor)->Tensor:
+    return jnp.array(x, jnp.int32)
 
-def cpu(x:Tensor):
+
+def long(x: Tensor)->Tensor:
+    return jnp.array(x, jnp.int64)
+
+
+def cpu(x: Tensor)->Tensor:
     return jax.device_put(x, device=jax.devices("cpu")[0])
 
-def cuda(x:Tensor, device:int=None):
-    r"""Moves all model parameters and buffers to the GPU.
+
+def cuda(x: Tensor, device: int = None):
+    """Moves all model parameters and buffers to the GPU.
 
     This also makes associated parameters and buffers different objects. So
     it should be called before constructing optimizer if the module will
@@ -650,27 +662,55 @@ def cuda(x:Tensor, device:int=None):
     else:
         return x
 
+
 def to(x, *args):
-    args=unpack_singleton(args)
-    if isinstance(args,str):
+    args = unpack_singleton(args)
+    if isinstance(args, str):
         if 'cpu' in args:
             return cpu(x)
         elif 'gpu' in args or 'cuda' in args:
             return cuda(x)
         elif 'float' in args:
-            return cast(x,jnp.float32)
+            return cast(x, jnp.float32)
         elif 'long' in args:
-            return cast(x,jnp.int64)
+            return cast(x, jnp.int64)
         elif 'int' in args:
-            return cast(x,jnp.int32)
-    elif isinstance(args,(jnp.dtype,jax._src.numpy.lax_numpy._ScalarMeta)):
+            return cast(x, jnp.int32)
+    elif isinstance(args, (jnp.dtype, jax._src.numpy.lax_numpy._ScalarMeta)):
         return cast(x, args)
     else:
         return x
 
 
+def copy(x: Tensor) -> Tensor:
+    """Returns a copy of x.
+
+    Args:
+        x:: input tensor
+
+    Returns:
+        a copy of x..
+
+    """
+    return jnp.copy(x)
+
+
+def detach(x: Tensor)->Tensor:
+    """Make the tensor stop gradient calculation.
+
+    Args:
+        x:
+
+    Returns:
+        stop gradient Tensor
+
+    """
+    x = jax.lax.stop_gradient(x)
+    return x
+
+
 @numpy_compatible
-def ndim(x: Tensor):
+def ndim(x: Tensor)->_int:
     """Number of dimension of a tensor
 
     Args:
@@ -683,7 +723,7 @@ def ndim(x: Tensor):
     return len(int_shape(x))
 
 
-def numel(x: Tensor):
+def numel(x: Tensor)->_int:
     """Number of elements of a tensor
 
     Args:
@@ -696,7 +736,7 @@ def numel(x: Tensor):
     return len(x.reshape(-1))
 
 
-def int_shape(x: Tensor):
+def int_shape(x):
     """Shape of a tensor in tuple of integer format
 
     Args:
@@ -713,6 +753,8 @@ def int_shape(x: Tensor):
 
     if x is None:
         return []
+    elif is_instance(x, 'Parameter'):
+        return list(x.data.shape)
     elif isinstance(x, TensorShape):
         return x.dims
     elif hasattr(x, 'shape'):
@@ -891,15 +933,15 @@ def less_equal(left: Tensor, right: (Tensor, float, int)):
     return jnp.less_equal(left, right)
 
 
-def argmax(x: Tensor, axis=1) -> Tensor:
+def argmax(x: Tensor, axis=-1) -> Tensor:
     return jnp.argmax(x, axis=axis)
 
 
-def argmin(x: Tensor, axis=1) -> Tensor:
+def argmin(x: Tensor, axis=-1) -> Tensor:
     return jnp.argmin(x, axis=axis)
 
 
-def argsort(x: np.ndarray, axis=1, descending=True) -> np.ndarray:
+def argsort(x: np.ndarray, axis=-1, descending=True) -> np.ndarray:
     if descending:
         return jnp.argsort(-x, axis=axis)
     else:
@@ -1215,7 +1257,7 @@ def round(x: Tensor, digit: int = 0):
 
 
 @numpy_compatible
-def prod(x: Tensor):
+def prod(x: Tensor)->Tensor:
     """Computes the product of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along all the dimensions
@@ -1250,8 +1292,24 @@ def pi():
 
 
 @numpy_compatible
-def sqrt(x: Tensor):
-    r"""Computes element-wise square root of the input tensor.
+def sign(x: Tensor) -> Tensor:
+    """The output of this operation is the element-wise sign of the two  inputtensor.
+
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns:
+        The sign of the input tensor.
+
+    """
+
+    return jnp.sign(x)
+
+
+@numpy_compatible
+def sqrt(x: Tensor)->Tensor:
+    """Computes element-wise square root of the input tensor.
 
     Note: This operation does not support integer types.
 
@@ -1286,7 +1344,7 @@ def sqrt(x: Tensor):
 
 
 @numpy_compatible
-def rsqrt(x: Tensor):
+def rsqrt(x: Tensor)->Tensor:
     """Computes reciprocal of square root of x element-wise.
 
     Args:
@@ -1307,8 +1365,8 @@ def rsqrt(x: Tensor):
 
 
 @numpy_compatible
-def square(x: Tensor):
-    r"""Computes square of x element-wise.
+def square(x: Tensor)->Tensor:
+    """Computes square of x element-wise.
 
     I.e., \\(y = x * x = x^2\\).
 
@@ -1329,8 +1387,8 @@ def square(x: Tensor):
 
 
 @numpy_compatible
-def abs(x: Tensor):
-    r"""Computes the absolute value of a tensor.
+def abs(x: Tensor)->Tensor:
+    """Computes the absolute value of a tensor.
 
     Given a tensor of integer or floating-point values, this operation returns a
     tensor of the same type, where each element contains the absolute value of the
@@ -1338,7 +1396,7 @@ def abs(x: Tensor):
 
     Given a tensor `x` of complex numbers, this operation returns a tensor of type
     `float32` or `float64` that is the absolute value of each element in `x`. For
-    a complex number \\(a + bj\\), its absolute value is computed as \\(\sqrt{a^2
+    a complex number \\(a + bj\\), its absolute value is computed as \\(\\sqrt{a^2
     + b^2}\\).  For example:
 
     >>> x = to_tensor([[-2.25 + 4.75j], [-3.25 + 5.75j]])
@@ -1361,7 +1419,7 @@ def abs(x: Tensor):
 
 @numpy_compatible
 def pow(x: Tensor, y: (Tensor, float)):
-    r"""Computes the power of one value to another.
+    """Computes the power of one value to another.
 
     Given a tensor `x` and a tensor `y`, this operation computes \\(x^y\\) for
     corresponding elements in `x` and `y`. For example:
@@ -1386,10 +1444,10 @@ def pow(x: Tensor, y: (Tensor, float)):
 
 
 @numpy_compatible
-def log(x: Tensor):
-    r"""Computes natural logarithm of x element-wise.
+def log(x: Tensor)->Tensor:
+    """Computes natural logarithm of x element-wise.
 
-    I.e., \\(y = \log_e x\\).
+    I.e., \\(y = \\log_e x\\).
 
     See: https://en.wikipedia.org/wiki/Logarithm
 
@@ -1403,7 +1461,7 @@ def log(x: Tensor):
     Examples:
         >>> x = to_tensor([0, 0.5, 1, 5])
         >>> log(x)
-        array([      -inf, -0.6931472,  0.,  1.609438 ])
+        Array([-inf, -6.9315e-01, 0.0000e+00, 1.6094e+00], dtype=float32)
 
 
 
@@ -1413,8 +1471,8 @@ def log(x: Tensor):
 
 
 @numpy_compatible
-def exp(x: Tensor):
-    r"""Computes exponential of x element-wise.  \\(y = e^x\\).
+def exp(x: Tensor)->Tensor:
+    """Computes exponential of x element-wise.  \\(y = e^x\\).
 
     This function computes the exponential of the input tensor element-wise.
     i.e. `math.exp(x)` or \\(e^x\\), where `x` is the input tensor.
@@ -1476,7 +1534,7 @@ def clip(x: Tensor, min=None, max=None):
 
 
 @numpy_compatible
-def sin(x: Tensor):
+def sin(x: Tensor)->Tensor:
     """Computes the element-wise sine
 
     Args:
@@ -1494,7 +1552,7 @@ def sin(x: Tensor):
 
 
 @numpy_compatible
-def cos(x: Tensor):
+def cos(x: Tensor)->Tensor:
     """Computes the element-wise cosine
 
     Args:
@@ -1512,7 +1570,7 @@ def cos(x: Tensor):
 
 
 @numpy_compatible
-def tan(x: Tensor):
+def tan(x: Tensor)->Tensor:
     """Computes the element-wise tan
 
     Args:
@@ -1530,7 +1588,7 @@ def tan(x: Tensor):
 
 
 @numpy_compatible
-def asin(x: Tensor):
+def asin(x: Tensor)->Tensor:
     """Computes the element-wise arcsin (inverse sine)
 
     Args:
@@ -1541,14 +1599,14 @@ def asin(x: Tensor):
     Examples:
         >>> asin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         Array([[1.5708e+00, 5.2360e-01],
-           [-2.5268e-01, -8.4806e-01]], dtype=float32)
+               [-2.5268e-01, -8.4806e-01]], dtype=float32)
 
     """
-    return jax.lax.asin(x)
+    return jnp.arcsin(x)
 
 
 @numpy_compatible
-def acos(x: Tensor):
+def acos(x: Tensor)->Tensor:
     """Computes the element-wise arccos (inverse cosine)
 
     Args:
@@ -1559,14 +1617,14 @@ def acos(x: Tensor):
     Examples:
         >>> acos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         Array([[0.0000e+00, 1.0472e+00],
-           [1.8235e+00, 2.4189e+00]], dtype=float32)
+               [1.8235e+00, 2.4189e+00]], dtype=float32)
 
     """
-    return jax.lax.acos(x)
+    return jnp.arccos(x)
 
 
 @numpy_compatible
-def atan(x: Tensor):
+def atan(x: Tensor)->Tensor:
     """Computes the element-wise arctan (inverse tan)
 
     Args:
@@ -1579,11 +1637,28 @@ def atan(x: Tensor):
         Array([-7.8540e-01, 0.0000e+00, 7.8540e-01], dtype=float32)
 
     """
-    return jax.lax.atan(x)
+    return jnp.arctan(x)
+
+
+def atan2(x: Tensor, other: Tensor) -> Tensor:
+    """Computes the element-wise arctangent (angles in radians between x and other )
+
+    Args:
+        x (Tensor): input tensor.
+        other (Tensor): second input tensor.
+
+    Returns:  the output tensor.
+
+     Examples:
+         >>> atan2(to_tensor([-1, 0, 1]), to_tensor([2, 4, 6])).cpu()
+         Array([-4.6365e-01, 0.0000e+00, 1.6515e-01], dtype=float32)
+
+    """
+    return jnp.arctan(x / (other + 1e-6))
 
 
 @numpy_compatible
-def sinh(x: Tensor):
+def sinh(x: Tensor)->Tensor:
     """Computes the element-wise sinh
 
     Args:
@@ -1597,11 +1672,11 @@ def sinh(x: Tensor):
                 [-0.2526, -0.8223]])
 
     """
-    return jax.lax.sinh(x)
+    return jnp.sinh(x)
 
 
 @numpy_compatible
-def cosh(x: Tensor):
+def cosh(x: Tensor)->Tensor:
     """Computes the element-wise cosh
 
     Args:
@@ -1615,11 +1690,11 @@ def cosh(x: Tensor):
            [1.0314e+00, 1.2947e+00]], dtype=float32)
 
     """
-    return jax.lax.cosh(x)
+    return jnp.cosh(x)
 
 
 @numpy_compatible
-def tanh(x: Tensor):
+def tanh(x: Tensor)->Tensor:
     """Computes the element-wise tanh
 
     Args:
@@ -1634,6 +1709,60 @@ def tanh(x: Tensor):
 
     """
     return jnp.tanh(x)
+
+
+@numpy_compatible
+def asinh(x: Tensor)->Tensor:
+    """Computes the element-wise asinh
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns: element-wise asinh
+
+    Examples:
+        >>> asinh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        Array([[8.8137e-01, 4.8121e-01],
+               [-2.4747e-01, -6.9315e-01]], dtype=float32)
+
+    """
+    return jnp.arcsinh(x)
+
+
+@numpy_compatible
+def acosh(x: Tensor)->Tensor:
+    """Computes the element-wise acosh
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns: element-wise acosh
+
+    Examples:
+        >>> acosh(to_tensor([[1.5431, 1.1276],[1.0314, 1.2947]])).cpu()
+        Array([[1.0000e+00, 4.9995e-01],
+               [2.4995e-01, 7.5002e-01]], dtype=float32)
+
+    """
+    return jnp.arccosh(x)
+
+
+@numpy_compatible
+def atanh(x: Tensor)->Tensor:
+    """Computes the element-wise atanh
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns: element-wise atanh
+
+    Examples:
+        >>> atanh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        Array([[inf, 5.4931e-01],
+           [-2.5541e-01, -9.7296e-01]], dtype=float32)
+
+    """
+    return jnp.arctanh(x)
 
 
 @numpy_compatible
@@ -1943,7 +2072,7 @@ def min(*args, **kwargs):
 
 
 @numpy_compatible
-def identity(x):
+def identity(x:Tensor)->Tensor:
     """Identity activation Layer
     A placeholder identity operator that is argument-insensitive.
 
@@ -1962,17 +2091,27 @@ def identity(x):
 
 
 @numpy_compatible
-def relu(x: Tensor):
+def relu(x: Tensor)->Tensor:
+    r"""Rectified linear unit activation function.
+
+    Computes the element-wise function:
+
+    .. math::
+      \mathrm{relu}(x) = \max(x, 0)
+
+    Args:
+      x : input array
+    """
     return jax.nn.relu(x)
 
 
 @numpy_compatible
-def sigmoid(x: Tensor):
+def sigmoid(x: Tensor)->Tensor:
     return 0.5 * (jnp.tanh(x / 2.) + 1)
 
 
 @numpy_compatible
-def relu6(x):
+def relu6(x:Tensor)->Tensor:
     """Rectified Linear Unit  6 activation function.
       With default values, it returns element-wise `min(max(x, 0)`,6).
       Otherwise, it follows:
@@ -2035,7 +2174,7 @@ def leaky_relu6(x, slope=0.2):
 
 
 @numpy_compatible
-def smooth_relu(x):
+def smooth_relu(x:Tensor)->Tensor:
     """smooth_relu activation function
 
 
@@ -2052,15 +2191,15 @@ def smooth_relu(x):
 
 @numpy_compatible
 def celu(x, alpha: Tensor = 1.0):
-    r"""Continuously-differentiable exponential linear unit activation.
+    """Continuously-differentiable exponential linear unit activation.
 
      Computes the element-wise function:
 
      .. math::
-       \mathrm{celu}(x) = \begin{cases}
+       \\mathrm{celu}(x) = \\begin{cases}
          x, & x > 0\\
-         \alpha \left(\exp(\frac{x}{\alpha}) - 1\right), & x \le 0
-       \end{cases}
+         \\alpha \\left(\\exp(\\frac{x}{\\alpha}) - 1\\right), & x \\le 0
+       \\end{cases}
 
      For more information, see
      `Continuously Differentiable Exponential Linear Units
@@ -2074,7 +2213,7 @@ def celu(x, alpha: Tensor = 1.0):
 
 
 @numpy_compatible
-def crelu(x, axis=1):
+def crelu(x, axis=-1):
     """Computes Concatenated ReLU.
 
     Concatenates a ReLU which selects only the positive part of the activation
@@ -2105,10 +2244,10 @@ def elu(x, alpha=1):
     """ Exponential Linear Unit.
     It follows:
 
-        f(x) =  alpha * (exp(x) - 1.) for x < 0
+        f(x) =  alpha * (exp(x) - 1.)  for x < 0
         f(x) = x for x >= 0
 
-    :math:`\text{ELU}(x) = \max(0,x) + \min(0, \alpha * (\exp(x) - 1))`.
+    :math:`\\text{ELU}(x) = \\max(0,x) + \\min(0, \\alpha * (\\exp(x) - 1))`.
 
     Args:
         x (Tensor): input tensor.
@@ -2148,8 +2287,8 @@ def p_relu(x, weight):
 
 
 @numpy_compatible
-def sigmoid(x):
-    """softmax activation function
+def sigmoid(x:Tensor)->Tensor:
+    """sigmoid activation function
 
     Args:
         x (Tensor): input tensor.
@@ -2163,7 +2302,7 @@ def sigmoid(x):
 
 
 @numpy_compatible
-def swish(x):
+def swish(x:Tensor)->Tensor:
     """Self-Gated Activation Function.
     it follows:
       ```
@@ -2190,16 +2329,16 @@ def swish(x):
 
 
 @numpy_compatible
-def selu(x):
+def selu(x:Tensor)->Tensor:
     """
     selu activation function
 
 
     .. math::
-            \text{SELU}(x) = \text{scale} * (\max(0,x) + \min(0, \alpha * (\exp(x) - 1)))
+            \\text{SELU}(x) = \\text{scale} * (\\max(0,x) + \\min(0, \\alpha * (\\exp(x) - 1)))
 
-    with :math:`\alpha = 1.6732632423543772848170429916717` and
-    :math:`\text{scale} = 1.0507009873554804934193349852946`.
+    with :math:`\\alpha = 1.6732632423543772848170429916717` and
+    :math:`\\text{scale} = 1.0507009873554804934193349852946`.
 
 
     Scaled exponential linear unit operation. Computes the element-wise exponential linear
@@ -2227,7 +2366,7 @@ def selu(x):
 
 
 @numpy_compatible
-def soft_sign(x):
+def soft_sign(x:Tensor)->Tensor:
     """
 
     Args:
@@ -2242,7 +2381,7 @@ def soft_sign(x):
 
 
 @numpy_compatible
-def lecun_tanh(x):
+def lecun_tanh(x:Tensor)->Tensor:
     """
 
     Args:
@@ -2257,7 +2396,7 @@ def lecun_tanh(x):
 
 
 @numpy_compatible
-def hard_sigmoid(x):
+def hard_sigmoid(x:Tensor)->Tensor:
     """Hard sigmoid Activation Function.
 
     Memory saving version of sigmoid
@@ -2285,7 +2424,7 @@ def hard_sigmoid(x):
 
 
 @numpy_compatible
-def hard_swish(x):
+def hard_swish(x:Tensor)->Tensor:
     """Hard swish Activation Function.
 
     Memory saving version of swish
@@ -2313,7 +2452,7 @@ def hard_swish(x):
 
 
 @numpy_compatible
-def hard_tanh(x):
+def hard_tanh(x:Tensor)->Tensor:
     """Hard Tanh Activation Function.
 
     Memory saving version of sigmoid
@@ -2338,7 +2477,7 @@ def hard_tanh(x):
 
 
 @numpy_compatible
-def soft_plus(x):
+def soft_plus(x:Tensor)->Tensor:
     """
 
     Args:
@@ -2353,7 +2492,7 @@ def soft_plus(x):
 
 
 @numpy_compatible
-def square_plus(x):
+def square_plus(x:Tensor)->Tensor:
     """
 
     Args:
@@ -2368,7 +2507,7 @@ def square_plus(x):
 
 
 @numpy_compatible
-def logit(x):
+def logit(x:Tensor)->Tensor:
     """
 
     Args:
@@ -2383,7 +2522,7 @@ def logit(x):
 
 
 @numpy_compatible
-def log_log(x):
+def log_log(x:Tensor)->Tensor:
     """LogLog Activation Function
 
     it follows:
@@ -2411,7 +2550,7 @@ def log_log(x):
 
 
 @numpy_compatible
-def mish(x):
+def mish(x:Tensor)->Tensor:
     """mish activation function
 
     Args:
@@ -2435,7 +2574,7 @@ def mish(x):
 
 
 @numpy_compatible
-def hard_mish(x):
+def hard_mish(x:Tensor)->Tensor:
     """hard mish activation function
 
     it follows:
@@ -2463,70 +2602,72 @@ def hard_mish(x):
 
 
 @numpy_compatible
-def softmax(x, axis=1):
+def softmax(x, axis=-1,temperature=1):
     """
-    Computes the gradient of :math:`f(z)=\log\sum_i\exp(z_i)` at ``z = x``. Concretely,
-    :math:`\mathrm{softmax}(x)=\left[\frac{\exp(x_1)}{\sum_i\exp(x_i)}\quad\frac{\exp(x_1)}{\sum_i\exp(
-    x_i)}\quad\ldots\quad\frac{\exp(x_1)}{\sum_i\exp(x_i)}\right]`
-    with the understanding that the implementation can use equivalent formulas
-    for efficiency and numerical stability.
-    The output is a vector of non-negative numbers that sum to 1 and can
-    therefore be interpreted as probabilities for mutually exclusive outcomes
-    as in the case of multiclass classification.
-    If ``axis`` is given as integer, then the softmax will be computed along that axis.
-    If the provided ``axis`` is -1, it will be computed along the last axis. Otherwise,
-    softmax will be applied to all axes.
+     Computes the gradient of :math:`f(z)=\\log\\sum_i\\exp(z_i)` at ``z = x``. Concretely,
+     :math:`\\mathrm{softmax}(x)=\\left[\\frac{\\exp(x_1)}{\\sum_i\\exp(x_i)}\\quad\\frac{\\exp(x_1)}{\\sum_i\\exp(
+     x_i)}\\quad\\ldots\\quad\\frac{\\exp(x_1)}{\\sum_i\\exp(x_i)}\\right]`
+     with the understanding that the implementation can use equivalent formulas
+     for efficiency and numerical stability.
+     The output is a vector of non-negative numbers that sum to 1 and can
+     therefore be interpreted as probabilities for mutually exclusive outcomes
+     as in the case of multiclass classification.
+     If ``axis`` is given as integer, then the softmax will be computed along that axis.
+     If the provided ``axis`` is -1, it will be computed along the last axis. Otherwise,
+     softmax will be applied to all axes.
 
-    Args:
-        x (Tensor): input tensor.
-        axis (int,list):  axis along which the reduction will be performed
+     Args:
+         x (Tensor): input tensor.
+         axis (int,list):  axis along which the reduction will be performed
+         temperature(float): Temperature
 
-    Returns:
-        (Tensor): output tensor and get same shape with x.
+     Returns:
+         (Tensor): output tensor and get same shape with x.
 
 
-    Examples:
-    >>> softmax(to_tensor([[1, 1, 2, 3]]))
-    tensor([[0.0826, 0.0826, 0.2245, 0.6103]])
-    >>> softmax(to_tensor([1., 1.]))
-    tensor([0.5000, 0.5000])
-    >>> softmax(to_tensor([[[1, 1], [3, 5]]]), axis=-1)
-    tensor([[[0.5000, 0.5000],
-             [0.1192, 0.8808]]])
-    >>> softmax(to_tensor([[[1, 1], [3, 5]]]), axis=1)
-    tensor([[[0.1192, 0.0180],
-             [0.8808, 0.9820]]])
+     Examples:
+     >>> softmax(to_tensor([[1, 1, 2, 3]]))
+     tensor([[0.0826, 0.0826, 0.2245, 0.6103]])
+     >>> softmax(to_tensor([1., 1.]))
+     tensor([0.5000, 0.5000])
+     >>> softmax(to_tensor([[[1, 1], [3, 5]]]), axis=-1)
+     tensor([[[0.5000, 0.5000],
+              [0.1192, 0.8808]]])
+     >>> softmax(to_tensor([[[1, 1], [3, 5]]]), axis=-1)
+     tensor([[[0.1192, 0.0180],
+              [0.8808, 0.9820]]])
 
-    """
-    return jax.nn.softmax(x, dim=axis)
+     """
+    return jax.nn.softmax(x/temperature, axis=axis)
 
 
 @numpy_compatible
-def log_softmax(x, axis=1):
+def log_softmax(x, axis=-1,temperature=1):
     """
-    Computes the logsoftmax normalized values of x. That is, y = x - log(reduce_sum(exp(x), axis))
-    (the implementation uses an equivalent formula for numerical stability).
-    It is also possible to use `x - reduce_log_sum_exp(x, axis)` instead of log_softmax:
-    this can be faster (one reduce pass instead of two), but can behave slightly differently numerically.
+     Computes the logsoftmax normalized values of x. That is, y = x - log(reduce_sum(exp(x), axis))
+     (the implementation uses an equivalent formula for numerical stability).
+     It is also possible to use `x - reduce_log_sum_exp(x, axis)` instead of log_softmax:
+     this can be faster (one reduce pass instead of two), but can behave slightly differently numerically.
 
-    Args:
-        x (Tensor): input tensor.
-        axis (int,list):  axis along which the reduction will be performed
+     Args:
+         x (Tensor): input tensor.
+         axis (int,list):  axis along which the reduction will be performed
+         temperature(float): Temperature
 
-    Returns:
-        (Tensor): output tensor and get same shape with x.
+     Returns:
+         (Tensor): output tensor and get same shape with x.
 
-    """
-    return x - reduce_logsumexp(x, axis=axis, keepdims=True)
+     """
+    return jax.nn.log_softmax(x/temperature, axis=axis)
 
 
-def gelu(x):
+def gelu(x:Tensor)->Tensor:
     """
     Gaussian Error Linear Unit.
     it follows:
         ```
         f(x) =x∗Φ(x)
-        where \Phi(x)Φ(x) is the Cumulative Distribution Function for Gaussian Distribution.
+        where \\Phi(x)Φ(x) is the Cumulative Distribution Function for Gaussian Distribution.
 
         ```
     Args:
@@ -2547,7 +2688,7 @@ def gelu(x):
     return jax.nn.gelu(x)
 
 
-def gpt_gelu(x):
+def gpt_gelu(x:Tensor)->Tensor:
     """
 
     Args:
@@ -2561,7 +2702,7 @@ def gpt_gelu(x):
     return 0.5 * x * (1 + jax.n.tanh(jnp.sqrt(2 / jnp.pi) * (x + 0.044715 * jnp.power(x, 3))))
 
 
-def silu(x):
+def silu(x:Tensor)->Tensor:
     return jax.nn.silu(x)
 
 
@@ -2588,7 +2729,7 @@ def moments(x: Tensor, axis, keepdims=True):
     return norm_mean, norm_variance
 
 
-def norm(x: Tensor, order=None, axis=1, keepdims=False):
+def norm(x: Tensor, order=None, axis=-1, keepdims=False):
     """
 
     Args:
@@ -2772,7 +2913,7 @@ def squeeze(x: Tensor, axis=None):
 
 
 @numpy_compatible
-def expand_dims(x: Tensor, axis):
+def expand_dims(x: Tensor, axis: Union[int, Sequence[int]]):
     """
 
     Args:
@@ -2782,7 +2923,7 @@ def expand_dims(x: Tensor, axis):
     Returns:
 
     """
-    return x.unsqueeze(axis)
+    return jnp.expand_dims(x,axis=axis)
 
 
 @numpy_compatible
@@ -2920,23 +3061,23 @@ def space_to_depth(x: Tensor, block_size=2):
 
 
 def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
-    r"""Pads tensor.
+    """Pads tensor.
 
     Padding size:
         The padding size by which to pad some dimensions of :attr:`input`
         are described starting from the last dimension and moving forward.
-        :math:`\left\lfloor\frac{\text{len(pad)}}{2}\right\rfloor` dimensions
+        :math:`\\left\\lfloor\\frac{\\text{len(pad)}}{2}\\right\\rfloor` dimensions
         of ``input`` will be padded.
         For example, to pad only the last dimension of the input tensor, then
         :attr:`pad` has the form
-        :math:`(\text{padding\_left}, \text{padding\_right})`;
+        :math:`(\text{padding\\_left}, \\text{padding\\_right})`;
         to pad the last 2 dimensions of the input tensor, then use
-        :math:`(\text{padding\_left}, \text{padding\_right},`
-        :math:`\text{padding\_top}, \text{padding\_bottom})`;
+        :math:`(\text{padding\\_left}, \\text{padding\\_right},`
+        :math:`\text{padding\\_top}, \\text{padding\\_bottom})`;
         to pad the last 3 dimensions, use
-        :math:`(\text{padding\_left}, \text{padding\_right},`
-        :math:`\text{padding\_top}, \text{padding\_bottom}`
-        :math:`\text{padding\_front}, \text{padding\_back})`.
+        :math:`(\text{padding\\_left}, \\text{padding\\_right},`
+        :math:`\\text{padding\\_top}, \\text{padding\\_bottom}`
+        :math:`\\text{padding\\_front}, \\text{padding\\_back})`.
 
     Padding mode:
         See :class:` jnp.nn.ConstantPad2d`, :class:` jnp.nn.ReflectionPad2d`, and
@@ -2956,7 +3097,7 @@ def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
         paddings ():
         x (Tensor): N-dimensional tensor
         pad (tuple): m-elements tuple, where
-            :math:`\frac{m}{2} \leq` input dimensions and :math:`m` is even.
+            :math:`\\frac{m}{2} \\leq` input dimensions and :math:`m` is even.
         mode: ``'constant'``, ``'reflect'``, ``'replicate'`` or ``'circular'``.
             Default: ``'constant'``
         value: fill value for ``'constant'`` padding. Default: ``0``
@@ -3016,9 +3157,9 @@ def ones(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requir
         shape = shape.dims
     if dtype is None:
         dtype = _float_dtype
-    x= jnp.ones(shape, dtype=dtype).to(get_session_value('device'))
+    x = jnp.ones(shape, dtype=dtype).to(get_session_value('device'))
     if not requires_grad:
-        x=jax.lax.stop_gradient(x)
+        x = jax.lax.stop_gradient(x)
     return x
 
 
@@ -3044,9 +3185,9 @@ def ones_like(a, dtype=None, requires_grad=True):
     """
     if dtype is None:
         dtype = a.dtype
-    x= jnp.ones(a.shape, dtype=dtype)
+    x = jnp.ones(a.shape, dtype=dtype)
     if not requires_grad:
-        x=jax.lax.stop_gradient(x)
+        x = jax.lax.stop_gradient(x)
     return x
 
 
@@ -3073,9 +3214,9 @@ def zeros(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requi
         shape = shape.dims
     if dtype is None:
         dtype = _float_dtype
-    x=jnp.zeros(shape, dtype=dtype).to(get_session_value('device'))
+    x = jnp.zeros(shape, dtype=dtype).to(get_session_value('device'))
     if not requires_grad:
-        x=jax.lax.stop_gradient(x)
+        x = jax.lax.stop_gradient(x)
     return x
 
 
@@ -3100,9 +3241,9 @@ def zeros_like(a, dtype=None, requires_grad=True):
     """
     if dtype is None:
         dtype = a.dtype
-    x= jnp.zeros(a.shape, dtype=dtype).to(get_session_value('device'))
+    x = jnp.zeros(a.shape, dtype=dtype).to(get_session_value('device'))
     if not requires_grad:
-        x=jax.lax.stop_gradient(x)
+        x = jax.lax.stop_gradient(x)
     return x
 
 
@@ -3382,32 +3523,32 @@ def split(x: Tensor, num_splits=2, axis=-1):
     return jnp.chunk(x, dim=axis, chunks=num_splits)
 
 
-def make_onehot(label, num_classes, axis=-1):
-    """
-    Create a one-hot encoding of x of size k.
-
-    x: array
-        The array to be one hot encoded
-    k: interger
-        The number of classes
-    dtype: jnp.dtype, optional(default=float32)
-        The dtype to be used on the encoding
-    Examples:
-    >>> make_onehot(jnp.array([[1, 2],[1, 3]],dtype=jnp.int64), 4, axis=-1)
-    tensor([[[0., 1., 1., 0.],
-             [0., 1., 0., 1.]],
-    <BLANKLINE>
-            [[0., 0., 0., 0.],
-             [0., 0., 0., 0.]]])
-
-    """
-    onehot = jnp.array(label[:, None] == jnp.arange(num_classes), dtype=jnp.float32)
-    if axis != -1:
-        axes = np.arange(ndim(label))
-        axes[axis] = ndim(label) - 1
-        axes[-1] = axis
-        onehot = jnp.transpose(axes)
-    return onehot
+# def make_onehot(label, num_classes, axis=-1):
+#     """
+#     Create a one-hot encoding of x of size k.
+#
+#     x: array
+#         The array to be one hot encoded
+#     k: interger
+#         The number of classes
+#     dtype: jnp.dtype, optional(default=float32)
+#         The dtype to be used on the encoding
+#     Examples:
+#     >>> make_onehot(jnp.array([[1, 2],[1, 3]],dtype=jnp.int64), 4, axis=-1)
+#     tensor([[[0., 1., 1., 0.],
+#              [0., 1., 0., 1.]],
+#     <BLANKLINE>
+#             [[0., 0., 0., 0.],
+#              [0., 0., 0., 0.]]])
+#
+#     """
+#     onehot = jnp.array(label[:, None] == jnp.arange(num_classes), dtype=jnp.float32)
+#     if axis != -1:
+#         axes = np.arange(ndim(label))
+#         axes[axis] = ndim(label) - 1
+#         axes[-1] = axis
+#         onehot = jnp.transpose(axes)
+#     return onehot
 
 
 def bbox_iou(bboxes1: Tensor, bboxes2: Tensor):
@@ -3460,49 +3601,47 @@ def bbox_diou(bboxes1, bboxes2):
          ious(Tensor): shape (n)
 
     Examples;
-    >>> boxes1=np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]])
-    >>> boxes2=np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]])
+    >>> boxes1=jnp.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]])
+    >>> boxes2=jnp.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]])
     >>> bbox_diou(boxes1,boxes2)
-    DeviceArray([7.9471e-01, 7.8265e-01, 6.0713e-01, 9.4636e-01, 7.2533e-01],            dtype=float32)
+    Array([7.9471e-01, 7.8265e-01, 6.0713e-01, 9.4636e-01, 7.2533e-01],      dtype=float32)
     >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0])
     >>> print(iou_loss)
-    0.2287639
+    Array(2.2876e-01, dtype=float32)
 
     """
 
-    b1_y1, b1_x1, b1_y2, b1_x2 = jnp.split(bboxes1, 4, axis=-1)
-    b2_y1, b2_x1, b2_y2, b2_x2 = jnp.split(bboxes2, 4, axis=-1)
-    y1 = jnp.maximum(b1_y1, b2_y1)
-    x1 = jnp.maximum(b1_x1, b2_x1)
-    y2 = jnp.minimum(b1_y2, b2_y2)
-    x2 = jnp.minimum(b1_x2, b2_x2)
+    x1, y1, x2, y2  = jnp.split(bboxes1, 4, axis=-1)
+    x1g, y1g, x2g, y2g = jnp.split(bboxes2, 4, axis=-1)
+    x2 = jnp.maximum(x1, x2)
+    y2 = jnp.maximum(y1, y2)
 
-    out_max_xy = jnp.maximum(bboxes1[:, 2:], bboxes2[:, 2:])
-    out_min_xy = jnp.minimum(bboxes1[:, :2], bboxes2[:, :2])
-    c_h = jnp.maximum(out_max_xy[:, 0] - out_min_xy[:, 0], 0)
-    c_w = jnp.maximum(out_max_xy[:, 1] - out_min_xy[:, 1], 0)
+    x_p = (x2 + x1) / 2
+    y_p = (y2 + y1) / 2
+    x_g = (x1g + x2g) / 2
+    y_g = (y1g + y2g) / 2
 
-    center_x1 = (bboxes1[:, 3] + bboxes1[:, 1]) / 2
-    center_y1 = (bboxes1[:, 2] + bboxes1[:, 0]) / 2
-    center_x2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
-    center_y2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
+    xkis1 = jnp.maximum(x1, x1g)
+    ykis1 = jnp.maximum(y1, y1g)
+    xkis2 = jnp.minimum(x2, x2g)
+    ykis2 = jnp.minimum(y2, y2g)
 
-    p2 = (center_x2 - center_x1) ** 2 + (center_y2 - center_y1) ** 2
-    p2 = jnp.expand_dims(p2, axis=-1)
+    xc1 = jnp.minimum(x1, x1g)
+    yc1 = jnp.minimum(y1, y1g)
+    xc2 = jnp.maximum(x2, x2g)
+    yc2 = jnp.maximum(y2, y2g)
 
-    c2 = c_w ** 2 + c_h ** 2
-    c2 = jnp.expand_dims(c2, axis=-1)
+    #intsctk = jnp.zeros_like(x1,dtype=x1.dtype)
+    mask = jnp.array((ykis2 > ykis1)*(xkis2 > xkis1), jnp.float32)
+    intsctk = ((xkis2- xkis1) * (ykis2 - ykis1))*mask
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk / unionk
 
-    intersection = jnp.maximum(x2 - x1, 0) * jnp.maximum(y2 - y1, 0)
-    # Compute unions
-    b1_area = (b1_y2 - b1_y1) * (b1_x2 - b1_x1)
-    b2_area = (b2_y2 - b2_y1) * (b2_x2 - b2_x1)
-    union = b1_area + b2_area - intersection
-
-    # 4. Compute IoU and reshape to [boxes1, boxes2]
-    diou = intersection / union - p2 / c2
-    diou = jnp.squeeze(diou, -1)
-    return diou
+    c = ((xc2 - xc1) ** 2) + ((yc2 - yc1) ** 2) + 1e-7
+    d = ((x_p - x_g) ** 2) + ((y_p - y_g) ** 2)
+    u = d / c
+    diouk =jnp.squeeze(iouk - u,axis=-1)
+    return diouk
 
 
 _FUN_NAMES = [
@@ -3611,6 +3750,8 @@ _FUN_NAMES = [
 
 for target_fun_name, source_fun in _FUN_NAMES:
     if not hasattr(Tensor, target_fun_name):
+        setattr(Tensor, target_fun_name, source_fun)
+    elif not hasattr(Tensor, target_fun_name):
         setattr(Tensor, target_fun_name, source_fun)
     elif target_fun_name in ["to", "float", "int", "long", "sum", "mean"]:
         setattr(Tensor, target_fun_name, source_fun)

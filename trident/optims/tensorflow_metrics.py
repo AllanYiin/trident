@@ -69,7 +69,7 @@ def accuracy(output:Tensor, target:Tensor, topk:int=1, axis:int=-1,ignore_index:
     elif _check_logsoftmax_logit(output_tensor):
         is_logsoftmax = True
         from_logits = True
-        output_tensor = clip(output_exp, min=1e-7, max=1 - 1e-7)
+        output_tensor = output_exp
     else:
         is_logsoftmax = False
         from_logits = False

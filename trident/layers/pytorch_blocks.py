@@ -1475,28 +1475,18 @@ class SqueezeExcite(Layer):
         self.use_bias = use_bias
         self.is_gather_excite = is_gather_excite
         self.activation = get_activation(activation)
-        self.pool = GlobalAvgPool2d()
+        if  isinstance(se_filters,numbers.Integral):
+            self.squeeze = Conv2d((1, 1), num_filters=self.se_filters, strides=1, auto_pad=False, activation=None,
+                                  use_bias=self.use_bias, name=self.name + '_squeeze')
+        elif isinstance(se_filters,numbers.Real) and se_filters<1:
+            self.squeeze=Conv2d((1, 1), depth_multiplier=se_filters, strides=1, auto_pad=False, activation=None,use_bias=self.use_bias, name=self.name + '_squeeze')
+        self.excite=Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
 
-    def build(self, input_shape: TensorShape):
-        if self._built == False:
-            if self.num_filters is None and isinstance(self.depth_multiplier,numbers.Number):
-                self.num_filters=int(self.input_filters*self.depth_multiplier)
+        self.pool = GlobalAvgPool2d(keepdims=True)
 
-            se_filters=None
-            if isinstance(self.se_filters,numbers.Integral):
-                se_filters=self.se_filters
-            if inspect.isfunction(self.se_filters):
-                se_filters=self.se_filters(self.input_filters)
-
-            self.squeeze = Conv2d((1, 1), se_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_squeeze')
-            self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
-
-            self.to(self.device)
-            self._built = True
 
     def forward(self, x, **kwargs):
         s = self.pool(x)
-        s = s.view(s.size(0), s.size(1), 1, 1)
         s = self.activation(self.squeeze(s))
         s = torch.sigmoid(self.excite(s))
 

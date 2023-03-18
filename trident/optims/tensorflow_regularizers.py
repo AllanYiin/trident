@@ -17,17 +17,20 @@ def l1_reg(model:Layer,reg_weight=1e-6):
     loss=0.0
     for name, param in model.named_parameters():
         if param.trainable:
-            if  'bias' not in name and not any_abnormal_number(param) and param.trainable:
-                loss = loss + (reg_weight * reduce_sum(abs(param)))
+            param_ = where(is_abnormal_number(param.value()), zeros_like(param), param.value())
+            if  'bias' not in name :
+                loss = loss + (reg_weight * reduce_sum(abs(param_)))
     return loss
 
 
 def l2_reg(model:Layer ,reg_weight=1e-6):
     loss = 0.0
     for name, param in model.named_parameters():
+
         if param.trainable:
-            if  'bias' not in name and not any_abnormal_number(param) and param.trainable:
-                loss = loss +  reg_weight *reduce_sum(square(param))
+            param_ = where(is_abnormal_number(param.value()), zeros_like(param), param.value())
+            if  'bias' not in name :
+                loss = loss +  reg_weight *reduce_sum(square(param_))
     return loss
 
 

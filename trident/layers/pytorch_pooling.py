@@ -5,6 +5,7 @@ from __future__ import print_function
 import builtins
 import inspect
 import math
+import numbers
 from collections import OrderedDict
 from functools import partial, wraps, update_wrapper
 from itertools import islice
@@ -58,8 +59,8 @@ class _PoolNd(Layer):
         self.strides = strides or kernel_size
         self.auto_pad = auto_pad
         self.padding_mode = padding_mode
-        self.padding = 0
         self.dilation = dilation
+        self.padding=None
         self.return_indices = kwargs.get('return_indices', False)
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.count_include_pad = kwargs.get('count_include_pad', False)
@@ -115,11 +116,14 @@ class MaxPool1d(_PoolNd):
 
     """
 
-    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='replicate', name='', **kwargs):
-        super(MaxPool1d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
-        self.kernel_size = _single(kernel_size)
-        self.strides = _single(strides if strides is not None else kernel_size)
-        self.padding = _single(self.padding)
+    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='replicate',dilation=1, name='', **kwargs):
+        kernel_size = _single(kernel_size) if isinstance(kernel_size, numbers.Integral) else kernel_size
+        strides = _single(strides) if isinstance(strides, numbers.Integral) else strides
+        dilation = _single(dilation) if isinstance(dilation, numbers.Integral) else dilation
+
+        super(MaxPool1d, self).__init__(kernel_size, strides, auto_pad, padding_mode,dilation, name)
+        self.padding = _single(self.padding) if isinstance(self.padding, numbers.Integral) else self.padding
+
         self.padding_mode = padding_mode
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
@@ -188,11 +192,15 @@ class MaxPool2d(_PoolNd):
     """
 
 
-    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', name='', **kwargs):
-        super(MaxPool2d, self).__init__(kernel_size, strides, auto_pad, padding_mode, 1, name, **kwargs)
-        self.kernel_size = _pair(kernel_size)
-        self.strides = _pair(strides if strides is not None else kernel_size)
-        self.padding = _pair(0)
+    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', dilation=1, name='', **kwargs):
+        kernel_size = _pair(kernel_size) if isinstance(kernel_size, numbers.Integral) else kernel_size
+        strides = _pair(strides) if isinstance(strides, numbers.Integral) else strides
+        dilation = _pair(dilation) if isinstance(dilation, numbers.Integral) else dilation
+
+        super(MaxPool2d, self).__init__(kernel_size, strides, auto_pad, padding_mode,dilation, name)
+        self.padding = _pair(self.padding) if isinstance(self.padding, numbers.Integral) else self.padding
+
+
         if padding_mode == 'zero':
             self.padding_mode = 'constant'
         else:
@@ -216,10 +224,12 @@ class MaxPool2d(_PoolNd):
             if pad_w % 2 == 1 and sw > 1:
                 pad_w += 1
 
-        elif len(self.padding) == 2:
+        elif self.padding is not None and len(self.padding) == 2:
             pad_h = self.padding[0] * 2
             pad_w = self.padding[1] * 2
-
+        elif self.padding is None:
+            pad_h =0 * 2
+            pad_w =0 * 2
         self.padding = (int(pad_h // 2), int(pad_w // 2))
 
     def forward(self, x, **kwargs):
@@ -295,16 +305,51 @@ class MaxPool3d(_PoolNd):
 
     """
 
-    def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
-        super(MaxPool3d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
-        self.kernel_size = _triple(kernel_size)
-        self.strides = _triple(strides if strides is not None else kernel_size)
-        self.padding = _triple(self.padding)
+    def __init__(self, kernel_size, strides=1, auto_pad=True, padding_mode='zero', dilation=1,name='', **kwargs):
+
+        kernel_size = _triple(kernel_size) if isinstance(kernel_size,numbers.Integral) else kernel_size
+        strides = _triple(strides) if isinstance(strides,numbers.Integral) else strides
+        dilation = _triple(dilation)if isinstance(dilation,numbers.Integral) else dilation
+
+        super(MaxPool3d, self).__init__(kernel_size, strides, auto_pad, padding_mode,dilation, name, **kwargs)
+        self.padding = _triple(self.padding) if isinstance(self.padding,numbers.Integral) else self.padding
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
 
+
+    def get_padding(self, input_shape):
+        pad_h = 0
+        pad_w = 0
+        pad_c = 0
+        if self.auto_pad == True:
+            ic,ih, iw = input_shape[-3:]
+            kc,kh, kw = self.kernel_size[-3:]
+            sc,sh, sw = self.strides[-3:]
+
+            oc,oh, ow =ceil(true_divide(ic , sc)),ceil(true_divide(ih , sh)),ceil(true_divide(iw , sw))
+            pad_h = max((oh - 1) * sh + (kh - 1) + 1 - ih, 0)
+            pad_w = max((ow - 1) * sw + (kw - 1) + 1 - iw, 0)
+            pad_c = max((oc - 1) * sc + (kc - 1) + 1 - ic, 0)
+            if pad_h % 2 == 1 and sh > 1:
+                pad_h += 1
+            if pad_w % 2 == 1 and sw > 1:
+                pad_w += 1
+            if pad_c % 2 == 1 and sc > 1:
+                pad_c += 1
+
+        elif self.padding is not  None and len(self.padding) == 3:
+            pad_c = self.padding[0] * 2
+            pad_h = self.padding[1] * 2
+            pad_w = self.padding[2] * 2
+        elif self.padding is None:
+            pad_c = 0 * 2
+            pad_h = 0 * 2
+            pad_w =0 * 2
+
+        self.padding =(int(pad_c // 2), int(pad_h // 2), int(pad_w // 2))
+
     def forward(self, x,**kwargs):
-        return F.max_pool3d(x, self.kernel_size, self.strides, self.padding, self.dilation, self.ceil_mode,
+        return F.max_pool3d(x, self.kernel_size, self.strides, self.padding, self.dilation , self.ceil_mode,
                             self.return_indices)
 
 
@@ -614,11 +659,12 @@ class AvgPool2d(_PoolNd):
     """
     __constants__ = ['kernel_size', 'stride', 'padding', 'ceil_mode', 'count_include_pad', 'divisor_override']
 
-    def __init__(self, kernel_size, strides=None, auto_pad=True,count_include_pad=True, divisor_override=None, name='', **kwargs):
-        super(AvgPool2d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
-        self.kernel_size = _pair(kernel_size)
-        self.strides = _pair(strides if strides is not None else kernel_size)
-        self.auto_pad = auto_pad
+    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', dilation=1,count_include_pad=True, divisor_override=None, name='', **kwargs):
+        kernel_size = _pair(kernel_size) if isinstance(kernel_size, numbers.Integral) else kernel_size
+        strides = _pair(strides) if isinstance(strides, numbers.Integral) else strides
+        dilation = _pair(dilation) if isinstance(dilation, numbers.Integral) else dilation
+
+        super(AvgPool2d, self).__init__(kernel_size, strides, auto_pad, padding_mode,dilation, name, **kwargs)
 
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.count_include_pad = kwargs.get('count_include_pad', True)
@@ -640,9 +686,12 @@ class AvgPool2d(_PoolNd):
             if pad_w % 2 == 1 and sw > 1:
                 pad_w += 1
 
-        elif len(self.padding) == 2:
+        elif self.padding is not None and len(self.padding) == 2:
             pad_h = self.padding[0] * 2
             pad_w = self.padding[1] * 2
+        elif self.padding is None:
+            pad_h = 0 * 2
+            pad_w =0 * 2
 
         self.padding = (int(pad_h // 2), int(pad_w // 2))
 

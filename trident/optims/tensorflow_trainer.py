@@ -35,7 +35,7 @@ from trident.callbacks import LambdaCallback
 from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase, AdjustLRCallback
 from trident.data.data_provider import DataProvider
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
-#from trident.data.image_common import *
+from trident.data.image_common import image_backend_adaption,reverse_image_backend_adaption
 from trident.data.mask_common import color2label
 from trident.data.transform import Transform
 from trident.layers.tensorflow_layers import *
@@ -225,23 +225,32 @@ class Model(ModelBase,Layer):
                 output.to(get_device())
                 output.eval()
                 out = output(*dummay_input)
-
-            self._model = output
-            # self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
-
-            if is_tensor(out) and len(output._signature.outputs) == 1:
-                output._signature.outputs[output._signature.outputs.key_list[0]].shape = tensor_to_shape(out)
-                output._signature.outputs[output._signature.outputs.key_list[0]].dtype = DTYPE_MAPPING[
-                    out.dtype] if out.dtype in DTYPE_MAPPING else out.dtype
-
-            elif isinstance(out, OrderedDict):
-                for k, v in out.item_list:
-                    output.signature.outputs[k] = TensorSpec(shape=tensor_to_shape(v), name=k)
-
+            if is_tensor(out):
+                if  len(output.signature.outputs)==0:
+                    output.signature.outputs['output']=TensorSpec.tensor_to_spec(out,need_exclude_batch_axis=True,is_singleton=False) if out is not None else TensorSpec(
+                            shape=TensorShape([None]), optional=True, name=k)
+                elif  len(output.signature.outputs)==1:
+                    output.signature.outputs[output.signature.outputs.key_list[0]] = TensorSpec.tensor_to_spec(out,
+                                                                                   need_exclude_batch_axis=True,
+                                                                                   is_singleton=False) if out is not None else TensorSpec(
+                            shape=TensorShape([None]), optional=True, name=k)
+            elif is_instance(out,'OrderedDict'):
+                for k, v in out.__dict__.items():
+                    if v is not None or k in output.signature.outputs:
+                        spec = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True,is_singleton=False,
+                                                         name=k) if v is not None else TensorSpec(
+                            shape=TensorShape([None]), optional=True, name=k)
+                        if k in output.signature.outputs:
+                            spec.optional = output.signature.outputs[k].optional
+                            spec.default = output.signature.outputs[k].default
+                        output.signature.outputs[k] = spec
             elif isinstance(out, (list, tuple)):
                 for i in range(len(out)):
                     output.signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]),
                                                                                  name='output_{0}'.format(i))
+            self._model = output
+            # self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
+
 
         elif isinstance(output, (list, tuple)) and all([isinstance(m, (tf.Module)) for m in output]):
             output_list = []
@@ -833,7 +842,7 @@ class Model(ModelBase,Layer):
             input_list = [data_feed['input'] if arg == 'x' and 'input' in data_feed else data_feed[arg] for arg in
                           self._model.signature.inputs.key_list]
             for item in train_data.key_list:
-                if train_data[item].dtype is np.string_ or train_data[item].dtype is np.str_ or train_data[
+                if train_data[item].dtype is np.str_ or train_data[item].dtype is np.str_ or train_data[
                     item].dtype.kind in {'U', 'S'}:
                     train_data[item] = [s.decode() for s in train_data[item]]
                 else:
@@ -843,7 +852,7 @@ class Model(ModelBase,Layer):
                     train_data[item].require_grads = True
 
                 if test_data is not None and item in test_data:
-                    if test_data[item].dtype is np.string_ or test_data[item].dtype is np.str_ or test_data[
+                    if test_data[item].dtype is np.str_ or test_data[item].dtype is np.str_ or test_data[
                         item].dtype.kind in {'U', 'S'}:
                         test_data[item] = [s.decode() for s in test_data[item]]
                     else:

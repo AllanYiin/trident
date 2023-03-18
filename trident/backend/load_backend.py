@@ -134,9 +134,8 @@ elif _session.backend == 'jax':
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"
         set_session('device','cuda')
     elif is_tpu_available():
-        import torch_xla.core.xla_model as xm
-        set_session('device', 'tpu')
-        set_session('print', xm.master_print)
+        if is_tpu_available():
+            set_session('device', 'tpu')
     else:
         set_session('device', 'cpu')
     from trident.backend.jax_backend import *

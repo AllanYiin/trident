@@ -1,4 +1,4 @@
-
+from typing import Callable
 def trident_export(*api_names, **kwargs):
     def Decorator(func_or_class):
         func_or_class._TRIDENT_API = api_names
@@ -25,3 +25,42 @@ def deprecated(version, substitute):
         return wrapper
 
     return decorate
+
+
+
+def compact(fun: Callable) -> Callable:
+  """Marks the given module method allowing inlined submodules.
+  Methods wrapped in @compact can define submodules directly within the method.
+  For instance::
+    @compact
+    __call__(self, x, features):
+      x = nn.Dense(features)(x)
+      ...
+  At most one method in each Module may be wrapped with @compact.
+  Args:
+    fun: The Module method to mark as compact.
+  Returns:
+    The given function `fun` marked as compact.
+  """
+  fun.compact = True  # type: ignore[attr-defined]
+  return fun
+
+
+
+
+def signature(fun: Callable) -> Callable:
+  """Generate this Callable's signature
+  Methods wrapped in @compact can define submodules directly within the method.
+  For instance::
+    @compact
+    __call__(self, x, features):
+      x = nn.Dense(features)(x)
+      ...
+  At most one method in each Module may be wrapped with @compact.
+  Args:
+    fun: The Module method to mark as compact.
+  Returns:
+    The given function `fun` marked as compact.
+  """
+  fun.compact = True  # type: ignore[attr-defined]
+  return fun

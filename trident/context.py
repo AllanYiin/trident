@@ -1,13 +1,14 @@
 import inspect
 import json
+import locale
 import os
+import platform
 import sys
 import threading
-import platform
 from collections import OrderedDict
-import numpy as np
-import locale
 from functools import partial
+
+import numpy as np
 
 _trident_context=None
 
@@ -217,14 +218,17 @@ class _Context:
 
         self.is_tensorboard_available=False
         self.is_tensorflow_available = False
+        self.is_jax_available = False
         self.is_pytorch_available = False
         self.is_numba_available = False
         self.is_tensorboard_available = False
         self.is_mlflow_available = False
         if 'tensorboard' in site_packages:
             self.is_tensorboard_available=True
-        if 'tensorflow' in site_packages:
-            self.is_tensorflow_available=True
+        if 'tensorboard' in site_packages:
+            self.is_tensorboard_available=True
+        if 'jax' in site_packages:
+            self.is_jax_available=True
         if 'torch' in site_packages:
             self.is_pytorch_available=True
         if 'cupy' in site_packages:
@@ -285,7 +289,7 @@ class _Context:
             if self.backend != os.environ['TRIDENT_BACKEND']:
                 self.backend = os.environ['TRIDENT_BACKEND']
 
-        if not  hasattr(self,'backend') or self.backend is None:
+        if not hasattr(self,'backend') or self.backend is None:
             try:
                 import torch
                 os.environ['TRIDENT_BACKEND'] = 'pytorch'
@@ -294,8 +298,12 @@ class _Context:
                     import tensorflow
                     os.environ['TRIDENT_BACKEND'] = 'tensorflow'
                 except:
-                    pass
-        np.set_printoptions(formatter={'float_kind': lambda x: self.numpy_print_format.format(x)})
+                    try:
+                        import jax
+                        os.environ['TRIDENT_BACKEND'] = 'jax'
+                    except:
+                        pass
+        np.set_printoptions(formatter={'float_kind': lambda x: self.numpy_print_format.format(x)},precision=4,suppress=True)
         self.device = None
 
 

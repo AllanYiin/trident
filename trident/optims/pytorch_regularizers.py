@@ -13,28 +13,31 @@ _epsilon = _session.epsilon
 __all__ = ['l1_reg','l2_reg','orth_reg','get_reg','total_variation_norm_reg']
 
 
-def l1_reg(model:nn.Module,reg_weight=1e-6):
+def l1_reg(model:nn.Module,reg_weight=1e-7):
     #with torch.enable_grad():
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
-        if 'bias' not in name and  not any_abnormal_number(param) and param.requires_grad==True:
-            loss = loss + (reg_weight * sum(abs(param)))
+        param_ = where(is_abnormal_number(param.data), zeros_like(param), param.data)
+        if 'bias' not in name and   param.requires_grad==True:
+            loss = loss + (reg_weight * abs(param_).sum())
     return loss
 
 
 def l2_reg(model:nn.Module,reg_weight=1e-6):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
-        if 'bias' not in name  and  not any_abnormal_number(param) and  param.requires_grad==True:
-            loss=loss+ reg_weight *(param**2).sum()
+        param_ = where(is_abnormal_number(param.data), zeros_like(param), param.data)
+        if 'bias' not in name  and   param.requires_grad==True:
+            loss=loss+ reg_weight *(param_**2).sum()
     return loss
 
 
 def orth_reg(model:nn.Module,reg_weight=1e-6):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
+        param_ = where(is_abnormal_number(param.data), zeros_like(param), param.data)
         if 'bias' not in name and param.requires_grad==True:
-            param_flat = param.view(param.shape[0], -1)
+            param_flat = param.view(param_.shape[0], -1)
             sym = torch.mm(param_flat, torch.t(param_flat))
             sym -= torch.eye(param_flat.shape[0])
             loss = loss + (reg_weight * sym.abs().sum())

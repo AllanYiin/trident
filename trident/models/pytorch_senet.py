@@ -52,7 +52,7 @@ if not os.path.exists(dirname):
 model_urls = {
     'se_resnet50': '1vq0uueiHXuHSEFhb02GoEuPzLwrDW_Mb',
     'se_resnet101': '17moUOsGynsWALLHyv3yprHWbbDMrdiOP',
-    'se_resnet152': '1BIaHb7_qunUVvt4TDAwonSKI2jYg4Ybj',
+    'se_resnet152': '1L9eGvwVOcH40_lCgCadZQtCrBdeVrsYi',
 }
 
 def basic_block(num_filters=64,base_width=64,strides=1,expansion  = 4,conv_shortcut=False,use_bias=False,name=''):

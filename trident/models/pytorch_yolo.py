@@ -39,184 +39,189 @@ from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization, BatchNorm2d
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
-from trident.misc.visualization_utils import generate_palette,plot_bbox
-from trident.data.vision_transforms import Resize,Normalize
-__all__ = [ 'yolo4_body', 'YoloDetectionModel', 'DarknetConv2D', 'DarknetConv2D_BN_Mish',
-           'DarknetConv2D_BN_Leaky', 'YoloLayer','YoLoV4']
+from trident.misc.visualization_utils import generate_palette, plot_bbox
+from trident.data.vision_transforms import Resize, Normalize
+
+__all__ = ['yolo4_body', 'YoloDetectionModel', 'DarknetConv2D', 'DarknetConv2D_BN_Mish', 'DarknetConv2D_BN_Leaky',
+           'YoloLayer', 'YoLoV4']
 
 _session = get_session()
-_device =get_device()
+_device = get_device()
 _epsilon = _session.epsilon
 _trident_dir = _session.trident_dir
 
-
 dirname = os.path.join(_trident_dir, 'models')
 
-def generate_anchors(grid_size):
-    anchors1 = to_tensor(np.array([12, 16, 19, 36, 40, 28]).reshape(-1, 2),requires_grad=False)
-    anchors2 = to_tensor(np.array([36, 75, 76, 55, 72, 146]).reshape(-1, 2),requires_grad=False)
-    anchors3 = to_tensor(np.array([142, 110, 192, 243, 459, 401]).reshape(-1, 2),requires_grad=False)
-    anchors=(anchors1,anchors2,anchors3)
-    return  anchors1 if grid_size==76 else anchors2 if grid_size==38 else anchors3 if grid_size==19 else None
 
+def generate_anchors():
+    anchors1 = to_tensor(np.array([12, 16, 19, 36, 40, 28]).reshape(-1, 2), requires_grad=False)
+    anchors2 = to_tensor(np.array([36, 75, 76, 55, 72, 146]).reshape(-1, 2), requires_grad=False)
+    anchors3 = to_tensor(np.array([142, 110, 192, 243, 459, 401]).reshape(-1, 2), requires_grad=False)
+    anchors = (anchors1, anchors2, anchors3)
+    return anchors
 
 
 def DarknetConv2D(*args, **kwargs):
     """Wrapper to set Darknet parameters for Convolution2D."""
-    darknet_conv_kwargs = {'use_bias': True}
-    darknet_conv_kwargs['auto_pad'] = False if kwargs.get('strides')==(2,2) else True
-    darknet_conv_kwargs['use_bias'] = True
+    darknet_conv_kwargs = {'use_bias': True, 'auto_pad': False if kwargs.get('strides') == (2, 2) else True}
     darknet_conv_kwargs.update(kwargs)
     return Conv2d(*args, **darknet_conv_kwargs)
 
+
 def DarknetConv2D_BN_Leaky(*args, **kwargs):
     """Darknet Convolution2D followed by BatchNormalization and LeakyReLU."""
-    darknet_conv_kwargs = {'use_bias': False,'normalization':BatchNorm2d(momentum=0.03,eps=1e-4)}
-    darknet_conv_kwargs['activation']=LeakyRelu(alpha=0.1)
-    darknet_conv_kwargs['auto_pad'] = False if kwargs.get('strides')==(2,2) else True
+    darknet_conv_kwargs = {'use_bias': False, 'normalization': BatchNorm2d(momentum=0.03, eps=1e-4),
+                           'activation': LeakyRelu(alpha=0.1),
+                           'auto_pad': False if kwargs.get('strides') == (2, 2) else True}
     darknet_conv_kwargs.update(kwargs)
     return Conv2d_Block(*args, **darknet_conv_kwargs)
-
 
 
 def DarknetConv2D_BN_Mish(*args, **kwargs):
     """Darknet Convolution2D followed by BatchNormalization and LeakyReLU."""
-    darknet_conv_kwargs = {'use_bias': False, 'normalization':BatchNorm2d(momentum=0.03,eps=1e-4), 'activation': Mish()}
-    darknet_conv_kwargs['auto_pad'] = False if kwargs.get('strides')==(2,2) else True
+    darknet_conv_kwargs = {'use_bias': False, 'normalization': BatchNorm2d(momentum=0.03, eps=1e-4),
+                           'activation': Mish(), 'auto_pad': False if kwargs.get('strides') == (2, 2) else True}
     darknet_conv_kwargs.update(kwargs)
     return Conv2d_Block(*args, **darknet_conv_kwargs)
 
 
-def resblock_body(num_filters, num_blocks, all_narrow=True,keep_output=False,name=''):
+def resblock_body(num_filters, num_blocks, all_narrow=True, keep_output=False, name=''):
     return Sequential(
-        DarknetConv2D_BN_Mish((3, 3),num_filters ,strides=(2,2), auto_pad=False, padding=((1, 0), (1, 0)),name=name+'_preconv1'),
+        DarknetConv2D_BN_Mish((3, 3), num_filters, strides=(2, 2), auto_pad=False, padding=((1, 0), (1, 0)),
+                              name=name + '_preconv1'),
         ShortCut2d(
             {
-            1:DarknetConv2D_BN_Mish((1, 1), num_filters // 2 if all_narrow else num_filters, name=name + '_shortconv'),
-            0:Sequential(
-                DarknetConv2D_BN_Mish((1, 1), num_filters // 2 if all_narrow else num_filters,name=name+'_mainconv'),
-                For(range(num_blocks), lambda i:
+                1: DarknetConv2D_BN_Mish((1, 1), num_filters // 2 if all_narrow else num_filters,
+                                         name=name + '_shortconv'),
+                0: Sequential(
+                    DarknetConv2D_BN_Mish((1, 1), num_filters // 2 if all_narrow else num_filters,
+                                          name=name + '_mainconv'),
+                    For(range(num_blocks), lambda i:
                     ShortCut2d(
                         Identity(),
                         Sequential(
-                            DarknetConv2D_BN_Mish((1, 1),num_filters // 2,name=name+'_for{0}_1'.format(i)),
-                            DarknetConv2D_BN_Mish((3, 3),num_filters // 2 if all_narrow else num_filters,name=name+'_for{0}_2'.format(i))
+                            DarknetConv2D_BN_Mish((1, 1), num_filters // 2, name=name + '_for{0}_1'.format(i)),
+                            DarknetConv2D_BN_Mish((3, 3), num_filters // 2 if all_narrow else num_filters,
+                                                  name=name + '_for{0}_2'.format(i))
                         ),
                         mode='add')
-                ),
-                DarknetConv2D_BN_Mish( (1, 1),num_filters // 2 if all_narrow else num_filters,name=name+'_postconv')
-            )},
-            mode='concate',name=name+'_route'),
+                        ),
+                    DarknetConv2D_BN_Mish((1, 1), num_filters // 2 if all_narrow else num_filters,
+                                          name=name + '_postconv')
+                )},
+            mode='concate', name=name + '_route'),
 
-        DarknetConv2D_BN_Mish((1,1),num_filters,name=name+'_convblock5')
-        )
+        DarknetConv2D_BN_Mish((1, 1), num_filters, name=name + '_convblock5')
+    )
 
 
-def yolo4_body(anchors=None,num_classes=80,image_size=608):
-    anchors1=generate_anchors(76) if anchors is None else anchors[0]
-    anchors2 = generate_anchors(38) if anchors is None else anchors[1]
-    anchors3 = generate_anchors(19) if anchors is None else anchors[2]
-    num_anchors=len(anchors1)
+def yolo4_body(anchors=None, num_classes=80, image_size=608):
+    anchors = anchors if anchors is not None else generate_anchors()
+    anchors1 = anchors[0]
+    anchors2 = anchors[1]
+    anchors3 = anchors[2]
+    num_anchors = len(anchors1)
     """Create YOLO_V4 model CNN body in Pytorch."""
     return Sequential(
-            DarknetConv2D_BN_Mish((3, 3), 32,name='first_layer'),
-            resblock_body(64, 1, all_narrow=False,name='block64'),
-            resblock_body(128, 2,name='block128'),
-            resblock_body(256, 8,name='block256'),
-            ShortCut2d(
-                {
-                    1:Sequential(
-                        resblock_body(512, 8,name='block512'),
-                        ShortCut2d(
-                            {
-                                1:Sequential(
-                                    resblock_body(1024, 4, name='block1024'),
-                                    DarknetConv2D_BN_Leaky( (1,1), 512,name='pre_maxpool1'),
-                                    DarknetConv2D_BN_Leaky( (3, 3),1024,name='pre_maxpool2'),
-                                    DarknetConv2D_BN_Leaky((1,1),512,name='pre_maxpool3'),
-                                    ShortCut2d(
-                                        MaxPool2d((13,13),strides=(1,1), auto_pad=True),
-                                        MaxPool2d((9,9), strides=(1, 1), auto_pad=True),
-                                        MaxPool2d((5,5), strides=(1, 1), auto_pad=True),
-                                        Identity(),
-                                        mode='concate'
-                                    ),
-                                    DarknetConv2D_BN_Leaky((1, 1), 512,name='pre_y19_1'),
-                                    DarknetConv2D_BN_Leaky((3, 3), 1024,name='pre_y19_2'),
-                                    DarknetConv2D_BN_Leaky((1, 1), 512,name='y_19',keep_output=True),
-                                    DarknetConv2D_BN_Leaky((1, 1),256,name='pre_y19_upsample'),
-                                    Upsampling2d(scale_factor=2,name='y19_upsample'),
+        DarknetConv2D_BN_Mish((3, 3), 32, name='first_layer'),
+        resblock_body(64, 1, all_narrow=False, name='block64'),
+        resblock_body(128, 2, name='block128'),
+        resblock_body(256, 8, name='block256'),
+        ShortCut2d(
+            {
+                1: Sequential(
+                    resblock_body(512, 8, name='block512'),
+                    ShortCut2d(
+                        {
+                            1: Sequential(
+                                resblock_body(1024, 4, name='block1024'),
+                                DarknetConv2D_BN_Leaky((1, 1), 512, name='pre_maxpool1'),
+                                DarknetConv2D_BN_Leaky((3, 3), 1024, name='pre_maxpool2'),
+                                DarknetConv2D_BN_Leaky((1, 1), 512, name='pre_maxpool3'),
+                                ShortCut2d(
+                                    MaxPool2d((13, 13), strides=(1, 1), auto_pad=True),
+                                    MaxPool2d((9, 9), strides=(1, 1), auto_pad=True),
+                                    MaxPool2d((5, 5), strides=(1, 1), auto_pad=True),
+                                    Identity(),
+                                    mode='concate'
                                 ),
-                                0:DarknetConv2D_BN_Leaky((1, 1), 256)
-                            },mode='concate'),
-                        DarknetConv2D_BN_Leaky((1, 1),256,name='pre_y38_1'),
-                        DarknetConv2D_BN_Leaky((3, 3),512,name='pre_y38_2'),
-                        DarknetConv2D_BN_Leaky((1, 1),256,name='pre_y38_3'),
-                        DarknetConv2D_BN_Leaky((3, 3),512,name='pre_y38_4'),
-                        DarknetConv2D_BN_Leaky((1, 1),256,name='y_38',keep_output=True),
-                        DarknetConv2D_BN_Leaky((1, 1),128,name='pre_y_38_upsample'),
-                        Upsampling2d(scale_factor=2,name='y_38_upsample'),
-                    ),
-                    0:DarknetConv2D_BN_Leaky((1, 1), 128)
-                },
-                mode='concate'),
-            DarknetConv2D_BN_Leaky((1, 1), 128,name='pre_y76_concate1'),
-            DarknetConv2D_BN_Leaky((3, 3), 256,name='pre_y76_concate2'),
-            DarknetConv2D_BN_Leaky((1, 1), 128,name='pre_y76_concate3'),
-            DarknetConv2D_BN_Leaky((3, 3), 256,name='pre_y76_concate4'),
-            DarknetConv2D_BN_Leaky((1, 1), 128,name='pre_y76_concate5'),
-            ShortCut2d(
-                #y76_output
-                Sequential(
-                    DarknetConv2D_BN_Leaky( (3, 3),256,name='pre_y76_output'),
-                    DarknetConv2D( (1, 1),num_anchors * (num_classes + 5),use_bias=True,name='y76_output'),
-                    YoloLayer(anchors=anchors1,num_classes=num_classes,grid_size=76, img_dim=image_size),
+                                DarknetConv2D_BN_Leaky((1, 1), 512, name='pre_y19_1'),
+                                DarknetConv2D_BN_Leaky((3, 3), 1024, name='pre_y19_2'),
+                                DarknetConv2D_BN_Leaky((1, 1), 512, name='y_19', keep_output=True),
+                                DarknetConv2D_BN_Leaky((1, 1), 256, name='pre_y19_upsample'),
+                                Upsampling2d(scale_factor=2, name='y19_upsample'),
+                            ),
+                            0: DarknetConv2D_BN_Leaky((1, 1), 256)
+                        }, mode='concate'),
+                    DarknetConv2D_BN_Leaky((1, 1), 256, name='pre_y38_1'),
+                    DarknetConv2D_BN_Leaky((3, 3), 512, name='pre_y38_2'),
+                    DarknetConv2D_BN_Leaky((1, 1), 256, name='pre_y38_3'),
+                    DarknetConv2D_BN_Leaky((3, 3), 512, name='pre_y38_4'),
+                    DarknetConv2D_BN_Leaky((1, 1), 256, name='y_38', keep_output=True),
+                    DarknetConv2D_BN_Leaky((1, 1), 128, name='pre_y_38_upsample'),
+                    Upsampling2d(scale_factor=2, name='y_38_upsample'),
+                ),
+                0: DarknetConv2D_BN_Leaky((1, 1), 128)
+            },
+            mode='concate'),
+        DarknetConv2D_BN_Leaky((1, 1), 128, name='pre_y76_concate1'),
+        DarknetConv2D_BN_Leaky((3, 3), 256, name='pre_y76_concate2'),
+        DarknetConv2D_BN_Leaky((1, 1), 128, name='pre_y76_concate3'),
+        DarknetConv2D_BN_Leaky((3, 3), 256, name='pre_y76_concate4'),
+        DarknetConv2D_BN_Leaky((1, 1), 128, name='pre_y76_concate5'),
+        ShortCut2d(
+            # y76_output
+            Sequential(
+                DarknetConv2D_BN_Leaky((3, 3), 256, name='pre_y76_output'),
+                DarknetConv2D((1, 1), num_anchors * (num_classes + 5), use_bias=True, name='y76_output'),
+                YoloLayer(anchors=anchors1, num_classes=num_classes, grid_size=76, img_dim=image_size),
                 name='y76_output'),
-                # y38_output
-                Sequential(
-                    ShortCut2d(
-                        DarknetConv2D_BN_Leaky((3, 3), 256, strides=(2, 2), auto_pad=False,padding=((1,0),(1,0)),name='y76_downsample'),
-                        branch_from='y_38',mode='concate'),
-                    DarknetConv2D_BN_Leaky((1, 1), 256,name='pre_y38_concate1'),
-                    DarknetConv2D_BN_Leaky((3, 3), 512,name='pre_y38_concate2'),
-                    DarknetConv2D_BN_Leaky((1, 1), 256,name='pre_y38_concate3'),
-                    DarknetConv2D_BN_Leaky((3, 3), 512,name='pre_y38_concate4'),
-                    DarknetConv2D_BN_Leaky((1, 1), 256,name='pre_y38_concate5'),
-                    ShortCut2d(
-                        Sequential(
-                            DarknetConv2D_BN_Leaky((3, 3), 512, name='pre_y38_output'),
-                            DarknetConv2D((1, 1), num_anchors * (num_classes + 5), use_bias=True, name='y38_output'),
-                            YoloLayer(anchors=anchors2, num_classes=num_classes,grid_size=38,  img_dim=image_size),
-                            name='y38_output'),
+            # y38_output
+            Sequential(
+                ShortCut2d(
+                    DarknetConv2D_BN_Leaky((3, 3), 256, strides=(2, 2), auto_pad=False, padding=((1, 0), (1, 0)),
+                                           name='y76_downsample'),
+                    branch_from='y_38', mode='concate'),
+                DarknetConv2D_BN_Leaky((1, 1), 256, name='pre_y38_concate1'),
+                DarknetConv2D_BN_Leaky((3, 3), 512, name='pre_y38_concate2'),
+                DarknetConv2D_BN_Leaky((1, 1), 256, name='pre_y38_concate3'),
+                DarknetConv2D_BN_Leaky((3, 3), 512, name='pre_y38_concate4'),
+                DarknetConv2D_BN_Leaky((1, 1), 256, name='pre_y38_concate5'),
+                ShortCut2d(
+                    Sequential(
+                        DarknetConv2D_BN_Leaky((3, 3), 512, name='pre_y38_output'),
+                        DarknetConv2D((1, 1), num_anchors * (num_classes + 5), use_bias=True, name='y38_output'),
+                        YoloLayer(anchors=anchors2, num_classes=num_classes, grid_size=38, img_dim=image_size),
+                        name='y38_output'),
 
+                    Sequential(
+                        ShortCut2d(
+                            DarknetConv2D_BN_Leaky((3, 3), 512, strides=(2, 2), auto_pad=False,
+                                                   padding=((1, 0), (1, 0)), name='y38_downsample'),
+                            branch_from='y_19', mode='concate'),
+                        DarknetConv2D_BN_Leaky((1, 1), 512, name='pre_y19_concate1'),
+                        DarknetConv2D_BN_Leaky((3, 3), 1024, name='pre_y19_concate2'),
+                        DarknetConv2D_BN_Leaky((1, 1), 512, name='pre_y19_concate3'),
+                        DarknetConv2D_BN_Leaky((3, 3), 1024, name='pre_y19_concate4'),
+                        DarknetConv2D_BN_Leaky((1, 1), 512, name='pre_y19_concate5'),
                         Sequential(
-                            ShortCut2d(
-                                DarknetConv2D_BN_Leaky((3, 3), 512, strides=(2, 2),auto_pad=False,padding=((1,0),(1,0)),name='y38_downsample'),
-                                branch_from='y_19', mode='concate'),
-                            DarknetConv2D_BN_Leaky((1, 1), 512,name='pre_y19_concate1'),
-                            DarknetConv2D_BN_Leaky((3, 3), 1024,name='pre_y19_concate2'),
-                            DarknetConv2D_BN_Leaky((1, 1), 512,name='pre_y19_concate3'),
-                            DarknetConv2D_BN_Leaky((3, 3), 1024,name='pre_y19_concate4'),
-                            DarknetConv2D_BN_Leaky((1, 1), 512,name='pre_y19_concate5'),
-                            Sequential(
-                                DarknetConv2D_BN_Leaky((3, 3),1024,name='pre_y19_output'),
-                                DarknetConv2D((1, 1), num_anchors * (num_classes + 5),use_bias=True,name='y19_output'),
-                                YoloLayer(anchors=anchors3,num_classes=num_classes,grid_size=19, img_dim=image_size),
+                            DarknetConv2D_BN_Leaky((3, 3), 1024, name='pre_y19_output'),
+                            DarknetConv2D((1, 1), num_anchors * (num_classes + 5), use_bias=True, name='y19_output'),
+                            YoloLayer(anchors=anchors3, num_classes=num_classes, grid_size=19, img_dim=image_size),
                             name='y19_output')),
 
-                        mode='concate')
-                )
-                ,mode = 'concate')
+                    mode='concate')
+            )
+            , mode='concate')
     )
 
 
 class YoloLayer(Layer):
     """Detection layer"""
 
-    def __init__(self, anchors=None, num_classes=80,grid_size=76, img_dim=608,small_item_enhance=False):
+    def __init__(self, anchors=None, num_classes=80, grid_size=76, img_dim=608, small_item_enhance=False):
         super(YoloLayer, self).__init__()
-        if anchors is None:
-            anchors=generate_anchors(grid_size)
+
         self.register_buffer('anchors', to_tensor(anchors, requires_grad=False).to(get_device()))
         self.small_item_enhance = small_item_enhance
         self.num_anchors = len(anchors)
@@ -228,11 +233,11 @@ class YoloLayer(Layer):
         self.noobj_scale = 100
         self.metrics = {}
         self.img_dim = img_dim
-        self.grid_size=grid_size
+        self.grid_size = grid_size
 
-        #self.grid_size = to_tensor(grid_size) # grid size
-        #yv, xv = torch.meshgrid([torch.arange(grid_size), torch.arange(grid_size)])
-        #self.register_buffer('grid',  torch.stack((xv.detach(), yv.detach()), 2).view((1, 1, grid_size, grid_size, 2)).float().detach())
+        # self.grid_size = to_tensor(grid_size) # grid size
+        # yv, xv = torch.meshgrid([torch.arange(grid_size), torch.arange(grid_size)])
+        # self.register_buffer('grid',  torch.stack((xv.detach(), yv.detach()), 2).view((1, 1, grid_size, grid_size, 2)).float().detach())
 
         self.stride = self.img_dim / grid_size
 
@@ -240,8 +245,9 @@ class YoloLayer(Layer):
 
     def compute_grid_offsets(self, grid_size):
 
-        self.register_buffer('grid', meshgrid(grid_size,grid_size).view((1, 1, grid_size, grid_size, 2)).float().detach())
-        #self.grid=meshgrid(grid_size,grid_size,requires_grad=False).view((1, 1, grid_size, grid_size, 2)).float().detach()
+        self.register_buffer('grid',
+                             meshgrid(grid_size, grid_size).view((1, 1, grid_size, grid_size, 2)).float().detach())
+        # self.grid=meshgrid(grid_size,grid_size,requires_grad=False).view((1, 1, grid_size, grid_size, 2)).float().detach()
 
         # Calculate offsets for each grid
 
@@ -249,20 +255,20 @@ class YoloLayer(Layer):
         num_batch = x.size(0)
         grid_size = x.size(-1)
 
-        if self.training and (self.grid_size!=x.size(-1) or self.grid_size!=x.size(-2)):
+        if self.training and (self.grid_size != x.size(-1) or self.grid_size != x.size(-2)):
             self.compute_grid_offsets(grid_size)
 
         self.grid.to(get_device())
         self.anchors.to(get_device())
-        anchor_vec = self.anchors/ self.stride
+        anchor_vec = self.anchors / self.stride
         anchor_wh = anchor_vec.view(1, self.num_anchors, 1, 1, 2)
 
-
-        prediction = x.view(num_batch, self.num_anchors, self.num_classes + 5, grid_size, grid_size).permute(0, 1, 3, 4, 2).contiguous()
+        prediction = x.view(num_batch, self.num_anchors, self.num_classes + 5, grid_size, grid_size).permute(0, 1, 3, 4,
+                                                                                                             2).contiguous()
         # if self.training:
         #     return reshape(prediction,(num_batch, -1, self.num_classes + 5))
 
-            # Get outputs
+        # Get outputs
         xy = sigmoid(prediction[..., 0:2])  # Center x
         wh = prediction[..., 2:4]  # Width
 
@@ -281,14 +287,12 @@ class YoloLayer(Layer):
 
         output = torch.cat([xy, wh, pred_conf, pred_class], -1)
 
-
         return output
 
 
-
 class YoloDetectionModel(ImageDetectionModel):
-    def __init__(self, inputs=None, input_shape=None,output=None):
-        super(YoloDetectionModel, self).__init__(inputs, input_shape,output)
+    def __init__(self, inputs=None, input_shape=None, output=None):
+        super(YoloDetectionModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = [Resize((input_shape[-2], input_shape[-1]), True), Normalize(0, 255)]
         self.detection_threshold = 0.5
         self.nms_threshold = 0.3
@@ -426,7 +430,7 @@ class YoloDetectionModel(ImageDetectionModel):
         return boxes[pick], pick
 
     def infer_single_image(self, img, scale=1, verbose=False):
-        time_time =None
+        time_time = None
         if verbose:
             time_time = time.time()
             print("==-----  starting infer {0} -----=======".format(img))
@@ -435,7 +439,8 @@ class YoloDetectionModel(ImageDetectionModel):
                 self._model.to(self.device)
                 self._model.eval()
                 if self._model.input_spec is None:
-                    self._model.input_spec=TensorSpec(shape=TensorShape([None,3,608,608]),object_type=ObjectType.rgb)
+                    self._model.input_spec = TensorSpec(shape=TensorShape([None, 3, 608, 608]),
+                                                        object_type=ObjectType.rgb)
                 if self._model.input_spec.object_type is None:
                     self._model.input_spec.object_type = ObjectType.rgb
                 img = image2array(img)
@@ -447,7 +452,8 @@ class YoloDetectionModel(ImageDetectionModel):
                 for func in self.preprocess_flow:
                     if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                         img = func(img, spec=self._model.input_spec)
-                        if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                        if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
+                                isinstance(func, Transform) and func.name == 'resize'):
                             rescale_scale = func.scale
 
                 img = image_backend_adaption(img)
@@ -477,24 +483,30 @@ class YoloDetectionModel(ImageDetectionModel):
                         boxes = boxes[keep]
                         print('         iou threshold:{0}'.format(self.nms_threshold))
                         print('         {0} bboxes keep!'.format(len(boxes)))
-                    boxes[:, :4] /=scale
-                    boxes[:, :4]=np.round(boxes[:, :4],0)
+                    boxes[:, :4] /= scale
+                    boxes[:, :4] = np.round(boxes[:, :4], 0)
 
                     if verbose:
                         print("======== bbox postprocess time:{0:.5f}".format((time.time() - time_time)))
                         time_time = time.time()
                     # boxes = boxes * (1 / scale[0])
-                    locations= boxes[:, :4]
+                    locations = boxes[:, :4]
                     probs = boxes[:, 4]
-                    labels=np.argmax(boxes[:, 5:], -1).astype(np.int32)
+                    labels = np.argmax(boxes[:, 5:], -1).astype(np.int32)
 
                     if verbose and locations is not None:
                         for i in range(len(locations)):
                             print('         box{0}: {1} prob:{2:.2%} class:{3}'.format(i, [np.round(num, 4) for num in
-                                                                                           locations[i].tolist()], probs[i],
-                                                                                       labels[i] if self.class_names is None or int(labels[i]) >= len(self.class_names) else self.class_names[int(labels[i])]))
+                                                                                           locations[i].tolist()],
+                                                                                       probs[i],
+                                                                                       labels[
+                                                                                           i] if self.class_names is None or int(
+                                                                                           labels[i]) >= len(
+                                                                                           self.class_names) else
+                                                                                       self.class_names[
+                                                                                           int(labels[i])]))
 
-                    return img_orig,locations,labels,probs
+                    return img_orig, locations, labels, probs
 
                 else:
                     return img_orig, None, None, None
@@ -518,8 +530,9 @@ class YoloDetectionModel(ImageDetectionModel):
             for m in range(len(boxes)):
                 this_box = boxes[m]
                 this_label = labels[m]
-                thiscolor=tuple([int(c) for c in self.palette[this_label][:3]])
-                pillow_img=plot_bbox(this_box, pillow_img, thiscolor,self.class_names[int(this_label)], line_thickness=2)
+                thiscolor = tuple([int(c) for c in self.palette[this_label][:3]])
+                pillow_img = plot_bbox(this_box, pillow_img, thiscolor, self.class_names[int(this_label)],
+                                       line_thickness=2)
             rgb_image = np.array(pillow_img.copy())
         if verbose:
             print("======== draw image time:{0:.5f}".format((time.time() - time_time)))
@@ -527,21 +540,21 @@ class YoloDetectionModel(ImageDetectionModel):
 
 
 def YoLoV4(pretrained=True,
-            freeze_features=True,
-            input_shape=(3, 608, 608),
-             classes=80,
-             **kwargs):
-    detector = YoloDetectionModel(input_shape=input_shape, output=yolo4_body(classes, input_shape[-1]))
+           freeze_features=True,
+           input_shape=(3, 608, 608),
+           classes=80,
+           **kwargs):
+    detector = YoloDetectionModel(input_shape=input_shape,
+                                  output=yolo4_body(num_classes=classes, image_size=input_shape[-1]))
 
     if pretrained:
         download_model_from_google_drive('1CcbyinE8gQFjMjt05arSg2W0LLUwjsdt', dirname, 'pretrained_yolov4_mscoco.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'pretrained_yolov4_mscoco.pth')))
-        detector.model = recovery_model
+        detector.model.load_state_dict(recovery_model.state_dict())
 
-    detector.model .input_shape = input_shape
-    detector.model .to(get_device())
+    detector.model.input_shape = input_shape
+    detector.model.to(get_device())
     return detector
-
 
 
 def darknet_body():
@@ -553,6 +566,3 @@ def darknet_body():
         resblock_body(512, 8),
         resblock_body(1024, 4)
     )
-
-
-

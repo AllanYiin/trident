@@ -15,7 +15,7 @@ from torch.autograd import Variable
 from trident.backend.common import get_session, addindent, get_time_suffix, get_class, get_function, camel2snake
 from trident.backend.pytorch_ops import *
 from trident.data.mask_common import mask2trimap
-from trident.optims.losses import _check_logsoftmax_logit
+from trident.optims.losses import _check_logsoftmax_logit,_check_logit,_check_softmax
 __all__ = ['accuracy','recall','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
 # def accuracy(input, target,axis=1):
@@ -40,6 +40,7 @@ def accuracy(output:Tensor, target:Tensor, topk:int=1,axis:int=1,ignore_index:Un
     """Computes the precision@k for the specified values of k
     prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
     """
+    shp=int_shape(output)
     output_tensor=output.copy().detach()
     target_tensor=target.copy().detach()
     num_classes = int_shape(output)[axis]
@@ -74,7 +75,7 @@ def accuracy(output:Tensor, target:Tensor, topk:int=1,axis:int=1,ignore_index:Un
             if isinstance(idx, int) and 0 <= idx < int_shape(output)[axis]:
                 input_mask[output_tensor == idx] = 0
 
-    batch_size = target_tensor.size(0)
+    batch_size = shp[0]
     if topk==1:
         return (output_tensor.eq(target_tensor).float()*input_mask).sum()/clip((input_mask).float().sum(),min=1)
     else:

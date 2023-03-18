@@ -116,7 +116,8 @@ def normal(tensor, mean=0., std=1.):
         >>> w = torch.empty(3, 5)
         >>> nn.init.normal_(w)
     """
-
+    if std is None or std < 0.02:
+        std = 0.02
     if isinstance(tensor,tf.Module):
         for name,weight in tensor.named_parameters():
             if weight.trainable==True and 'bias' not in name:
@@ -329,6 +330,8 @@ def trunc_normal(tensor, mean=0., std=1., a=-2., b=2.):
         >>> w = torch.empty(3, 5)
         >>> nn.init.trunc_normal_(w)
     """
+    if std is None or std < 0.02:
+        std = 0.02
     if isinstance(tensor,tf.Module):
         for name,weight in tensor.named_parameters():
             if weight.trainable==True and 'bias' not in name:

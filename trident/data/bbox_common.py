@@ -23,7 +23,7 @@ else:
 
 
 
-__all__ = ['nms', 'xywh2xyxy', 'xyxy2xywh','box_area','box_iou','bbox_iou','bbox_diou','box_giou','bbox_giou','bbox_giou_numpy','plot_one_box','convert_to_square']
+__all__ = ['xywh2xyxy', 'xyxy2xywh','box_area','plot_one_box','convert_to_square']
 
 
 def plot_one_box(box, img, color=None, label=None, line_thickness=None):
@@ -145,79 +145,79 @@ def box_area(boxes: Tensor) -> Tensor:
     """
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
-
-def box_iou(boxes1, boxes2):
-    """Calculate the ious between each bbox of bboxes1 and bboxes2.
-
-    Args:
-        boxes1(ndarray/ tensor): shape (n, 4)
-        boxes2(ndarray/ tensor): shape (k, 4)
-
-    Returns:
-        iou(ndarray/ tensor): shape (n, k)
-        union (ndarray/ tensor): shape (n, k)
-
-    Examples:
-        >>> box_iou(to_tensor(np.array([[104, 85, 200, 157]])).cpu(),to_tensor(np.array([[110, 80, 195, 153]])).cpu())
-        (tensor([[0.7878]]), tensor([[7337]]))
-        >>> box_iou(np.array([[104, 85, 200, 157]]),np.array([[110, 80, 195, 153]]))
-        (array([[7.8779e-01]]), array([[7.3370e+03]]))
-       >>> box_iou(to_tensor(np.array([[104, 85, 200, 157]])).cpu(),to_tensor(np.array([[10, 20, 45, 73]])).cpu())
-        (tensor([[0.]]), tensor([[8767]]))
-        >>> box_iou(np.array([[104, 85, 200, 157]]),np.array([[10, 20, 45, 73]]))
-        (array([[0.0000e+00]]), array([[8.7670e+03]]))
-
-    """
-    area1 = box_area(boxes1)
-    area2 = box_area(boxes2)
-
-    lt = maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    rb = minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
-
-    wh = clip(rb- lt,min=0)  # [N,M,2]
-    inter = wh[:, :, 0] * wh[:, :, 1] # [N,M]
-
-    union = area1[:, None] + area2 - inter
-    iou = inter / union
-    return iou, union
-
-bbox_iou=box_iou
-
-
-def box_giou(boxes1, boxes2):
-    """
-    Generalized IoU from https://giou.stanford.edu/
-    The boxes should be in [x0, y0, x1, y1] format
-    Returns a [N, M] pairwise matrix, where N = len(boxes1)
-    and M = len(boxes2)
-
-    Examples:
-        >>> box_giou(to_tensor(np.array([[104, 85, 200, 157]])).cpu(),to_tensor(np.array([[110, 80, 195, 153]])).cpu())
-        tensor([[0.7803]])
-        >>> box_giou(np.array([[104, 85, 200, 157]]),np.array([[110, 80, 195, 153]]))
-        array([[7.8035e-01]])
-        >>> box_giou(to_tensor(np.array([[104, 85, 200, 157]])).cpu(),to_tensor(np.array([[10, 20, 45, 73]])).cpu())
-        tensor([[-0.6632]])
-        >>> box_giou(np.array([[104, 85, 200, 157]]),np.array([[10, 20, 45, 73]]))
-        array([[-6.6320e-01]])
-
-    """
-    # degenerate boxes gives inf / nan results
-    # so do an early check
-    assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
-    assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
-    iou, union = box_iou(boxes1, boxes2)
-
-    lt = minimum(boxes1[:, None, :2], boxes2[:, :2])
-    rb =maximum(boxes1[:, None, 2:], boxes2[:, 2:])
-
-    wh = clip(rb - lt,min=0)  # [N,M,2]
-    area = wh[:, :, 0] * wh[:, :, 1]
-
-    return iou - (area - union) / area
-
-bbox_giou=box_giou
-bbox_giou_numpy=box_giou
+#
+# def box_iou(boxes1, boxes2):
+#     """Calculate the ious between each bbox of bboxes1 and bboxes2.
+#
+#     Args:
+#         boxes1(ndarray/ tensor): shape (n, 4)
+#         boxes2(ndarray/ tensor): shape (k, 4)
+#
+#     Returns:
+#         iou(ndarray/ tensor): shape (n, k)
+#         union (ndarray/ tensor): shape (n, k)
+#
+#     Examples:
+#         >>> box_iou(to_tensor(np.array([[104, 85, 200, 157]])).cpu(),to_tensor(np.array([[110, 80, 195, 153]])).cpu())
+#         (tensor([[0.7878]]), tensor([[7337]]))
+#         >>> box_iou(np.array([[104, 85, 200, 157]]),np.array([[110, 80, 195, 153]]))
+#         (array([[7.8779e-01]]), array([[7.3370e+03]]))
+#        >>> box_iou(to_tensor(np.array([[104, 85, 200, 157]])).cpu(),to_tensor(np.array([[10, 20, 45, 73]])).cpu())
+#         (tensor([[0.]]), tensor([[8767]]))
+#         >>> box_iou(np.array([[104, 85, 200, 157]]),np.array([[10, 20, 45, 73]]))
+#         (array([[0.0000e+00]]), array([[8.7670e+03]]))
+#
+#     """
+#     area1 = box_area(boxes1)
+#     area2 = box_area(boxes2)
+#
+#     lt = maximum(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+#     rb = minimum(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+#
+#     wh = clip(rb- lt,min=0)  # [N,M,2]
+#     inter = wh[:, :, 0] * wh[:, :, 1] # [N,M]
+#
+#     union = area1[:, None] + area2 - inter
+#     iou = inter / union
+#     return iou, union
+#
+#
+#
+#
+# def box_giou(boxes1, boxes2):
+#     """
+#     Generalized IoU from https://giou.stanford.edu/
+#     The boxes should be in [x0, y0, x1, y1] format
+#     Returns a [N, M] pairwise matrix, where N = len(boxes1)
+#     and M = len(boxes2)
+#
+#     Examples:
+#         >>> box_giou(to_tensor(np.array([[104, 85, 200, 157]])).cpu(),to_tensor(np.array([[110, 80, 195, 153]])).cpu())
+#         tensor([[0.7803]])
+#         >>> box_giou(np.array([[104, 85, 200, 157]]),np.array([[110, 80, 195, 153]]))
+#         array([[7.8035e-01]])
+#         >>> box_giou(to_tensor(np.array([[104, 85, 200, 157]])).cpu(),to_tensor(np.array([[10, 20, 45, 73]])).cpu())
+#         tensor([[-0.6632]])
+#         >>> box_giou(np.array([[104, 85, 200, 157]]),np.array([[10, 20, 45, 73]]))
+#         array([[-6.6320e-01]])
+#
+#     """
+#     # degenerate boxes gives inf / nan results
+#     # so do an early check
+#     assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
+#     assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
+#     iou, union = box_iou(boxes1, boxes2)
+#
+#     lt = minimum(boxes1[:, None, :2], boxes2[:, :2])
+#     rb =maximum(boxes1[:, None, 2:], boxes2[:, 2:])
+#
+#     wh = clip(rb - lt,min=0)  # [N,M,2]
+#     area = wh[:, :, 0] * wh[:, :, 1]
+#
+#     return iou - (area - union) / area
+#
+# bbox_giou=box_giou
+# bbox_giou_numpy=box_giou
 
 def clip_boxes_to_image(boxes, size):
 
@@ -281,16 +281,17 @@ def nms(boxes, threshold):
         if len(sorted_index) == 1:
             break
         # sorted_index = sorted_index[:-1]
-        xx1 = np.max(x1[i], x1[sorted_index[:last]])
-        yy1 = np.max(y1[i], y1[sorted_index[:last]])
-        xx2 = np.min(x2[i], x2[sorted_index[:last]])
-        yy2 = np.min(y2[i], y2[sorted_index[:last]])
-        # compute the width and height of the bounding box
-        xc = ((xx1 + xx2).abs_() / 2 - (x1[sorted_index[:last]] + x2[sorted_index[:last]]) / 2)
-        yc = ((yy1 + yy2).abs_() / 2 - (y1[sorted_index[:last]] + y2[sorted_index[:last]]) / 2)
 
-        w = (xx2 - xx1 + 1).clamp_(0)
-        h = (yy2 - yy1 + 1).clamp_(0)
+        xx1 = np.maximum(x1[i], x1[sorted_index[:last]])
+        yy1 = np.maximum(y1[i], y1[sorted_index[:last]])
+        xx2 = np.minimum(x2[i], x2[sorted_index[:last]])
+        yy2 = np.minimum(y2[i], y2[sorted_index[:last]])
+        # compute the width and height of the bounding box
+        xc = (np.abs(xx1 + xx2) / 2 - (x1[sorted_index[:last]] + x2[sorted_index[:last]]) / 2)
+        yc = (np.abs(yy1 + yy2) / 2 - (y1[sorted_index[:last]] + y2[sorted_index[:last]]) / 2)
+
+        w = np.clip(xx2 - xx1 + 1,a_min=0,a_max=None)
+        h = np.clip(yy2 - yy1 + 1,a_min=0,a_max=None)
         inter = w * h
 
         # any of happends will dedup
@@ -298,19 +299,7 @@ def nms(boxes, threshold):
         sorted_index = sorted_index[IoU <= threshold]
 
     if boxes is not None and len(pick) > 0:
-        try:
-            out = boxes[pick]
-            if len(out.size()) == 1:
-                out = out.unsqueeze(0)
-                if len(out) == 0:
-                    return None
-            return out,pick
-        except Exception as e:
-            print(e)
-            print('box_len', box_len)
-            print('pick', len(pick))
-            print('boxes', len(boxes))
-
+        return pick
     return None
 
 
@@ -339,225 +328,18 @@ def matrix_iof(a, b):
     area_a = np.prod(a[:, 2:4] - a[:, 0:2], axis=1)
     return area_i / np.maximum(area_a[:, np.newaxis], 1)
 
+def landmark106_to_68(landmarks):
+    landmark106to68 =to_tensor( [1, 10, 12, 14, 16, 3, 5, 7, 0, 23, 21, 19, 32, 30, 28, 26, 17,  # face17
+                       43, 48, 49, 51, 50,  # left brow点
+                       102, 103, 104, 105, 101,  # right brow 5
+                       72, 73, 74, 86, 78, 79, 80, 85, 84,  # nose 9
+                       35, 41, 42, 39, 37, 36,  # left eye 6
+                       89, 95, 96, 93, 91, 90,  # right eye 6
+                       52, 64, 63, 71, 67, 68, 61, 58, 59, 53, 56, 55, 65, 66, 62, 70, 69, 57, 60, 54  # mouth 20
+                       ]).long()
+    return landmarks[landmark106to68]
 
 
-# def bbox_iou(bboxes1, bboxes2, mode='iou', allow_neg=False):
-#     """Calculate the ious between each bbox of bboxes1 and bboxes2.
-#
-#     Args:
-#         allow_neg ():
-#         bboxes1(ndarray): shape (n, 4)
-#         bboxes2(ndarray): shape (k, 4)
-#         mode(str): iou (intersection over union) or iof (intersection
-#             over foreground)
-#
-#     Returns:
-#         ious(ndarray): shape (n, k)
-#     """
-#
-#     assert mode in ['iou', 'iof']
-#     if (bboxes1 is None or len(bboxes1) == 0) and (bboxes2 is None or len(bboxes2) == 0):
-#         return np.ones(1)
-#
-#     elif bboxes1 is None or len(bboxes1)==0 or bboxes2 is None or len(bboxes2)==0:
-#         return np.zeros(1)
-#
-#     bboxes1 = bboxes1.astype(np.float32)
-#     bboxes2 = bboxes2.astype(np.float32)
-#     rows = bboxes1.shape[0]
-#     cols = bboxes2.shape[0]
-#     ious = np.zeros((rows, cols), dtype=np.float32)
-#     if rows * cols == 0:
-#         return ious
-#     exchange = False
-#     if bboxes1.shape[0] > bboxes2.shape[0]:
-#         bboxes1, bboxes2 = bboxes2, bboxes1
-#         ious = np.zeros((cols, rows), dtype=np.float32)
-#         exchange = True
-#     area1 = (bboxes1[:, 2] - bboxes1[:, 0] + 1) * (
-#         bboxes1[:, 3] - bboxes1[:, 1] + 1)
-#     area2 = (bboxes2[:, 2] - bboxes2[:, 0] + 1) * (
-#         bboxes2[:, 3] - bboxes2[:, 1] + 1)
-#     for i in range(bboxes1.shape[0]):
-#         x_start = np.maximum(bboxes1[i, 0], bboxes2[:, 0])
-#         y_start = np.maximum(bboxes1[i, 1], bboxes2[:, 1])
-#         x_end = np.minimum(bboxes1[i, 2], bboxes2[:, 2])
-#         y_end = np.minimum(bboxes1[i, 3], bboxes2[:, 3])
-#         if not allow_neg:
-#             overlap = np.maximum(x_end - x_start + 1, 0) * np.maximum(y_end - y_start + 1, 0)
-#         else:
-#             overlap = (x_end - x_start + 1) * (y_end - y_start + 1)
-#             flag = np.ones(overlap.shape)
-#             flag[x_end - x_start + 1 < 0] = -1.
-#             flag[y_end - y_start + 1 < 0] = -1.
-#             overlap = flag * np.abs(overlap)
-#
-#         if mode == 'iou':
-#             union = area1[i] + area2 - overlap
-#         else:
-#             union = area1[i] if not exchange else area2
-#         ious[i, :] = overlap / union
-#     if exchange:
-#         ious = ious.T
-#     return ious
-
-# def bbox_giou_numpy(bboxes1, bboxes2):
-#     """Calculate the gious between each bbox of bboxes1 and bboxes2.
-#
-#     Args:
-#         bboxes1(ndarray): shape (n, 4)
-#         bboxes2(ndarray): shape (k, 4)
-#
-#     Returns:
-#         gious(ndarray): shape (n, k)
-#     """
-#
-#
-#     bboxes1 = bboxes1.astype(np.float32)
-#     bboxes2 = bboxes2.astype(np.float32)
-#     rows = bboxes1.shape[0]
-#     cols = bboxes2.shape[0]
-#     ious = np.zeros((rows, cols), dtype=np.float32)
-#     if rows * cols == 0:
-#         return ious
-#     exchange = False
-#     if bboxes1.shape[0] > bboxes2.shape[0]:
-#         bboxes1, bboxes2 = bboxes2, bboxes1
-#         ious = np.zeros((cols, rows), dtype=np.float32)
-#         exchange = True
-#     area1 = (bboxes1[:, 2] - bboxes1[:, 0] + 1) * (
-#         bboxes1[:, 3] - bboxes1[:, 1] + 1)
-#     area2 = (bboxes2[:, 2] - bboxes2[:, 0] + 1) * (
-#         bboxes2[:, 3] - bboxes2[:, 1] + 1)
-#     for i in range(bboxes1.shape[0]):
-#         x_start = np.maximum(bboxes1[i, 0], bboxes2[:, 0])
-#         x_min = np.minimum(bboxes1[i, 0], bboxes2[:, 0])
-#         y_start = np.maximum(bboxes1[i, 1], bboxes2[:, 1])
-#         y_min = np.minimum(bboxes1[i, 1], bboxes2[:, 1])
-#         x_end = np.minimum(bboxes1[i, 2], bboxes2[:, 2])
-#         x_max = np.maximum(bboxes1[i, 2], bboxes2[:, 2])
-#         y_end = np.minimum(bboxes1[i, 3], bboxes2[:, 3])
-#         y_max = np.maximum(bboxes1[i, 3], bboxes2[:, 3])
-#
-#         overlap = np.clip(np.maximum(x_end - x_start + 1, 0) * np.maximum(y_end - y_start + 1, 0),1e-8,np.inf)
-#         closure = np.clip(np.maximum(x_max - x_min + 1, 0) * np.maximum(y_max - y_min + 1, 0),1e-8,np.inf)
-#
-#         union =np.clip( area1[i] + area2 - overlap,1e-8,np.inf)
-#
-#         ious[i, :] = overlap / union - (closure - union) / closure
-#     if exchange:
-#         ious = ious.T
-#     return ious
-
-# def bbox_giou(bboxes1, bboxes2):
-#     """Calculate GIoU loss on anchor boxes
-#         Reference Paper:
-#             "Generalized Intersection over Union: A Metric and A Loss for Bounding Box Regression"
-#             https://arxiv.org/abs/1902.09630
-#
-#     Args:
-#         bboxes1: tensor, shape=(n, 4), xyxy
-#         bboxes2: tensor, shape=(n, 4), xyxy
-#
-#     Returns:
-#         giou: tensor, shape=(batch, feat_w, feat_h, anchor_num, 1)
-#
-#     """
-#     bboxes1 = bboxes1.float()
-#     bboxes2 = bboxes2.float()
-#     rows = bboxes1.shape[0]
-#     cols = bboxes2.shape[0]
-#     # if (bboxes1 is None or len(bboxes1) == 0) and (bboxes2 is None or len(bboxes2) == 0):
-#     #     return ones((rows, cols))
-#     #
-#     # elif bboxes1 is None or len(bboxes1)==0 or bboxes2 is None or len(bboxes2)==0:
-#     #     return zeros((rows, cols))
-#     #
-#
-#     ious = zeros((rows, cols))
-#     ious.requires_grad=True
-#     if rows * cols == 0:
-#         return ious
-#     exchange = False
-#     if bboxes1.shape[0] > bboxes2.shape[0]:
-#         bboxes1, bboxes2 = bboxes2, bboxes1
-#         ious = zeros((cols, rows),requires_grad=True)
-#         exchange = True
-#     area1 = (bboxes1[:, 2] - bboxes1[:, 0] + 1) * (bboxes1[:, 3] - bboxes1[:, 1] + 1)
-#     area2 = (bboxes2[:, 2] - bboxes2[:, 0] + 1) * (bboxes2[:, 3] - bboxes2[:, 1] + 1)
-#     for i in range(bboxes1.shape[0]):
-#         x_start = maximum(bboxes1[i, 0], bboxes2[:, 0])
-#         x_min = minimum(bboxes1[i, 0], bboxes2[:, 0])
-#         y_start = maximum(bboxes1[i, 1], bboxes2[:, 1])
-#         y_min = minimum(bboxes1[i, 1], bboxes2[:, 1])
-#         x_end = minimum(bboxes1[i, 2], bboxes2[:, 2])
-#         x_max = maximum(bboxes1[i, 2], bboxes2[:, 2])
-#         y_end = minimum(bboxes1[i, 3], bboxes2[:, 3])
-#         y_max = maximum(bboxes1[i, 3], bboxes2[:, 3])
-#
-#         overlap =clip( maximum(x_end - x_start + 1, 0) * maximum(y_end - y_start + 1, 0),min=1e-8)
-#         closure = clip(maximum(x_max - x_min + 1, 0) * maximum(y_max - y_min + 1, 0),min=1e-8)
-#
-#         union = clip(area1[i] + area2 - overlap,min=1e-8)
-#
-#         ious[i, :] = overlap / union - (closure - union) / closure
-#     if exchange:
-#         ious = ious.T
-#     return ious
-
-def bbox_diou(bboxes1, bboxes2):
-    """Calculate DIoU loss on anchor boxes
-        Reference Paper:
-            "Distance-IoU Loss: Faster and Better Learning for Bounding Box Regression"
-            https://arxiv.org/abs/1911.08287
-
-    Args:
-        bboxes1: tensor, shape=(batch, feat_w, feat_h, anchor_num, 4), xywh
-        bboxes2: tensor, shape=(batch, feat_w, feat_h, anchor_num, 4), xywh
-
-    Returns:
-        diou: tensor, shape=(batch, feat_w, feat_h, anchor_num, 1)
-
-    """
-
-    b1_mins =  bboxes1[..., :2]
-    b1_maxes =  bboxes1[..., 2:4]
-    b1_wh=b1_maxes-b1_mins
-
-
-    b2_mins =  bboxes2[..., :2]
-    b2_maxes = bboxes2[..., 2:4]
-    b2_wh=b2_maxes-b2_mins
-
-    intersect_mins = maximum(b1_mins, b2_mins)
-    intersect_maxes = minimum(b1_maxes, b2_maxes)
-    intersect_wh = maximum(intersect_maxes - intersect_mins, 0.)
-    intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]
-
-    b1_area = b1_wh[..., 0] * b1_wh[..., 1]
-    b2_area = b2_wh[..., 0] * b2_wh[..., 1]
-    union_area = b1_area + b2_area - intersect_area
-    # calculate IoU, add epsilon in denominator to avoid dividing by 0
-    iou = intersect_area / (union_area + epsilon())
-
-    # box center distance
-    center_distance = reduce_sum(square((b1_maxes+b1_mins)/2 - (b2_maxes+b2_mins)/2), axis=-1)
-    # get enclosed area
-    enclose_mins = minimum(b1_mins, b2_mins)
-    enclose_maxes = maximum(b1_maxes, b2_maxes)
-    enclose_wh =maximum(enclose_maxes - enclose_mins, 0.0)
-    # get enclosed diagonal distance
-    enclose_diagonal = reduce_sum(square(enclose_wh), axis=-1)
-    # calculate DIoU, add epsilon in denominator to avoid dividing by 0
-    diou = iou - 1.0 * center_distance/ (enclose_diagonal + epsilon())
-
-    # calculate param v and alpha to extend to CIoU
-    #v = 4*K.square(tf.math.atan2(b1_wh[..., 0], b1_wh[..., 1]) - tf.math.atan2(b2_wh[..., 0], b2_wh[..., 1])) / (math.pi * math.pi)
-    #alpha = v / (1.0 - iou + v)
-    #diou = diou - alpha*v
-
-    diou = expand_dims(diou, -1)
-    return diou
 
 def convert_to_square(bboxes):
     """Convert bounding boxes to a square form.
@@ -583,3 +365,4 @@ def convert_to_square(bboxes):
     bboxes[:, 2] = bboxes[:, 0] + max_len
     bboxes[:, 3] = bboxes[:, 1] + max_len
     return bboxes
+

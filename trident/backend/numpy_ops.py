@@ -2,21 +2,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import numbers
-import random
 import math
-import os
-import sys
-import builtins
-from scipy import special
-from collections import Sized, Iterable
-from functools import partial
-from typing import Tuple, List, Optional, Union, Sequence
+import random
+from collections import Iterable
+from typing import List, Optional, Sequence
 
 import numpy as np
-from trident.backend.common import epsilon,is_numpy,to_list
-from trident.backend import dtype as Dtype
+from scipy import special
+
 from trident import context
+from trident.backend import dtype as Dtype
+from trident.backend.common import epsilon, is_numpy, to_list
 
 #
 # __all__ = [ 'ndim', 'cast', 'int_shape', 'is_nan', 'is_inf',
@@ -52,7 +48,7 @@ DTYPE_MAPPING = {
     np.double: Dtype.float64,
     np.csingle: Dtype.cfloat
 }
-
+_Tensor=np.ndarray
 np.long=np.int_
 np.bool=np.bool_
 np.uint8=np.ubyte
@@ -67,7 +63,7 @@ def to_numpy(x):
     return np.array(x)
 
 
-def ndim(x:np.ndarray):
+def ndim(x:_Tensor):
     """Number of dimension of a tensor
 
     Args:
@@ -92,7 +88,7 @@ def numel(x: np.ndarray):
     return x.size
 
 
-def int_shape(x:np.ndarray):
+def int_shape(x:_Tensor):
     """Shape of a tensor in tuple of integer format
 
     Args:
@@ -145,7 +141,7 @@ def str2dtype(dtype):
     return np.float32
 
 
-def cast(x:np.ndarray, dtype:np.dtype):
+def cast(x:_Tensor, dtype:np.dtype):
     """Casts a tensor to a new type.
 
     The operation casts `x` (in case of `Tensor`) or `x.values`
@@ -296,7 +292,7 @@ def logical_and(left, right):
     return np.logical_and(left, right)
 
 
-def logical_not(x:np.ndarray):
+def logical_not(x:_Tensor):
     """Element-wise `logical not: ~x`
     Args:
         x (Tensor): input boolean tensor
@@ -335,7 +331,7 @@ def logical_xor(left, right):
 ###########################
 
 
-def less(left:np.ndarray, right:(np.ndarray,float,int)):
+def less(left:_Tensor, right:(np.ndarray,float,int)):
     """
     Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
@@ -356,7 +352,7 @@ def less(left:np.ndarray, right:(np.ndarray,float,int)):
     return np.less(left,right).astype(np.float32)
 
 
-def equal(left:np.ndarray, right:(np.ndarray,float,int)):
+def equal(left:_Tensor, right:(np.ndarray,float,int)):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
     Args:
@@ -375,7 +371,7 @@ def equal(left:np.ndarray, right:(np.ndarray,float,int)):
     return np.equal(left,right).astype(np.float32)
 
 
-def greater(left:np.ndarray, right:(np.ndarray,float,int)):
+def greater(left:_Tensor, right:(np.ndarray,float,int)):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
     Args:
@@ -394,7 +390,7 @@ def greater(left:np.ndarray, right:(np.ndarray,float,int)):
     return np.greater(left,right).astype(np.float32)
 
 
-def greater_equal(left:np.ndarray, right:(np.ndarray,float,int)):
+def greater_equal(left:_Tensor, right:(np.ndarray,float,int)):
     """
     Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
@@ -414,7 +410,7 @@ def greater_equal(left:np.ndarray, right:(np.ndarray,float,int)):
     return np.greater_equal(left,right).astype(np.float32)
 
 
-def not_equal(left:np.ndarray, right:(np.ndarray,float,int)):
+def not_equal(left:_Tensor, right:(np.ndarray,float,int)):
     """
     Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
@@ -434,7 +430,7 @@ def not_equal(left:np.ndarray, right:(np.ndarray,float,int)):
     return np.not_equal(left,right).astype(np.float32)
 
 
-def less_equal(left:np.ndarray, right:(np.ndarray,float,int)):
+def less_equal(left:_Tensor, right:(np.ndarray,float,int)):
     """
     Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
@@ -454,15 +450,15 @@ def less_equal(left:np.ndarray, right:(np.ndarray,float,int)):
     return np.less_equal(left,right).astype(np.float32)
 
 
-def argmax(x:np.ndarray, axis=1) ->np.ndarray:
+def argmax(x:_Tensor, axis=1) ->np.ndarray:
     return np.argmax(x,axis=axis)
 
 
-def argmin(x:np.ndarray, axis=1) ->np.ndarray:
+def argmin(x:_Tensor, axis=1) ->np.ndarray:
     return np.argmin(x,axis=axis)
 
 
-def argsort(x:np.ndarray, axis=1, descending=True) ->np.ndarray:
+def argsort(x:_Tensor, axis=1, descending=True) ->np.ndarray:
     if descending:
         return np.argsort(-x, axis=axis)
     else:
@@ -497,14 +493,14 @@ def topk(x: np.ndarray,  k=1) -> np.ndarray:
     full_sort = np.argsort(x)
     return full_sort.take(np.arange(k))
 
-def maximum(x:np.ndarray, other: (np.ndarray, int, float)) ->np.ndarray:
+def maximum(x:_Tensor, other: (np.ndarray, int, float)) ->np.ndarray:
     if isinstance(other,np.ndarray):
         return np.maximum(x, other)
     elif isinstance(other, (int, float)):
         return np.clip(x,a_min=float(other))
 
 
-def minimum(x:np.ndarray, other: (np.ndarray, int, float)) ->np.ndarray:
+def minimum(x:_Tensor, other: (np.ndarray, int, float)) ->np.ndarray:
     if isinstance(other,np.ndarray):
         return np.minimum(x, other)
     elif isinstance(other, (int, float)):
@@ -792,8 +788,22 @@ def pi():
     return np.pi
 
 
-def sqrt(x:np.ndarray):
-    r"""Computes element-wise square root of the input tensor.
+def sign(x: _Tensor) -> _Tensor:
+    """The output of this operation is the element-wise sign of the two  inputtensor.
+
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns:
+        The sign of the input tensor.
+
+    """
+
+    return np.sign(x)
+
+def sqrt(x:_Tensor):
+    """Computes element-wise square root of the input tensor.
 
     Note: This operation does not support integer types.
 
@@ -827,7 +837,7 @@ def sqrt(x:np.ndarray):
     return np.sqrt(x)
 
 
-def rsqrt(x:np.ndarray):
+def rsqrt(x:_Tensor):
     """Computes reciprocal of square root of x element-wise.
 
     Args:
@@ -848,8 +858,8 @@ def rsqrt(x:np.ndarray):
     return 1/np.sqrt(x)
 
 
-def square(x:np.ndarray):
-    r"""Computes square of x element-wise.
+def square(x:_Tensor):
+    """Computes square of x element-wise.
 
     I.e., \\(y = x * x = x^2\\).
 
@@ -869,8 +879,8 @@ def square(x:np.ndarray):
     return np.square(x)
 
 
-def abs(x:np.ndarray):
-    r"""Computes the absolute value of a tensor.
+def abs(x:_Tensor):
+    """Computes the absolute value of a tensor.
 
     Given a tensor of integer or floating-point values, this operation returns a
     tensor of the same type, where each element contains the absolute value of the
@@ -901,8 +911,8 @@ def abs(x:np.ndarray):
     return np.abs(x)
 
 
-def pow(x:np.ndarray, y):
-    r"""Computes the power of one value to another.
+def pow(x:_Tensor, y):
+    """Computes the power of one value to another.
 
     Given a tensor `x` and a tensor `y`, this operation computes \\(x^y\\) for
     corresponding elements in `x` and `y`. For example:
@@ -925,8 +935,8 @@ def pow(x:np.ndarray, y):
     return np.power(x,y)
 
 
-def log(x:np.ndarray):
-    r"""Computes natural logarithm of x element-wise.
+def log(x:_Tensor):
+    """Computes natural logarithm of x element-wise.
 
     I.e., \\(y = \log_e x\\).
 
@@ -952,8 +962,8 @@ def log(x:np.ndarray):
     return np.log(x)
 
 
-def exp(x:np.ndarray):
-    r"""Computes exponential of x element-wise.  \\(y = e^x\\).
+def exp(x:_Tensor):
+    """Computes exponential of x element-wise.  \\(y = e^x\\).
 
     This function computes the exponential of the input tensor element-wise.
     i.e. `math.exp(x)` or \\(e^x\\), where `x` is the input tensor.
@@ -995,7 +1005,7 @@ def exp(x:np.ndarray):
     return np.exp(x)
 
 
-def clip(x:np.ndarray, min=None, max=None):
+def clip(x:_Tensor, min=None, max=None):
     """
 
     Args:
@@ -1009,7 +1019,7 @@ def clip(x:np.ndarray, min=None, max=None):
     return np.clip(x,a_min=min,a_max=max)
 
 
-def sin(x:np.ndarray):
+def sin(x:_Tensor):
     """Computes the element-wise sine
 
     Args:
@@ -1018,7 +1028,7 @@ def sin(x:np.ndarray):
     Returns: element-wise sine
 
     Examples:
-        >>> sin(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> sin(np.array([[1,0.5],[-0.25,-0.75]]))()
         tensor([[ 0.8415,  0.4794],
                 [-0.2474, -0.6816]])
 
@@ -1026,7 +1036,7 @@ def sin(x:np.ndarray):
     return np.sin(x.astype(np.float32))
 
 
-def cos(x:np.ndarray):
+def cos(x:_Tensor):
     """Computes the element-wise cosine
 
     Args:
@@ -1035,7 +1045,7 @@ def cos(x:np.ndarray):
     Returns: element-wise cosine
 
     Examples:
-        >>> cos(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> cos(np.array([[1,0.5],[-0.25,-0.75]]))()
         tensor([[0.5403, 0.8776],
                 [0.9689, 0.7317]])
 
@@ -1043,7 +1053,7 @@ def cos(x:np.ndarray):
     return np.cos(x.astype(np.float32))
 
 
-def tan(x:np.ndarray):
+def tan(x:_Tensor):
     """Computes the element-wise tan
 
     Args:
@@ -1052,7 +1062,7 @@ def tan(x:np.ndarray):
     Returns: element-wise tan
 
     Examples:
-        >>> tan(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> tan(np.array([[1,0.5],[-0.25,-0.75]]))()
         tensor([[ 1.5574,  0.5463],
                 [-0.2553, -0.9316]])
 
@@ -1060,7 +1070,7 @@ def tan(x:np.ndarray):
     return np.tan(x.astype(np.float32))
 
 
-def asin(x:np.ndarray):
+def asin(x:_Tensor):
     """Computes the element-wise arcsin (inverse sine)
 
     Args:
@@ -1069,7 +1079,7 @@ def asin(x:np.ndarray):
     Returns: element-wise arcsin
 
     Examples:
-        >>> asin(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> asin(np.array([[1,0.5],[-0.25,-0.75]]))()
         tensor([[ 1.5708,  0.5236],
                 [-0.2527, -0.8481]])
 
@@ -1077,7 +1087,7 @@ def asin(x:np.ndarray):
     return np.arcsin(x.astype(np.float32))
 
 
-def acos(x:np.ndarray):
+def acos(x:_Tensor):
     """Computes the element-wise arccos (inverse cosine)
 
     Args:
@@ -1086,7 +1096,7 @@ def acos(x:np.ndarray):
     Returns: element-wise arccos
 
     Examples:
-        >>> acos(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> acos(np.array([[1,0.5],[-0.25,-0.75]]))()
         tensor([[0.0000, 1.0472],
                 [1.8235, 2.4189]])
 
@@ -1094,7 +1104,7 @@ def acos(x:np.ndarray):
     return np.arccos(x.astype(np.float32))
 
 
-def atan(x:np.ndarray):
+def atan(x:_Tensor):
     """Computes the element-wise arctan (inverse tan)
 
     Args:
@@ -1103,14 +1113,32 @@ def atan(x:np.ndarray):
     Returns: element-wise arccos
 
     Examples:
-        >>> atan(np.array([-1, 0, 1])).cpu()
+        >>> atan(np.array([-1, 0, 1]))()
         tensor([-0.7854,  0.0000,  0.7854])
 
     """
     return np.arctan(x.astype(np.float32))
 
 
-def sinh(x:np.ndarray):
+def atan2(x: _Tensor, other: _Tensor) -> _Tensor:
+    """Computes the element-wise arctangent (angles in radians between x and other )
+
+    Args:
+        x (Tensor): input tensor.
+        other (Tensor): second input tensor.
+
+    Returns:  the output tensor.
+
+     Examples:
+         >>> atan2(to_tensor([-1, 0, 1]), to_tensor([2, 4, 6]))()
+         tensor([-0.4636,  0.0000,  0.1651])
+
+    """
+    return atan(x / (other + 1e-6))
+
+
+
+def sinh(x:_Tensor):
     """Computes the element-wise sinh
 
     Args:
@@ -1119,7 +1147,7 @@ def sinh(x:np.ndarray):
     Returns: element-wise sinh
 
     Examples:
-        >>> sinh(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> sinh(np.array([[1,0.5],[-0.25,-0.75]]))()
         tensor([[ 1.1752,  0.5211],
                 [-0.2526, -0.8223]])
 
@@ -1127,7 +1155,7 @@ def sinh(x:np.ndarray):
     return np.sinh(x.astype(np.float32))
 
 
-def cosh(x:np.ndarray):
+def cosh(x:_Tensor):
     """Computes the element-wise cosh
 
     Args:
@@ -1136,7 +1164,7 @@ def cosh(x:np.ndarray):
     Returns: element-wise cosh
 
     Examples:
-        >>> cosh(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> cosh(np.array([[1,0.5],[-0.25,-0.75]]))()
         tensor([[1.5431, 1.1276],
                 [1.0314, 1.2947]])
 
@@ -1144,7 +1172,7 @@ def cosh(x:np.ndarray):
     return np.cosh(x.astype(np.float32))
 
 
-def tanh(x:np.ndarray):
+def tanh(x:_Tensor):
     """Computes the element-wise tanh
 
     Args:
@@ -1153,7 +1181,7 @@ def tanh(x:np.ndarray):
     Returns: element-wise tanh
 
     Examples:
-        >>> tanh(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> tanh(np.array([[1,0.5],[-0.25,-0.75]]))()
         tensor([[ 0.7616,  0.4621],
                 [-0.2449, -0.6351]])
 
@@ -1302,7 +1330,7 @@ def where(flag, value_if_true, value_if_false):
 ## reduce operation
 ###########################
 
-def reduce_mean(x:np.ndarray, axis=None, keepdims=False, **kwargs):
+def reduce_mean(x:_Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the mean of the input tensor's elements across a specified axis or a list of specified axes.
 
     Args:
@@ -1316,13 +1344,13 @@ def reduce_mean(x:np.ndarray, axis=None, keepdims=False, **kwargs):
 
     Examples:
         >>> data = np.array(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
-        >>> print(reduce_mean(data, 0).cpu())
+        >>> print(reduce_mean(data, 0)())
         tensor([[30.,  1.],
                 [40.,  2.]])
-        >>> print(reduce_mean(data, axis=0).cpu())
+        >>> print(reduce_mean(data, axis=0)())
         tensor([[30.,  1.],
                 [40.,  2.]])
-        >>> print(reduce_mean(data, axis=[0,2]).cpu())
+        >>> print(reduce_mean(data, axis=[0,2])())
         tensor([15.5000, 21.0000])
 
     """
@@ -1341,7 +1369,7 @@ def reduce_mean(x:np.ndarray, axis=None, keepdims=False, **kwargs):
         return x
 
 
-def reduce_sum(x:np.ndarray, axis=None, keepdims=False, **kwargs):
+def reduce_sum(x:_Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the sum of the input tensor's elements across a specified axis or a list of specified axes.
 
     Args:
@@ -1355,15 +1383,15 @@ def reduce_sum(x:np.ndarray, axis=None, keepdims=False, **kwargs):
 
     Examples:
         >>> data = np.array(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
-        >>> print(reduce_sum(data).cpu())
+        >>> print(reduce_sum(data)())
         tensor(219.)
-        >>> print(reduce_sum(data, 0).cpu())
+        >>> print(reduce_sum(data, 0)())
         tensor([[ 90.,   3.],
                 [120.,   6.]])
-        >>> print(reduce_sum(data, axis=0).cpu())
+        >>> print(reduce_sum(data, axis=0)())
         tensor([[ 90.,   3.],
                 [120.,   6.]])
-        >>> print(reduce_sum(data, axis=[0,2]).cpu())
+        >>> print(reduce_sum(data, axis=[0,2])())
         tensor([ 93., 126.])
 
     """
@@ -1383,7 +1411,7 @@ def reduce_sum(x:np.ndarray, axis=None, keepdims=False, **kwargs):
         return x
 
 
-def reduce_max(x:np.ndarray, axis=None, keepdims=False, **kwargs):
+def reduce_max(x:_Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the maximum of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -1442,7 +1470,7 @@ def reduce_max(x:np.ndarray, axis=None, keepdims=False, **kwargs):
         return x
 
 
-def reduce_min(x:np.ndarray, axis=None, keepdims=False, **kwargs):
+def reduce_min(x:_Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the minimum of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -1502,7 +1530,7 @@ def reduce_min(x:np.ndarray, axis=None, keepdims=False, **kwargs):
         return x
 
 
-def reduce_logsumexp(x:np.ndarray, axis=None, keepdims=False, **kwargs):
+def reduce_logsumexp(x:_Tensor, axis=None, keepdims=False, **kwargs):
     """Computes log(sum(exp(elements across dimensions of a tensor))).
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -1544,7 +1572,7 @@ def reduce_logsumexp(x:np.ndarray, axis=None, keepdims=False, **kwargs):
         return log(reduce_sum(exp(x), axis=axis, keepdims=keepdims))
 
 
-def reduce_prod(x:np.ndarray, axis=None, keepdims=False, **kwargs):
+def reduce_prod(x:_Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the product of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -1791,7 +1819,7 @@ def smooth_relu(x):
 
 
 def celu(x, alpha: np.ndarray = 1.0):
-    r"""Continuously-differentiable exponential linear unit activation.
+    """Continuously-differentiable exponential linear unit activation.
 
      Computes the element-wise function:
 
@@ -1896,7 +1924,7 @@ def hard_sigmoid(x):
 
 
     Examples:
-        >>> hard_sigmoid(np.array([-3.0, -1.0, 0.0, 2.0])).cpu()
+        >>> hard_sigmoid(np.array([-3.0, -1.0, 0.0, 2.0]))()
         tensor([-0.0000, -0.3333,  0.0000,  1.6667])
 
 
@@ -1920,7 +1948,7 @@ def hard_swish(x):
         (np.ndarray): output tensor and have same shape with x.
 
     Examples:
-        >>> hard_swish(np.array([-3.0, -1.0, 0.0, 2.0])).cpu()
+        >>> hard_swish(np.array([-3.0, -1.0, 0.0, 2.0]))()
         tensor([-0.0000, -0.3333,  0.0000,  1.6667])
 
     References:
@@ -1947,7 +1975,7 @@ def hard_tanh(x):
 
 
     Examples:
-        >>> hard_tanh(np.array([-3.0, -1.0, 0.0, 2.0])).cpu()
+        >>> hard_tanh(np.array([-3.0, -1.0, 0.0, 2.0]))()
         tensor([-0.0000, -0.3333,  0.0000,  1.6667])
 
 
@@ -2255,7 +2283,7 @@ def gpt_gelu(x):
 ## normalization operation
 ###########################
 
-def moments(x:np.ndarray, axis, keepdims=True):
+def moments(x:_Tensor, axis, keepdims=True):
     """
 
     Args:
@@ -2341,7 +2369,7 @@ def permute(x, pattern=None) ->np.ndarray:
     return np.transpose(x,*pattern)
 
 
-def squeeze(x:np.ndarray, axis=0):
+def squeeze(x:_Tensor, axis=0):
     """
 
     Args:
@@ -2354,7 +2382,7 @@ def squeeze(x:np.ndarray, axis=0):
     return np.squeeze(x,axis)
 
 
-def expand_dims(x:np.ndarray, axis=0):
+def expand_dims(x:_Tensor, axis=0):
     """
 
     Args:
@@ -2367,7 +2395,7 @@ def expand_dims(x:np.ndarray, axis=0):
     return np.expand_dims(x,axis)
 
 
-# def depth_to_space(x:np.ndarray, block_size=2):
+# def depth_to_space(x:_Tensor, block_size=2):
 #     """
 #     Rearranges elements in the input tensor from the depth dimension into spatial blocks.
 #     The equivalent to Pixel-Shuffle
@@ -2433,7 +2461,7 @@ def expand_dims(x:np.ndarray, axis=0):
 #         return x
 #
 #
-def space_to_depth(x:np.ndarray, block_size=2):
+def space_to_depth(x:_Tensor, block_size=2):
     """
     Rearranges elements in the input tensor from the spatial dimensions to the depth dimension.
 
@@ -2503,8 +2531,8 @@ def space_to_depth(x:np.ndarray, block_size=2):
 ## tensor generation
 ###########################
 
-def pad(x:np.ndarray, paddings: Sequence[int], mode='constant', value=0):
-    r"""Pads tensor.
+def pad(x:_Tensor, paddings: Sequence[int], mode='constant', value=0):
+    """Pads tensor.
 
     Padding size:
         The padding size by which to pad some dimensions of :attr:`input`
@@ -2783,7 +2811,7 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
 
     Examples:
     >>> grid=meshgrid(3,2)
-    >>> grid.cpu()
+    >>> grid()
     tensor([[[0., 0.],
              [0., 1.]],
     <BLANKLINE>
@@ -2792,16 +2820,16 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
     <BLANKLINE>
             [[2., 0.],
              [2., 1.]]])
-    >>> print(grid[0,0,:].cpu())
+    >>> print(grid[0,0,:]())
      tensor([0., 0.])
-    >>> print(grid[:,0,0].cpu())
+    >>> print(grid[:,0,0]())
     tensor([0., 1., 2.])
     >>> print(grid.shape)
     np.Size([3, 2, 2])
 
 
     >>> grid1=meshgrid(3,2,normalized_coordinates=True)
-    >>> grid1.cpu()
+    >>> grid1()
     tensor([[[0.0000, 0.0000],
              [0.0000, 1.0000]],
     <BLANKLINE>
@@ -2868,7 +2896,7 @@ def stack(x: List[np.ndarray], axis=1):
     return np.stack(x, axis=axis)
 
 
-def gram_matrix(x:np.ndarray):
+def gram_matrix(x:_Tensor):
     """
 
     Args:
@@ -2897,7 +2925,7 @@ def set_seed(seed: int) -> None:
     np.random.seed(seed)
 
 
-def shuffle(t:np.ndarray):
+def shuffle(t:_Tensor):
     """
 
     Args:
@@ -2910,7 +2938,7 @@ def shuffle(t:np.ndarray):
     return  np.random.shuffle(t)
 
 
-def random_choice(t:np.ndarray,n:int=1):
+def random_choice(t:_Tensor,n:int=1):
     """Generates a random sample from a given 1-D array
 
     Args:
@@ -3063,7 +3091,7 @@ def conv2d(input, weight,bias: Optional[np.ndarray]=None, strides=1, padding=0,d
 ## color space
 ###########################
 
-def rgb2gray(rgb:np.ndarray):
+def rgb2gray(rgb:_Tensor):
     """Compute luminance of an RGB image.
 
     Args:
@@ -3080,7 +3108,7 @@ def rgb2gray(rgb:np.ndarray):
     return gray
 
 
-def rgb2hsv(rgb:np.ndarray):
+def rgb2hsv(rgb:_Tensor):
     """Compute luminance of an RGB image.
 
     Args:
@@ -3143,7 +3171,7 @@ def rgb2hsv(rgb:np.ndarray):
     return out*255.0
 
 
-def xyz2rgb(xyz:np.ndarray):
+def xyz2rgb(xyz:_Tensor):
     """
     input xyz as pynp tensor of size (batch_size,  h, w, 3) or (h, w,3)
     """
@@ -3187,7 +3215,7 @@ def xyz2rgb(xyz:np.ndarray):
     raise ValueError('image should channel-last')
 
 
-def rgb2xyz(rgb:np.ndarray):
+def rgb2xyz(rgb:_Tensor):
     """
     input rgb as pynp tensor of size (batch_size, 3, h, w) or (3, h, w)
     """
@@ -3239,16 +3267,16 @@ def rgb2xyz(rgb:np.ndarray):
 D65 = [0.95047, 1.00000, 1.08883]
 
 
-def lab_f(t:np.ndarray):
+def lab_f(t:_Tensor):
     k=1/3.0
     return np.where(t > 0.008856451679035631,np.power(t,k), t * 7.787037037037035 + 0.13793103448275862)
 
 
-def lab_finv(t:np.ndarray):
+def lab_finv(t:_Tensor):
     return np.where(t > 0.20689655172413793, np.power(t,3.0), 0.12841854934601665 * (t - 0.13793103448275862))
 
 
-def lab2xyz(lab:np.ndarray, wref=None):
+def lab2xyz(lab:_Tensor, wref=None):
     """
     input lab as pynp tensor of size (batch_size, 3, h, w) or (3, h, w)
     l
@@ -3293,7 +3321,7 @@ def lab2xyz(lab:np.ndarray, wref=None):
 
     raise ValueError('image should channel-last')
 
-def xyz2lab(xyz:np.ndarray, wref=None):
+def xyz2lab(xyz:_Tensor, wref=None):
     """
     input xyz as pynp tensor of size (batch_size, 3, h, w) or (3, h, w)
     """
@@ -3336,7 +3364,7 @@ def xyz2lab(xyz:np.ndarray, wref=None):
     raise ValueError('image should channel-last')
 
 
-def lab2rgb(lab:np.ndarray):
+def lab2rgb(lab:_Tensor):
     """
     input lab as pynp tensor of size (batch_size, 3, h, w) or (3, h, w)
     """
@@ -3355,7 +3383,7 @@ def lab2rgb(lab:np.ndarray):
         return rgb
 
 
-def rgb2lab(rgb:np.ndarray):
+def rgb2lab(rgb:_Tensor):
     """
     input rgb as pynp tensor of size (batch_size, 3, h, w) or (3, h, w)
     """
@@ -3373,7 +3401,7 @@ def rgb2lab(rgb:np.ndarray):
         xyz=xyz2lab(rgb2xyz(rgb))
         return xyz
 
-def gray2rgb(gray:np.ndarray):
+def gray2rgb(gray:_Tensor):
     """Compute luminance of an RGB image.
 
     Args:
@@ -3396,7 +3424,7 @@ def gray2rgb(gray:np.ndarray):
 ###########################
 
 
-def xywh2xyxy(boxes:np.ndarray, image_size=None):
+def xywh2xyxy(boxes:_Tensor, image_size=None):
     """
     Args:
         boxes (tensor or ndarray):
@@ -3426,7 +3454,7 @@ def xywh2xyxy(boxes:np.ndarray, image_size=None):
         raise TypeError('Argument xywh must be a list, tuple, numpy array or tensor.')
 
 
-def xyxy2xywh(boxes:np.ndarray):
+def xyxy2xywh(boxes:_Tensor):
     """Convert [x1 y1 x2 y2] box format to [x1 y1 w h] format."""
     if not isinstance(boxes, np.ndarray):
         boxes=to_numpy(boxes)
@@ -3526,10 +3554,10 @@ def bbox_diou(bboxes1: np.ndarray, bboxes2: np.ndarray):
     Examples;
     >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
     >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
-    >>> bbox_diou(boxes1,boxes2).cpu()
+    >>> bbox_diou(boxes1,boxes2)()
     tensor([0.7947, 0.7826, 0.6071, 0.9464, 0.7253])
     >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0])
-    >>> print(iou_loss.cpu())
+    >>> print(iou_loss())
     tensor(0.2288)
 
     """
@@ -3582,10 +3610,10 @@ def bbox_ciou(bboxes1: np.ndarray, bboxes2: np.ndarray):
     Examples;
     >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
     >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
-    >>> bbox_ciou(boxes1,boxes2).cpu()
+    >>> bbox_ciou(boxes1,boxes2)()
     tensor([0.7947, 0.7826, 0.6071, 0.9464, 0.7253])
     >>> iou_loss=(1-bbox_ciou(boxes1,boxes2)).sum()/(boxes1.shape[0])
-    >>> print(iou_loss.cpu())
+    >>> print(iou_loss())
     tensor(0.2288)
 
     """
@@ -3626,9 +3654,9 @@ def bbox_ciou(bboxes1: np.ndarray, bboxes2: np.ndarray):
     d = ((x_center - x_center_g) ** 2) + ((y_center - y_center_g) ** 2)
     u = d / c
     v = (4 / (math.pi ** 2)) * np.pow((np.atan(w_gt / h_gt) - np.atan(w_pred / h_pred)), 2)
-    with np.no_grad():
-        S = 1 - iouk
-        alpha = v / (S + v)
+
+    S = 1 - iouk
+    alpha = v / (S + v)
     ciouk = iouk - (u + alpha * v)
     return ciouk
 
@@ -3646,9 +3674,9 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
     Examples;
     >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
     >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
-    >>> bbox_giou(boxes1,boxes2).cpu()
+    >>> bbox_giou(boxes1,boxes2)()
     >>> iou_loss=(1-bbox_giou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
-    >>> print(iou_loss.cpu())
+    >>> print(iou_loss())
     tensor(0.3924)
 
 
@@ -3686,25 +3714,59 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
     return giouk
 
 
+def hard_nms(box_scores, iou_threshold, top_k=-1, candidate_size=200):
+    """
+    Args:
+        box_scores (N, 5): boxes in corner-form and probabilities.
+        iou_threshold: intersection over union threshold.
+        top_k: keep top_k results. If k <= 0, keep all the results.
+        candidate_size: only consider the candidates with the highest scores.
+    Returns:
+         picked: a list of indexes of the kept boxes
+    """
+    scores = box_scores[:, -1]
+    boxes = box_scores[:, :-1]
+    picked = []
+    # _, indexes = scores.sort(descending=True)
+    indexes = np.argsort(scores)
+    # indexes = indexes[:candidate_size]
+    indexes = indexes[-candidate_size:]
+    while len(indexes) > 0:
+        # current = indexes[0]
+        current = indexes[-1]
+        picked.append(current)
+        if 0 < top_k == len(picked) or len(indexes) == 1:
+            break
+        current_box = boxes[current, :]
+        # indexes = indexes[1:]
+        indexes = indexes[:-1]
+        rest_boxes = boxes[indexes, :]
+        iou = iou_of(
+            rest_boxes,
+            np.expand_dims(current_box, axis=0),
+        )
+        indexes = indexes[iou <= iou_threshold]
+
+    return box_scores[picked, :]
 
 #
-# def np_rot90_(x:np.ndarray):
+# def np_rot90_(x:_Tensor):
 #     return x.transpose_(2, 3).flip(2)
 #
 #
-# def np_rot90(x:np.ndarray):
+# def np_rot90(x:_Tensor):
 #     return x.transpose(2, 3).flip(2)
 #
 #
-# def np_rot180(x:np.ndarray):
+# def np_rot180(x:_Tensor):
 #     return x.flip(2).flip(3)
 #
 #
-# def np_rot270(x:np.ndarray):
+# def np_rot270(x:_Tensor):
 #     return x.transpose(2, 3).flip(3)
 #
 #
-# def np_flipud(x:np.ndarray):
+# def np_flipud(x:_Tensor):
 #     """
 #     Flip image tensor vertically
 #     :param x:
@@ -3713,7 +3775,7 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return x.flip(2)
 #
 #
-# def np_fliplr(x:np.ndarray):
+# def np_fliplr(x:_Tensor):
 #     """
 #     Flip image tensor horizontally
 #     :param x:
@@ -3722,7 +3784,7 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return x.flip(3)
 #
 #
-# def pad_image_tensor(image_tensor:np.ndarray, pad_size: int = 32):
+# def pad_image_tensor(image_tensor:_Tensor, pad_size: int = 32):
 #     """Pad input tensor to make it's height and width dividable by @pad_size
 #
 #     :param image_tensor: Input tensor of shape NCHW
@@ -3770,7 +3832,7 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return image_tensor[..., pad_top: rows - pad_btm, pad_left: cols - pad_right]
 #
 #
-# def unpad_xyxy_bboxes(bboxes_tensor:np.ndarray, pad, dim=-1):
+# def unpad_xyxy_bboxes(bboxes_tensor:_Tensor, pad, dim=-1):
 #     pad_left, pad_right, pad_top, pad_btm = pad
 #     pad =np.ndarray([pad_left, pad_top, pad_left, pad_top], dtype=bboxes_tensor.dtype).to(bboxes_tensor.device)
 #
@@ -3807,8 +3869,8 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return np.stack([cos_a, sin_a, -sin_a, cos_a], dim=-1).view(*angle.shape, 2, 2)
 #
 #
-# def get_rotation_matrix2d(center:np.ndarray, angle, scale) ->np.ndarray:
-#     r"""Calculates an affine matrix of 2D rotation.
+# def get_rotation_matrix2d(center:_Tensor, angle, scale) ->np.ndarray:
+#     """Calculates an affine matrix of 2D rotation.
 #
 #     The function calculates the following matrix:
 #
@@ -3878,14 +3940,14 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return M
 #
 #
-# def _compute_rotation_matrix(angle:np.ndarray, center:np.ndarray) ->np.ndarray:
+# def _compute_rotation_matrix(angle:_Tensor, center:_Tensor) ->np.ndarray:
 #     """Computes a pure affine rotation matrix."""
 #     scale_tensor = np.ones_like(angle)
 #     matrix_tensor = get_rotation_matrix2d(center, angle, scale)
 #     return matrix_tensor
 #
 #
-# def _compute_translation_matrix(translation:np.ndarray) ->np.ndarray:
+# def _compute_translation_matrix(translation:_Tensor) ->np.ndarray:
 #     """Computes affine matrix for translation."""
 #     matrix_tensor = np.eye(3, device=translation.device, dtype=translation.dtype)
 #     matrix = matrix_tensor.repeat(translation.shape[0], 1, 1)
@@ -3896,14 +3958,14 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return matrix
 #
 #
-# def _compute_scaling_matrix(scale:np.ndarray, center:np.ndarray) ->np.ndarray:
+# def _compute_scaling_matrix(scale:_Tensor, center:_Tensor) ->np.ndarray:
 #     """Computes affine matrix for scaling."""
 #     angle_tensor = np.zeros_like(scale)
 #     matrix_tensor = get_rotation_matrix2d(center, angle_tensor, scale)
 #     return matrix_tensor
 #
 #
-# def _compute_shear_matrix(shear:np.ndarray) ->np.ndarray:
+# def _compute_shear_matrix(shear:_Tensor) ->np.ndarray:
 #     """Computes affine matrix for shearing."""
 #     matrix_tensor = np.eye(3, device=shear.device, dtype=shear.dtype)
 #     matrix = matrix_tensor.repeat(shear.shape[0], 1, 1)
@@ -3953,8 +4015,8 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return dst_norm_trans_src_norm
 #
 #
-# def transform_points(trans_01:np.ndarray, points_1:np.ndarray) ->np.ndarray:
-#     r"""Function that applies transformations to a set of points.
+# def transform_points(trans_01:_Tensor, points_1:_Tensor) ->np.ndarray:
+#     """Function that applies transformations to a set of points.
 #     Args:
 #         trans_01 (np.ndarray): tensor for transformations of shape
 #           :math:`(B, D+1, D+1)`.
@@ -3992,8 +4054,8 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return scale_tensor * points_0_h[..., :-1]
 #
 #
-# def warp_grid(dst_homo_src:np.ndarray, dsize) ->np.ndarray:
-#     r"""Computes the grid to warp the coordinates grid by an homography.
+# def warp_grid(dst_homo_src:_Tensor, dsize) ->np.ndarray:
+#     """Computes the grid to warp the coordinates grid by an homography.
 #
 #     Args:
 #         dst_homo_src (np.ndarray): Homography or homographies (stacked) to
@@ -4019,9 +4081,9 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return flow_tensor.view(batch_size, height, width, 2)  # NxHxWx2
 #
 #
-# def warp_affine(src:np.ndarray, M:np.ndarray, dsize: Tuple[int, int], mode: Optional[str] = 'bilinear',
+# def warp_affine(src:_Tensor, M:_Tensor, dsize: Tuple[int, int], mode: Optional[str] = 'bilinear',
 #                 padding_mode: Optional[str] = 'zeros') ->np.ndarray:
-#     r"""Applies an affine transformation to a tensor.
+#     """Applies an affine transformation to a tensor.
 #
 #     The function warp_affine transforms the source tensor using
 #     the specified matrix:
@@ -4071,8 +4133,8 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #         return None
 #
 #
-# def affine(tensor:np.ndarray, matrix:np.ndarray) ->np.ndarray:
-#     r"""Apply an affine transformation to the image.
+# def affine(tensor:_Tensor, matrix:_Tensor) ->np.ndarray:
+#     """Apply an affine transformation to the image.
 #
 #     Args:
 #         tensor (np.ndarray): The image tensor to be warped.
@@ -4105,8 +4167,8 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 # # based on:
 # # https://github.com/anibali/tvl/blob/master/src/tvl/transforms.py#L185
 #
-# def rotate(tensor:np.ndarray, angle:np.ndarray) ->np.ndarray:
-#     r"""Rotate the image anti-clockwise about the centre.
+# def rotate(tensor:_Tensor, angle:_Tensor) ->np.ndarray:
+#     """Rotate the image anti-clockwise about the centre.
 #
 #     See :class:`~kornia.Rotate` for details.
 #     """
@@ -4130,8 +4192,8 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return affine(tensor, rotation_matrix[..., :2, :3])
 #
 #
-# def translate(tensor:np.ndarray, translation:np.ndarray) ->np.ndarray:
-#     r"""Translate the tensor in pixel units.
+# def translate(tensor:_Tensor, translation:_Tensor) ->np.ndarray:
+#     """Translate the tensor in pixel units.
 #
 #     See :class:`~kornia.Translate` for details.
 #     """
@@ -4150,8 +4212,8 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return affine(tensor, translation_matrix[..., :2, :3])
 #
 #
-# def scale(tensor:np.ndarray, scale_factor:np.ndarray) ->np.ndarray:
-#     r"""Scales the input image.
+# def scale(tensor:_Tensor, scale_factor:_Tensor) ->np.ndarray:
+#     """Scales the input image.
 #
 #     See :class:`~kornia.Scale` for details.
 #     """
@@ -4173,8 +4235,8 @@ def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
 #     return affine(tensor, scaling_matrix[..., :2, :3])
 #
 #
-# def shear(tensor:np.ndarray, shear:np.ndarray) ->np.ndarray:
-#     r"""Shear the tensor.
+# def shear(tensor:_Tensor, shear:_Tensor) ->np.ndarray:
+#     """Shear the tensor.
 #
 #     See :class:`~kornia.Shear` for details.
 #     """

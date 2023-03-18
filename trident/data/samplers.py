@@ -157,6 +157,7 @@ class BatchSampler(Sampler):
                     batch_data.append(_return_data.value_list)
 
                     if len(batch_data) == self.batch_size:
+
                         returnData = copy.deepcopy(self.data_source.data_template)
                         unzip_batch_data = list(zip(*batch_data))
 
@@ -165,7 +166,7 @@ class BatchSampler(Sampler):
                             if check_same_size(*unzip_batch_data[i]):
                                 try:
                                     if returnData.key_list[i].object_type==ObjectType.image_path and all([isinstance(s,str) for s in unzip_batch_data[i]]):
-                                        returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i]],dtype=np.string_)
+                                        returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i]],dtype=np.str_)
                                     else:
                                         returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i] ])
                                         if  self.data_source.parent is not None and self.data_source.parent .dynamic_padding and 'int' in  str(returnData[returnData.key_list[i]] .dtype):

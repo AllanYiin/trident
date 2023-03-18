@@ -200,11 +200,11 @@ class ZipDataset(Dataset):
 
     def __init__(self, *datasets, **kwargs):
         """See `Dataset.zip()` for details."""
-        super().__init__(*unpack_singleton(datasets), **kwargs)
-        self.symbol = '{0}'.format(str((ds.symbol for ds in unpack_singleton(datasets))))
+        super().__init__(datasets, **kwargs)
+        self.symbol = tuple([ds.symbol for ds in datasets])
 
     def __getitem__(self, index: int) -> Tuple:
-        return self.items[index]
+        return tuple([ds[index] for ds in self.items])
 
     def __getattr__(self, name):
         if name in self.__dict__:
@@ -228,7 +228,7 @@ class ZipDataset(Dataset):
             object.__setattr__(self, name, value)
 
     def __len__(self) -> int:
-        return 0 if len(self.items)==0 else len(self.items[0])  #len(self) % len(self.items)
+        return len(self.items[0])
 
 
 class NumpyDataset(Dataset):
@@ -516,8 +516,6 @@ class MaskDataset(Dataset):
             raise ValueError('image data should be ndarray')
         elif isinstance(mask, np.ndarray) and mask.ndim not in [2, 3]:
             raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(mask.ndim))
-        if ndim(mask)==2 and self.squeeze_channel==False:
-            mask=np.expand_dims(mask,-1)
         return mask
 
     def mask_transform(self, mask_data):
@@ -534,6 +532,8 @@ class MaskDataset(Dataset):
                     else:
                         data=fc(data)
                 data = mask_backend_adaptive(data, label_mapping=self.class_names, object_type=self.object_type)
+                if len(data.shape) == 2 and self.squeeze_channel == False:
+                    data = np.expand_dims(data, -1)
                 return data
             else:
                 return data

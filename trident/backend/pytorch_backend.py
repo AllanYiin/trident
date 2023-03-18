@@ -1,10 +1,9 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import weakref
+
 import builtins
 import copy
-import functools
 import gc
 import itertools
 import logging
@@ -14,11 +13,11 @@ import os
 import shutil
 import sys
 import uuid
+import weakref
 from collections import defaultdict, abc
 from functools import partial
 from types import MethodType
-from typing import Any, Dict, List,Iterable, Iterator, Mapping, Optional, overload, Tuple, TypeVar, Union,Callable, Iterator, Set
-
+from typing import Any, Dict, List, Iterable, Mapping, Optional, overload, Tuple, TypeVar, Union, Callable, Iterator
 
 import numpy as np
 
@@ -30,7 +29,6 @@ from itertools import islice
 from distutils.version import LooseVersion
 import torch.nn as nn
 import torch.onnx
-import torch.utils.hooks as hooks
 from torch._jit_internal import _copy_to_script_wrapper
 from trident.backend.common import to_list, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, \
     get_session, set_session, get_session_value, PrintException, Signature, TensorShape, get_args_spec, is_instance
@@ -815,13 +813,14 @@ class Layer(nn.Module):
         super().__setattr__('training', True)
         super().__setattr__('_built', False)
         super().__setattr__('factory_kwargs', {'device': get_device(), 'dtype': Dtype.float32})
+
         if pt_version.version < torch2_version.version:
             super().__setattr__('_forward_hooks_with_kwargs', OrderedDict())
             super().__setattr__('_forward_pre_hooks_with_kwargs', OrderedDict())
             super().__setattr__('_backward_pre_hooks', OrderedDict())
             super().__setattr__('_state_dict_pre_hooks', OrderedDict())
 
-        self.to(self.factory_kwargs['device'])
+
 
         self.batch_index = 0
         self.filter_index = 1
@@ -850,7 +849,7 @@ class Layer(nn.Module):
 
         self._signature = None
         self._signature = get_signature(self, name=self.name)
-        self._device = get_device()
+
 
         self.dump_patches = True
 
@@ -868,18 +867,7 @@ class Layer(nn.Module):
                     return node
             return self
 
-    # def forward(self, *input,**kwargs):
-    #     """Defines the computation performed at every call.
-    #
-    #     Should be overridden by all subclasses.
-    #
-    #     .. note::
-    #         Although the recipe for forward pass needs to be defined within
-    #         this function, one should call the :class:`Module` instance afterwards
-    #         instead of this since the former takes care of running the
-    #         registered hooks while the latter silently ignores them.
-    #     """
-    #     raise NotImplementedError
+
 
     @property
     def name(self) -> str:
@@ -942,8 +930,8 @@ class Layer(nn.Module):
             for mod in module.modules():
                 mod.nodes = self.nodes
                 mod.is_root = False
-                mod._device = self._device
-                mod.to(self._device)
+
+
                 reset_name(mod, self._uid_prefixs)
                 mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
 
@@ -1844,7 +1832,6 @@ class Layer(nn.Module):
             if is_tensor(inp):
                 shp = tensor_to_shape(inp, need_exclude_batch_axis=True)
                 self.input_shape = shp
-                self.input_filters = shp[self.filter_index]
 
                 if self.is_root:
                     if self._signature is None:
@@ -2133,28 +2120,34 @@ class Sequential(Layer):
     _modules: Dict[str, nn.Module]  # type: ignore[assignment]
 
     @overload
-    def __init__(self, *args: Module) -> None:
+    def __init__(self, *args: nn.Module) -> None:
         ...
 
     @overload
-    def __init__(self, arg: 'OrderedDict[str, nn.Module]') -> None:
+    def __init__(self, arg: Dict[str, nn.Module]) -> None:
         ...
 
-    def __init__(self, *args, name=None):
-        super(Sequential, self).__init__(name=name)
+    def __init__(self, *args, name=None, keep_output=False):
+        super().__setattr__('_modules', OrderedDict())
+        super(Sequential, self).__init__(name=name,keep_output=keep_output)
         self._name = name
         self._built = False
         self.uuid = uuid.uuid4().node
+
         args = unpack_singleton(args)
 
-        if len(args) == 1 and isinstance(args[0], OrderedDict):
+        if isinstance(args, OrderedDict):
+            for key, module in args.items():
+                self.add_module(key, module)
+        elif len(args)==1 and isinstance(args, OrderedDict):
             for key, module in args[0].items():
                 self.add_module(key, module)
         else:
             for idx, module in enumerate(args):
                 self.add_module(str(idx), module)
 
-        self.to(self.device)
+
+
 
 
 
@@ -2168,9 +2161,9 @@ class Sequential(Layer):
         Returns:
 
         """
-        if self._built == False and len(self._modules) > 0:
-            self.__getitem__(0).input_shape = input_shape
-            self._built = True
+        # if self._built == False and len(self._modules) > 0:
+        #     self.__getitem__(0).input_shape = input_shape
+        #     self._built = True
 
     def add_module(self, name, module):
         """Adds a child module to the current module.
@@ -2238,9 +2231,11 @@ class Sequential(Layer):
     @_copy_to_script_wrapper
     def __getitem__(self, idx):
         if isinstance(idx, slice):
-            self.__class__(OrderedDict(list(self._modules.items())[idx]))
+            return self.__class__(OrderedDict(list(self._modules.items())[idx]))
         else:
             return self._get_item_by_idx(self._modules.values(), idx)
+
+
 
     def __setitem__(self, idx, module):
         key: str = self._get_item_by_idx(self._modules.keys(), idx)
@@ -2276,7 +2271,7 @@ class Sequential(Layer):
                              'of Sequential class, but {} is given.'.format(
                                  str(type(other))))
 
-    def pop(self, key: Union[int, slice]) -> Module:
+    def pop(self, key: Union[int, slice]) -> nn.Module:
         v = self[key]
         del self[key]
         return v
@@ -2351,11 +2346,7 @@ class Sequential(Layer):
         for module in self._modules.values():
             # x = enforce_singleton(x)
             if isinstance(x, tuple):
-                if len(module.signature.inputs) == len(x):  # self,x
-                    x = module(*x, **kwargs)
-                else:
-                    x = enforce_singleton(x)
-                    x = module(x, **kwargs)
+                x = module(*x, **kwargs)
             else:
                 x = module(x, **kwargs)
             # class_name=module.__class__.__name__.lower()
@@ -2367,7 +2358,7 @@ class Sequential(Layer):
         return x
 
 
-    def append(self, module: Module) -> 'Sequential':
+    def append(self, module: nn.Module) -> 'Sequential':
         r"""Appends a given module to the end.
 
         Args:
@@ -2376,7 +2367,7 @@ class Sequential(Layer):
         self.add_module(str(len(self)), module)
         return self
 
-    def insert(self, index: int, module: Module) -> 'Sequential':
+    def insert(self, index: int, module: nn.Module) -> 'Sequential':
         if not isinstance(module, Module):
             raise AssertionError(
                 'module should be of type: {}'.format(Module))
@@ -2426,6 +2417,7 @@ class ModuleList(Layer):
 
     _modules: Dict[str, nn.Module]  # type: ignore[assignment]
     def __init__(self,  modules: Optional[Iterable[nn.Module]] = None, name=None, keep_output=False):
+        super().__setattr__('_modules', OrderedDict())
         super(ModuleList, self).__init__(name=name, keep_output=keep_output)
         self.uuid = uuid.uuid4().node
         self._name = name
@@ -2486,7 +2478,7 @@ class ModuleList(Layer):
         return keys
 
 
-    def insert(self, index: int, module: Module) -> None:
+    def insert(self, index: int, module: nn.Module) -> None:
         r"""Insert a given module before a given index in the list.
 
         Args:
@@ -2497,7 +2489,7 @@ class ModuleList(Layer):
             self._modules[str(i)] = self._modules[str(i - 1)]
         self._modules[str(index)] = module
 
-    def append(self, module: Module) -> 'ModuleList':
+    def append(self, module: nn.Module) -> 'ModuleList':
         r"""Appends a given module to the end of the list.
 
         Args:
@@ -2506,12 +2498,12 @@ class ModuleList(Layer):
         self.add_module(str(len(self)), module)
         return self
 
-    def pop(self, key: Union[int, slice]) -> Module:
+    def pop(self, key: Union[int, slice]) -> nn.Module:
         v = self[key]
         del self[key]
         return v
 
-    def extend(self, modules: Iterable[Module]) -> 'ModuleList':
+    def extend(self, modules: Iterable[nn.Module]) -> 'ModuleList':
         r"""Appends modules from a Python iterable to the end of the list.
 
         Args:
@@ -2575,9 +2567,10 @@ class ModuleDict(Layer):
 
     _modules: Dict[str, nn.Module]  # type: ignore[assignment]
     def __init__(self, modules: Optional[Mapping[str, Layer]] = None, name=None, keep_output=False,
-                 is_multicasting=False, **kwargs) -> None:
+                 is_multicasting=True, **kwargs) -> None:
         super(ModuleDict, self).__init__(name=name, keep_output=keep_output, **kwargs)
         self.uuid = uuid.uuid4().node
+
         self.is_multicasting = is_multicasting
         if modules is not None:
             if len(modules) > 0:
@@ -2862,6 +2855,206 @@ class Combine(Layer):
         return None
 
 
+
+import torch
+
+
+def _extract_intervals(offsets, sizes, data):
+    """Select contiguous intervals of rows, given their offsets and sizes.
+    E.g. suppose offsets = [35, 70, 90], sizes = [3, 2, 4], then this will
+    return
+
+            (torch.LongTensor(0, 3, 5),
+            data[torch.LongTensor([35, 36, 37, 70, 71, 90, 91, 92, 93])])
+
+    """
+    offsets = offsets.long()
+    sizes = sizes.long()
+    res_rows = sizes.sum().item()
+    assert offsets.size(0) == sizes.size(0)
+
+    non_zero_size = sizes != 0
+    if non_zero_size.long().sum() == 0:
+        return torch.zeros(offsets.size(0) + 1).long(), data.new()
+
+    new_offsets = torch.cat([torch.LongTensor([0]), sizes.cumsum(0)])
+    sizes_nz = sizes[non_zero_size]
+    offsets_nz = offsets[non_zero_size]
+
+    res_delta = torch.LongTensor(res_rows).fill_(1)
+    res_delta[0] = offsets_nz[0]
+
+    if offsets_nz.size(0) > 1:
+        input_delta = offsets_nz[1:] - offsets_nz[:-1] - sizes_nz[:-1]  # [32, 18]
+        res_row_offsets = sizes_nz.cumsum(0)[:-1]  # [3, 5]
+        res_delta[res_row_offsets] += input_delta  # [35, 1, 1, 33, 1, 19, 1, 1, 1]
+
+    res_offsets = res_delta.cumsum(0)  # [35, 36, 37, 70, 71, 90, 91, 92, 93]
+    res = data[res_offsets]
+
+    return new_offsets, res
+
+
+class TensorList(object):
+    """A list of tensors of different sizes, backed by a (offset, size, data)
+    tuple.
+
+    Indexing by LongTensor returns a new TensorList with the selected list
+    elements (similar to indexing a torch index_select_).
+
+    Indexing by an int returns a torch.Tensor with that list element.
+    """
+
+    @classmethod
+    def cat(cls, elements):
+        offsets, data = zip(*[[x.offsets, x.data] for x in elements])
+        offsets = list(offsets)
+        batch_offset = torch.LongTensor([o[-1] for o in offsets]).cumsum(0)
+        for j in range(len(offsets) - 1):
+            offsets[j + 1] = offsets[j + 1][1:] + batch_offset[j]
+        return cls(torch.cat(offsets), torch.cat(data))
+
+    @classmethod
+    def empty(cls, num_tensors=0):
+        return cls(
+            torch.zeros((), dtype=torch.long).expand((num_tensors + 1,)),
+            torch.empty((0,), dtype=torch.long),
+        )
+
+    def new(self):
+        return type(self)(self.offsets.new_zeros((1,)), self.data.new_empty((0,)))
+
+    def __init__(self, offsets, data):
+        # some sanity checks
+        assert isinstance(offsets, (torch.LongTensor, torch.cuda.LongTensor))
+        assert offsets.ndimension() == 1
+        assert offsets[0] == 0
+        assert offsets[-1] == (data.size(0) if data.ndimension() > 0 else 0)
+
+        self.offsets = offsets
+        self.data = data
+
+    def __getitem__(self, index):
+        if isinstance(index, (torch.LongTensor, torch.cuda.LongTensor)):
+            offsets_sub = self.offsets[index]
+            sizes_sub = self.offsets[index + 1] - offsets_sub
+            new_offsets, new_data = _extract_intervals(
+                offsets_sub, sizes_sub, self.data
+            )
+
+            return TensorList(new_offsets, new_data)
+        elif isinstance(index, int):
+            if self.offsets[index] != self.offsets[index + 1]:
+                return self.data[self.offsets[index] : self.offsets[index + 1]]
+            else:
+                return self.data.new()
+        elif isinstance(index, slice):
+            start, stop, step = index.indices(len(self))
+            if step != 1:
+                raise ValueError("Expected slice with step 1, got %d" % step)
+            new_offsets = self.offsets[start : stop + 1]
+            new_data = self.data[new_offsets[0] : new_offsets[-1]]
+            new_offsets = new_offsets - new_offsets[0]
+            return TensorList(new_offsets, new_data)
+        else:
+            raise KeyError("Unknown index type: %s" % type(index))
+
+    def __eq__(self, other):
+        if not isinstance(other, TensorList):
+            return NotImplemented
+        return torch.equal(self.offsets, other.offsets) and torch.equal(
+            self.data, other.data
+        )
+
+    def __len__(self):
+        return self.offsets.size(0) - 1
+
+    def __iadd__(self, other):
+        if isinstance(other, int):
+            self.data += other
+            return self
+        else:
+            raise NotImplementedError()
+
+    def __isub__(self, other):
+        if isinstance(other, int):
+            self.data -= other
+            return self
+        else:
+            raise NotImplementedError()
+
+    def size(self, dim=None):
+        # FIXME: this is a terrible API
+
+        # to have similar appearance with other tensor types
+        assert dim == 0 or dim is None, "TensorList can only have 1 dimension"
+        if dim is None:
+            return torch.Size([len(self)])
+        else:
+            return len(self)
+
+    def nelement(self):
+        return self.data.nelement()
+
+    def clone(self):
+        return self.__class__(self.offsets, self.data.clone())
+
+    def __repr__(self):
+        if self.offsets.nelement() < 100 or self.data.nelement() < 1000:
+            return "TensorList( [%s] )" % " , ".join(
+                str(self[i].tolist()) for i in range(len(self))
+            )
+        return "TensorList{offsets=%s, data=%s}" % (self.offsets, self.data)
+
+    def apply(self, F):
+        return self.__class__(self.offsets, F(self.data))
+
+    def combine(self, other, F):
+        if isinstance(other, TensorList):
+            assert torch.equal(self.offsets, other.offsets)
+            assert self.data.shape[0] == other.data.shape[0]
+            res = self.__class__(self.offsets, F(self.data, other.data))
+        else:
+            res = self.__class__(self.offsets, F(self.data, other))
+        assert res.data.shape[0] == self.data.shape[0]
+        return res
+
+    def lengths(self):
+        return self.offsets[1:] - self.offsets[:-1]
+
+    def unsqueeze(self, dim):
+        return self.apply(lambda x: x.unsqueeze(dim))
+
+    def view(self, *args):
+        return self.apply(lambda x: x.view(*args))
+
+    def __add__(self, other):
+        return self.combine(other, lambda x, y: x + y)
+
+    def __sub__(self, other):
+        return self.combine(other, lambda x, y: x - y)
+
+    def __mul__(self, other):
+        return self.combine(other, lambda x, y: x * y)
+
+    def __truediv__(self, other):
+        return self.combine(other, lambda x, y: x / y)
+
+    def sum(self, dim=None, keepdim=False):
+        if dim is None:
+            return self.data.sum()
+        # We're only going to agree to sum across "inner dimensions"
+        if dim < 0:
+            dim = self.data.ndimension() + dim
+        assert dim > 0, "Can't sum along the 'list' dimension"
+        return self.__class__(self.offsets, self.data.sum(dim, keepdim=keepdim))
+
+    def to(self, *args, **kwargs) -> "TensorList":
+        return type(self)(
+            self.offsets.to(*args, **kwargs), self.data.to(*args, **kwargs)
+        )
+
+
 def print_network(net, verbose=False):
     num_params = 0
     for i, param in enumerate(net.parameters()):
@@ -3097,17 +3290,17 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
         total_size = total_params_size + total_output_size + total_input_size
 
         print("================================================================")
-        print("Total params: {0:,.0f}".format(total_params[0]))
-        print("Trainable params: {0:,.0f}".format(trainable_params[0]))
-        print("Non-trainable params: {0:,.0f}".format(total_params[0] - trainable_params[0]))
-        print("Total MACC: {0:,.0f}".format(macc[0]))
-        print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10. ** 9, 5)[0]))
-        print("----------------------------------------------------------------")
-        print("Input size (MB): %0.2f" % total_input_size)
-        print("Forward/backward pass size (MB): %0.2f" % total_output_size)
-        print("Params size (MB): %0.2f" % total_params_size)
-        print("Estimated Total Size (MB): %0.2f" % total_size)
-        print("----------------------------------------------------------------")
+        print("Total params: {0:,.0f}".format(total_params[0]),flush=True)
+        print("Trainable params: {0:,.0f}".format(trainable_params[0]),flush=True)
+        print("Non-trainable params: {0:,.0f}".format(total_params[0] - trainable_params[0]),flush=True)
+        print("Total MACC: {0:,.0f}".format(macc[0]),flush=True)
+        print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10. ** 9, 5)[0]),flush=True)
+        print("----------------------------------------------------------------",flush=True)
+        print("Input size (MB): %0.2f" % total_input_size,flush=True)
+        print("Forward/backward pass size (MB): %0.2f" % total_output_size,flush=True)
+        print("Params size (MB): %0.2f" % total_params_size,flush=True)
+        print("Estimated Total Size (MB): %0.2f" % total_size,flush=True)
+        print("----------------------------------------------------------------",flush=True)
         # return summary
         del hooks
     except Exception as e:
@@ -3382,8 +3575,8 @@ def fix_layer(layer: Layer):
                     return node
             return self
 
-    if not hasattr(layer, 'device'):
-        layer.device = layer.weights[0].device.type
+    # if not hasattr(layer, 'device'):
+    #     layer.device = layer.weights[0].device.type
 
     layer.to(get_device())
     if not hasattr(layer, '_nodes'):

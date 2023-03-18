@@ -274,7 +274,7 @@ class _ClassificationLoss(Loss, tracking.AutoTrackable):
                             np.array([dp.traindata.label.items[i] for i in tqdm(range(len(dp.traindata.label.items)))]),
                             return_counts=True)
                         ctx.print('')
-                        reweights, label_statistics = _class_unique_value_process(unique, counts)
+                        reweights, label_statistics = _class_unique_value_process(unique.tolist(), counts.tolist())
                         self.label_statistics = reweights
                         ds._label_statistics = label_statistics
 
@@ -284,6 +284,11 @@ class _ClassificationLoss(Loss, tracking.AutoTrackable):
                     elif isinstance(ds, BboxDataset) or dp.traindata.label.object_type in [ObjectType.absolute_bbox,
                                                                                            ObjectType.relative_bbox]:
                         ctx.print('Start retrive label class distribution for auto-balance in loss function.')
+                        sample_base = list(range(len(ds)))
+                        if len(sample_base) > 1000:
+                            np.random.shuffle(sample_base)
+                            sample_base = sample_base[:1000]
+                        overall_unique = OrderedDict()
                         unique, counts = torch.unique(to_tensor(
                             np.concatenate([dp.traindata.label[i][:, 4] for i in tqdm(range(len(ds.items)))], axis=0),
                             dtype=Dtype.long, device='cpu'), return_counts=True)
@@ -869,7 +874,7 @@ class F1ScoreLoss(_ClassificationLoss):
                 sample_weight = expand_dims(sample_weight, 0)
 
             if self.is_logsoftmax:
-                output = clip(exp(clip(output, max=0)), 1e-7, 1 - 1e-7)
+                output = exp(clip(output, max=0))
                 self.from_logits = True
             if not self.from_logits:
                 output = softmax(output, self.axis)
@@ -992,7 +997,7 @@ class BCELoss(_ClassificationLoss):
                 name="sample_weight")
 
             if self.is_logsoftmax:
-                output = clip(exp(clip(output, max=0)), 1e-7, 1 - 1e-7)
+                output = exp(clip(output, max=0))
             loss = binary_cross_entropy(output, target, from_logits=self.from_logits)
             return loss
 
@@ -1081,7 +1086,6 @@ class DiceLoss(_ClassificationLoss):
 
             if self.is_logsoftmax and reduce_max(output) <= 0:
                 output = exp(output)
-                output = clip(output, 1e-7, 1)
                 self.from_logits = True
 
             if int_shape(output) != int_shape(target):
@@ -1432,7 +1436,7 @@ class IoULoss(_ClassificationLoss):
 
             _dtype = output.dtype
             if self.is_logsoftmax:
-                output = clip(exp(output), 1e-8, 1 - 1e-8)
+                output = exp(output)
                 self.from_logits = True
             if not self.from_logits:
                 output = softmax(output, self.axis)

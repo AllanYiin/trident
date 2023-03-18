@@ -38,6 +38,7 @@ from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 from trident.models.pytorch_ssd import *
 from trident.data.vision_transforms import Resize, Normalize
+import torchvision
 
 __all__ = ['RfbNet', 'generate_priors']
 
@@ -211,7 +212,8 @@ def basic_rfb(num_filters, scale=0.1):
 
 def conv_dw(num_filters, strides):
     return Sequential(
-        DepthwiseConv2d_Block((3, 3), depth_multiplier=1, strides=strides, use_bias=False, activation=Relu(inplace=True),
+        DepthwiseConv2d_Block((3, 3), depth_multiplier=1, strides=strides, use_bias=False,
+                              activation=Relu(inplace=True),
                               normalization='batch'),
         Conv2d_Block((1, 1), num_filters=num_filters, strides=1, groups=1, auto_pad=True, use_bias=False,
                      activation=Relu(inplace=True), normalization='batch'),
@@ -238,7 +240,7 @@ def tiny_mobile_rfbnet(filter_base=16, num_classes=2):
 
 
 class RFBnet(Layer):
-    def __init__(self, *args, base_filters=16, num_classes=2, num_regressors=4, detection_threshold=0.7,
+    def __init__(self, *args, base_filters=16, num_classes=2, num_regressors=4, detection_threshold=0.4,
                  nms_threshold=0.3, center_variance=0.1, size_variance=0.2,
                  name='tiny_mobile_rfbnet', **kwargs):
         """
@@ -256,8 +258,7 @@ class RFBnet(Layer):
         self.detection_threshold = detection_threshold
         self.nms_threshold = nms_threshold
         self.variance = (center_variance, size_variance)
-        self.softmax=SoftMax(-1)
-
+        self.softmax = SoftMax(-1)
 
         self.num_classes = num_classes
         self.num_regressors = num_regressors
@@ -265,39 +266,49 @@ class RFBnet(Layer):
         self.define_img_size(640)
 
         self.extra = Sequential(Conv2d((1, 1), num_filters=64, strides=1, activation=Relu(inplace=True), use_bias=True),
-                                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=2, auto_pad=True, activation=Relu(inplace=True),
+                                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=2, auto_pad=True,
+                                                activation=Relu(inplace=True),
                                                 use_bias=True),
-                                Conv2d((1, 1), num_filters=256, strides=1, activation=None, use_bias=True), Relu(inplace=True),
+                                Conv2d((1, 1), num_filters=256, strides=1, activation=None, use_bias=True),
+                                Relu(inplace=True),
                                 name='extra')
         self.regression_headers = ModuleList([
             Sequential(
-            DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
-            Conv2d((1, 1), num_filters=3 * self.num_regressors, strides=1, activation=None, use_bias=True)),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True),
+                                use_bias=True),
+                Conv2d((1, 1), num_filters=3 * self.num_regressors, strides=1, activation=None, use_bias=True)),
 
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True),
+                                use_bias=True),
                 Conv2d((1, 1), num_filters=2 * self.num_regressors, strides=1, activation=None, use_bias=True)),
 
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True),
+                                use_bias=True),
                 Conv2d((1, 1), num_filters=2 * self.num_regressors, strides=1, activation=None, use_bias=True)),
 
-            Conv2d((3, 3), num_filters=3 * self.num_regressors, strides=1, auto_pad=True, activation=None) ],
+            Conv2d((3, 3), num_filters=3 * self.num_regressors, strides=1, auto_pad=True, activation=None)],
             name='regression_headers')
         self.classification_headers = ModuleList([
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True),
+                                use_bias=True),
                 Conv2d((1, 1), num_filters=3 * self.num_classes, strides=1, activation=None, use_bias=True)),
 
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True),
+                                use_bias=True),
                 Conv2d((1, 1), num_filters=2 * self.num_classes, strides=1, activation=None, use_bias=True)),
 
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
-                Conv2d((1, 1), num_filters=2 * self.num_classes, strides=1, auto_pad=True, activation=None, use_bias=True)),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True),
+                                use_bias=True),
+                Conv2d((1, 1), num_filters=2 * self.num_classes, strides=1, auto_pad=True, activation=None,
+                       use_bias=True)),
 
-            Conv2d((3, 3), num_filters=3 * self.num_classes, strides=1, auto_pad=True, activation=None, use_bias=True) ], name='classification_headers')
+            Conv2d((3, 3), num_filters=3 * self.num_classes, strides=1, auto_pad=True, activation=None, use_bias=True)],
+            name='classification_headers')
 
     def define_img_size(self, size=640):
         global image_size, feature_map_w_h_list, priors
@@ -338,12 +349,11 @@ class RFBnet(Layer):
         Returns:
             area (N): return the area.
         """
-        hw = clip(right_bottom - left_top, min=0.0)
+        hw = clip(right_bottom - left_top, 0.0, None)
         return hw[..., 0] * hw[..., 1]
 
     def iou_of(self, boxes0, boxes1, eps=1e-5):
         """Return intersection-over-union (Jaccard index) of boxes.
-
         Args:
             boxes0 (N, 4): ground truth boxes.
             boxes1 (N or 1, 4): predicted boxes.
@@ -351,81 +361,227 @@ class RFBnet(Layer):
         Returns:
             iou (N): IoU values.
         """
-        overlap_left_top = max(boxes0[..., :2], boxes1[..., :2])
-        overlap_right_bottom = min(boxes0[..., 2:], boxes1[..., 2:])
+        overlap_left_top = torch.max(boxes0[..., :2], boxes1[..., :2])
+        overlap_right_bottom = torch.min(boxes0[..., 2:4], boxes1[..., 2:4])
 
         overlap_area = self.area_of(overlap_left_top, overlap_right_bottom)
-        area0 = self.area_of(boxes0[..., :2], boxes0[..., 2:])
-        area1 = self.area_of(boxes1[..., :2], boxes1[..., 2:])
+        area0 = self.area_of(boxes0[..., :2], boxes0[..., 2:4])
+        area1 = self.area_of(boxes1[..., :2], boxes1[..., 2:4])
         return overlap_area / (area0 + area1 - overlap_area + eps)
 
-    def hard_nms(self, box_scores, nms_threshold, top_k=-1, candidate_size=200):
+    def hard_nms(self, box_scores, nms_threshold=0.3, top_k=-1, candidate_size=200):
         """
-
         Args:
             box_scores (N, 5): boxes in corner-form and probabilities.
-            nms_threshold: intersection over union threshold.
+            iou_threshold: intersection over union threshold.
             top_k: keep top_k results. If k <= 0, keep all the results.
             candidate_size: only consider the candidates with the highest scores.
         Returns:
              picked: a list of indexes of the kept boxes
         """
-        if box_scores is None or len(box_scores) == 0:
-            return None, None
         scores = box_scores[:, -1]
-        boxes = box_scores[:, :4]
+        boxes = box_scores[:, :-1]
         picked = []
-        # _, indexes = scores.sort(descending=True)
-        indexes = np.argsort(-scores)
-        # indexes = indexes[:candidate_size]
-        indexes = indexes[-candidate_size:]
+        _, indexes = scores.sort(descending=True)
+        indexes = indexes[:candidate_size]
         while len(indexes) > 0:
-            # current = indexes[0]
-            current = indexes[-1]
-            picked.append(current)
+            current = indexes[0]
+            picked.append(current.item())
             if 0 < top_k == len(picked) or len(indexes) == 1:
                 break
             current_box = boxes[current, :]
-            # indexes = indexes[1:]
-            indexes = indexes[:-1]
+            indexes = indexes[1:]
             rest_boxes = boxes[indexes, :]
-            iou, inter, union = self.iou_of(rest_boxes, expand_dims(current_box, axis=0), )
-            iot = inter / self.area_of(current_box[..., :2], current_box[..., 2:])
+            iou = self.iou_of(
+                rest_boxes,
+                current_box.unsqueeze(0),
+            )
+            indexes = indexes[iou <= iou_threshold]
 
-            indexes = indexes[((iou <= nms_threshold) * (iot <= nms_threshold)).astype(np.bool)]
-        return box_scores[picked, :], picked
+        return box_scores[picked, :]
 
-    def predict(self, width, height, confidences, boxes, detection_threshold=None, iou_threshold=0.3, top_k=-1):
-        boxes = boxes
-        confidences = confidences
-        if detection_threshold is not None:
-            self.detection_threshold = detection_threshold
+    # def predict(self, confidences, decode_boxes):
+    #     all_picked_box_probs = []
+    #
+    #     for idx in range(len(confidences)):
+    #         boxes = decode_boxes[idx]
+    #         scores = confidences[idx]
+    #
+    #
+    #         # this version of nms is slower on GPU, so we move data to CPU.
+    #         boxes = boxes.cpu()
+    #         scores = scores.cpu()
+    #         picked_box_probs = []
+    #         picked_labels = []
+    #         for class_index in range(1, scores.size(1)):
+    #             probs = scores[:, class_index]
+    #
+    #             #print(class_index, to_numpy(probs).max())
+    #             mask = probs > self.prob_threshold
+    #             subset_probs = probs[mask]
+    #             if len()== 0:
+    #                 print('max_conf:',class_index,to_numpy( scores[:, class_index]).max())
+    #                 continue
+    #             subset_boxes = boxes[mask, :]
+    #             box_probs = torch.cat([subset_boxes, subset_probs.reshape(-1, 1)], dim=1)
+    #             keep = torchvision.ops.nms(subset_boxes, subset_probs, iou_threshold=self.iou_threshold)
+    #             box_probs = box_probs[keep, :]
+    #             picked_box_probs.append(box_probs)
+    #             picked_labels.extend([class_index] * box_probs.size(0))
+    #         if picked_box_probs and len(picked_box_probs) >0:
+    #
+    #             picked_box_probs = concate(picked_box_probs, 0)
+    #             picked_box_probs[:, 0] *= 640
+    #             picked_box_probs[:, 1] *= 480
+    #             picked_box_probs[:, 2] *= 640
+    #             picked_box_probs[:, 3] *= 480
+    #
+    #             picked_labels = to_tensor(picked_labels).unsqueeze(-1).to(picked_box_probs.device).to(picked_box_probs.dtype)
+    #
+    #             all_picked_box_probs.append(concate([picked_box_probs, picked_labels], axis=-1))
+    #
+    #     return all_picked_box_probs
+    #
+    #     #
+    #     # boxes = boxes
+    #     # confidences = confidences
+    #     # if detection_threshold is not None:
+    #     #     self.detection_threshold = detection_threshold
+    #     # picked_box_probs = []
+    #     # picked_labels = []
+    #     # for class_index in range(1, confidences.shape[-1]):
+    #     #     probs = confidences[..., class_index]
+    #     #     mask = probs > self.detection_threshold
+    #     #     probs = probs[mask]
+    #     #     if probs.shape[0] == 0:
+    #     #         continue
+    #     #     subset_boxes = boxes[mask, :]
+    #     #     box_probs = concate([subset_boxes, probs.reshape(-1, 1)], axis=1)
+    #     #     keep = torchvision.ops.nms(subset_boxes, probs,iou_threshold=iou_threshold)
+    #     #
+    #     #     picked_box_probs.append(box_probs[keep,:])
+    #     #     picked_labels.extend([class_index] * len(keep))
+    #     # if not picked_box_probs:
+    #     #     try:
+    #     #         shp=list(boxes.shape)
+    #     #         shp[-1]=2
+    #     #         boxes=concate([boxes, zeros(shp)], axis=-1)
+    #     #     except Exception as e:
+    #     #         print(e)
+    #     #         PrintException()
+    #     #     return boxes[boxes[..., -1] >0].unsqueeze(0)
+    #     # elif len(picked_box_probs)==1:
+    #     #     try:
+    #     #         picked_box_probs = picked_box_probs[0]
+    #     #         picked_labels = to_tensor(picked_labels)
+    #     #     except Exception as e:
+    #     #         print(e)
+    #     #         PrintException()
+    #     # else:
+    #     #     try:
+    #     #         picked_box_probs = concate(picked_box_probs,axis=0)
+    #     #         picked_labels = to_tensor(picked_labels)
+    #     #     except Exception as e:
+    #     #         print(e)
+    #     #         PrintException()
+    #     # _, _, height, width = self.signature.inputs.value_list[0].shape
+    #     # picked_box_probs[...,  0] *= width
+    #     # picked_box_probs[...,  1] *= height
+    #     # picked_box_probs[...,  2] *= width
+    #     # picked_box_probs[...,  3] *= height
+    #     # return concate([picked_box_probs[..., :4], picked_labels.unsqueeze(-1),picked_box_probs[...,  4].unsqueeze(-1)],axis=-1).unsqueeze(0)
+
+    def predict(self, confidences, boxes):
+        all_picked_box_probs = []
+
+
+        boxes =boxes.cpu()
+        scores = confidences.cpu()
+
+        # this version of nms is slower on GPU, so we move data to CPU.
+
         picked_box_probs = []
         picked_labels = []
-        for class_index in range(1, confidences.shape[1]):
-            probs = confidences[:, class_index]
+        for class_index in range(1, scores.size(-1)):
+            probs = scores[..., class_index]
             mask = probs > self.detection_threshold
-            probs = probs[mask]
-            if probs.shape[0] == 0:
-                continue
-            subset_boxes = boxes[mask, :]
-            box_probs = concate([subset_boxes, probs.reshape(-1, 1)], axis=1)
-            box_probs = self.hard_nms(box_probs,
-                                      nms_threshold=iou_threshold,
-                                      top_k=top_k,
-                                      )
-            picked_box_probs.append(box_probs)
-            picked_labels.extend([class_index] * box_probs.shape[0])
-        if not picked_box_probs:
-            return np.array([]), np.array([]), np.array([])
-        picked_box_probs = concate(picked_box_probs)
-        picked_box_probs[:, 0] *= width
-        picked_box_probs[:, 1] *= height
-        picked_box_probs[:, 2] *= width
-        picked_box_probs[:, 3] *= height
-        return to_numpy(picked_box_probs[:, :4]).astype(np.int32), np.array(picked_labels), to_numpy(
-            picked_box_probs[:, 4])
+            subset_probs = probs[mask]
+            if subset_probs.shape[0] == 0:
 
+                print('max_conf:', class_index, to_numpy(probs).max())
+                continue
+
+            subset_boxes = boxes[mask, :]
+
+            box_probs = torch.cat([subset_boxes, subset_probs.reshape(-1, 1)], dim=1)
+            keep = torchvision.ops.nms(subset_boxes, subset_probs, iou_threshold=self.nms_threshold)
+            box_probs=box_probs[keep, :]
+            picked_box_probs.append(box_probs)
+            picked_labels.extend([class_index] * box_probs.size(0))
+        #if not picked_box_probs or len(picked_box_probs)== 0:
+
+        if picked_box_probs and len(picked_box_probs) > 0:
+            picked_box_probs = concate(picked_box_probs, 0)
+            picked_box_probs[:, 0] *= 640
+            picked_box_probs[:, 1] *= 480
+            picked_box_probs[:, 2] *= 640
+            picked_box_probs[:, 3] *= 480
+
+            picked_labels = to_tensor(picked_labels).unsqueeze(-1).to(picked_box_probs.device).to(picked_box_probs.dtype)
+            return concate([picked_box_probs, picked_labels], axis=-1)
+        else:
+
+            boxes=to_tensor([[0,0,0,0,0,0]]).float().view(1,6)
+            return boxes[boxes[..., 4]>0].unsqueeze(0)
+
+        #
+        # boxes = boxes
+        # confidences = confidences
+        # if detection_threshold is not None:
+        #     self.detection_threshold = detection_threshold
+        # picked_box_probs = []
+        # picked_labels = []
+        # for class_index in range(1, confidences.shape[-1]):
+        #     probs = confidences[..., class_index]
+        #     mask = probs > self.detection_threshold
+        #     probs = probs[mask]
+        #     if probs.shape[0] == 0:
+        #         continue
+        #     subset_boxes = boxes[mask, :]
+        #     box_probs = concate([subset_boxes, probs.reshape(-1, 1)], axis=1)
+        #     keep = torchvision.ops.nms(subset_boxes, probs,iou_threshold=iou_threshold)
+        #
+        #     picked_box_probs.append(box_probs[keep,:])
+        #     picked_labels.extend([class_index] * len(keep))
+        # if not picked_box_probs:
+        #     try:
+        #         shp=list(boxes.shape)
+        #         shp[-1]=2
+        #         boxes=concate([boxes, zeros(shp)], axis=-1)
+        #     except Exception as e:
+        #         print(e)
+        #         PrintException()
+        #     return boxes[boxes[..., -1] >0].unsqueeze(0)
+        # elif len(picked_box_probs)==1:
+        #     try:
+        #         picked_box_probs = picked_box_probs[0]
+        #         picked_labels = to_tensor(picked_labels)
+        #     except Exception as e:
+        #         print(e)
+        #         PrintException()
+        # else:
+        #     try:
+        #         picked_box_probs = concate(picked_box_probs,axis=0)
+        #         picked_labels = to_tensor(picked_labels)
+        #     except Exception as e:
+        #         print(e)
+        #         PrintException()
+        # _, _, height, width = self.signature.inputs.value_list[0].shape
+        # picked_box_probs[...,  0] *= width
+        # picked_box_probs[...,  1] *= height
+        # picked_box_probs[...,  2] *= width
+        # picked_box_probs[...,  3] *= height
+        # return concate([picked_box_probs[..., :4], picked_labels.unsqueeze(-1),picked_box_probs[...,  4].unsqueeze(-1)],axis=-1).unsqueeze(0)
     def rerec(self, box, img_shape):
         """Convert box to square."""
         h = box[:, 3] - box[:, 1]
@@ -470,28 +626,28 @@ class RFBnet(Layer):
         locations.append(location3)
 
         confidences = torch.cat(confidences, 1)
-        if not hasattr(self,'softmax') or self.softmax is None:
-            self.softmax=SoftMax(-1)
-        confidences=self.softmax(confidences)
+        if not hasattr(self, 'softmax') or self.softmax is None:
+            self.softmax = SoftMax(-1)
 
         locations = torch.cat(locations, 1)
 
         if self.training:
+            confidences = self.softmax(confidences)
             result = OrderedDict()
             result['confidences'] = confidences
             result['locations'] = locations
             return result
 
         else:
-
+            confidences = softmax(confidences,axis=-1)
             locations = decode(locations, self.priors, self.variance)
             return confidences, locations
 
 
 def RfbNet(include_top=True,
            pretrained=True,
-           input_shape=(3,480,640),
-           base_filters=16, num_classes=2, num_regressors=4,
+           input_shape=(3, 480, 640),
+           base_filters=16, num_classes=2, num_regressors=4,detection_threshold=0.4,nms_threshold=0.3,
            **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
@@ -500,18 +656,20 @@ def RfbNet(include_top=True,
     if num_classes != 2 or num_regressors != 4:
         pretrained = False
     rfbnet_model = SsdDetectionModel(input_shape=input_shape,
-                               output=RFBnet(base_filters=base_filters, num_classes=num_classes,
-                                             num_regressors=num_regressors))
-    rfbnet_model.detection_threshold = 0.5
-    rfbnet_model.nms_threshold = 0.7
+                                     output=RFBnet(base_filters=base_filters, num_classes=num_classes,
+                                                   num_regressors=num_regressors))
+
+    rfbnet_model.detection_threshold = detection_threshold
+    rfbnet_model.nms_threshold = nms_threshold
     rfbnet_model.palette[0] = (0, 0, 0)
     rfbnet_model.palette[1] = (128, 255, 128)
     rfbnet_model.preprocess_flow = [
-        Resize((480, 640), True,align_corner=True),
+        Resize((480, 640), True, align_corner=True),
         Normalize(127.5, 127.5)
     ]
-    rfbnet_model.class_names=['background','face']
+
     if pretrained == True:
+        rfbnet_model.class_names = ['background', 'face']
         download_model_from_google_drive('1T_0VYOHaxoyuG1fAxY-6g0C7pfXiujns', dirname, 'version-RFB-640.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'version-RFB-640.pth')))
         recovery_model.softmax = SoftMax(axis=-1)

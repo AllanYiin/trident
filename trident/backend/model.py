@@ -23,7 +23,7 @@ from trident.context import split_path, make_dir_if_need, sanitize_path
 
 from trident.backend import dtype
 from trident.backend.common import to_list, format_time, get_terminal_size, get_backend, \
-    PrintException, OrderedDict, adaptive_format, cyan_color, get_class, camel2snake, is_instance
+    PrintException, OrderedDict, adaptive_format, cyan_color, get_class, camel2snake, is_instance,unpack_singleton
 from trident.backend.opencv_backend import array2image
 from trident.backend.tensorspec import *
 from trident.data.image_common import *
@@ -40,6 +40,10 @@ if get_backend() == 'pytorch':
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_backend import *
     from trident.backend.tensorflow_ops import *
+
+elif get_backend() == 'jax':
+    from trident.backend.jax_backend import *
+    from trident.backend.jax_ops import *
 
 __all__ = ['progress_bar', 'ModelBase']
 
@@ -137,25 +141,11 @@ class ModelBase(object):
 
     @model.setter
     def model(self, value):
-
-        self._outputs = OrderedDict()
-        self._targets = OrderedDict()
-
         if isinstance(value, Layer):
-            # if not value.is_root or value.nodes.key_list[0] != value.uuid:
-            #     value.nodes = OrderedDict([(mod.uuid, mod) for mod in list(value.modules()) if isinstance(mod, Layer)])
-            #     for name, mod in value.named_modules():
-            #         if isinstance(mod, Layer):
-            #             mod.nodes = value.nodes
-            #             mod.relative_name = name
-
-            inp_shape = self._model.input_shape
-            if inp_shape is None and hasattr(value, 'signature') and value.signature is not None and len(
-                    value.signature.inputs) > 0:
-                inp_shape = value._signature.inputs.value_list[0].shape
-            elif inp_shape is None:
-                inp_shape = copy.deepcopy(value.input_shape)
-            self._initial_graph(input_shape=inp_shape, output=value)
+            if value.built and hasattr(value, 'signature') and value.input_shape is not None:
+                self._model=value
+            else:
+                self._initial_graph(input_shape=inp_shape, output=value)
         elif isinstance(value, np.ndarray) or 'tensor' in value.__name__.lower():
             self._initial_graph(input_shape=int_shape(value), output=to_tensor(value))
         else:
@@ -692,7 +682,8 @@ class ModelBase(object):
             output = try_map_args_and_call(model, data, data_feed, self.is_autocast_enabled)
             # if any_abnormal_number(output):
             #     print('{0} after calculate forward'.format(''))
-            if isinstance(output, (list, tuple)):
+            output=unpack_singleton(output)
+            if isinstance(output, (list, tuple)) and len(output)==len(signature.outputs):
                 for i in range(len(output)):
                     data[signature.outputs.key_list[i]] = output[i]
             elif is_instance(output, 'OrderedDict'):

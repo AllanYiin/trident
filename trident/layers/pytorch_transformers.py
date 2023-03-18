@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+from distutils.version import LooseVersion
 import math
 from typing import List, Tuple, Optional, Union, Callable, Any, Iterable,Iterator,Mapping, TypeVar,overload
 import torch
@@ -16,7 +16,7 @@ from trident.layers.pytorch_blocks import FullConnect_Block
 from trident.layers.pytorch_layers import Embedding, Dropout, Dense,SoftMax
 from trident.layers.pytorch_normalizations import LayerNorm
 
-__all__ = ['Mlp', 'BERT','GPT2', 'BERTEmbedding', 'PositionalEmbedding', 'PositionwiseFeedForward','ConvFeedForward', 'DropPath', 'Attention',
+__all__ = ['Mlp', 'BERT','GPT2', 'BERTEmbedding', 'PositionalEmbedding', 'PositionwiseFeedForward','ConvFeedForward', 'DropPath',
            'MultiHeadedAttention','MaskedMultiHeadedAttention', 'SublayerConnection', 'TransformerBlock','GptTransformerBlock']
 
 def Mlp(hidden_features=None, out_features=None, dropout_rate=0):
@@ -53,14 +53,15 @@ class PositionalEmbedding(Layer):
 class PositionwiseFeedForward(Layer):
     "Implements FFN equation."
 
-    def __init__(self, d_model, d_ff, activation=SquaredRelu,dropout_rate=0.1):
+    def __init__(self, d_model, d_ff, activation=SquaredRelu,dropout_rate=0.1,use_bias=True):
         super(PositionwiseFeedForward, self).__init__()
-        self.w_1 = Dense(num_filters=d_ff, activation=get_activation(activation))
-        self.w_2 = Dense(num_filters=d_model)
+        self.w_1 = Dense(num_filters=d_ff, activation=get_activation(activation),use_bias=use_bias)
+        self.w_2 = Dense(num_filters=d_model,use_bias=use_bias)
         self.dropout = Dropout(dropout_rate)
 
     def forward(self, x):
-        return self.dropout(self.w_2(self.w_1(x)))
+        x=self.dropout(self.w_2(self.w_1(x)))
+        return x
 
 
 class Conv1D(Layer):
@@ -77,6 +78,8 @@ class Conv1D(Layer):
         self.num_filters = num_filters
         self.filter_index = -1
         self.activation = get_activation(activation)
+
+
 
     def build(self, input_shape: TensorShape):
         if self._built == False:
@@ -95,10 +98,11 @@ class Conv1D(Layer):
         return x
 
 
+
 class ConvFeedForward(Layer):
     "Implements FFN equation."
 
-    def __init__(self, d_model, d_ff, activation=SquaredRelu,dropout_rate=0.1):
+    def __init__(self, d_model, d_ff, activation=SquaredRelu(),dropout_rate=0.1):
         super(ConvFeedForward, self).__init__()
         self.w_1 = Conv1D(num_filters=d_ff,activation=get_activation(activation))
         self.w_2 = Conv1D(num_filters=d_model)
@@ -117,7 +121,7 @@ class BERTEmbedding(Layer):
         sum of all these features are output of BERTEmbedding
     """
 
-    def __init__(self, vocab_size, embedding_dim, cls_idx=1, sep_idx=2, unk_idx=3, pad_idx=0, mask_idx=4,
+    def __init__(self, vocab_size, embedding_dim,position_embedding_type='absolute', cls_idx=1, sep_idx=2, unk_idx=3, pad_idx=0, mask_idx=4,
                  max_seq_length=512, dropout_rate=0.1, add_noise=False, noise_intensity=0.05):
         """
         :param vocab_size: total vocab size
@@ -127,8 +131,9 @@ class BERTEmbedding(Layer):
         super().__init__()
         self.token = Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim, padding_idx=pad_idx,
                                add_noise=add_noise, noise_intensity=noise_intensity)
-        self.position = PositionalEmbedding(d_model=self.token.embedding_dim, max_seq_length=max_seq_length)
-        self.segment = Embedding(num_embeddings=3, embedding_dim=self.token.embedding_dim, padding_idx=0)
+        self.position =Embedding(num_embeddings=max_seq_length, embedding_dim=embedding_dim, padding_idx=None)
+        self.token_type = Embedding(num_embeddings=2, embedding_dim=embedding_dim, padding_idx=None)
+
         self.max_seq_length = max_seq_length
         self.cls_idx = cls_idx
         self.sep_idx = sep_idx
@@ -137,34 +142,46 @@ class BERTEmbedding(Layer):
         self.mask_idx = mask_idx
         self.dropout_rate = dropout_rate
         self.dropout = Dropout(dropout_rate)
-        self.norm = LayerNorm(eps=1e-12)
+        self.norm = LayerNorm(eps=1e-12,in_sequence=True)
         self.embedding_dim = embedding_dim
+        self.position_embedding_type = position_embedding_type
+        self.register_buffer("position_ids", torch.arange(max_seq_length).expand((1, -1)))
+        if LooseVersion(vstring=torch.__version__)>LooseVersion(vstring='1.6.0'):
+            self.register_buffer(
+                "token_type_ids",
+                torch.zeros(self.position_ids.size(), dtype=torch.long),
+                persistent=False,
+            )
 
-    def forward(self, x, segments_tensor=None):
-        if segments_tensor is None:
-            segments_tensor = zeros_like(x).to(x.device).detach()
-            # if self.sep_idx not in x:
-            #
-            # else:
-            #     segments_tensor_list=[]
-            #     B,N=int_shape(x)
-            #     sep_tuples=(x == self.sep_idx).nonzero()(as_tuple=True)
-            #     for i in range(B):
-            #         sep_tuple=sep_tuples[i]
-            #         if len(sep_tuple)<=1:
-            #             segments_tensor_list.append(zeros_like(x[i]))
-            #         elif  sep_tuple==2:
-            #             t=zeros_like([i]).detach()
-            #             sep_tuple[:sep_tuple[0]+1]=1
-            #             sep_tuple[sep_tuple[0]+1:sep_tuple[1] + 1] = 2
-            #             segments_tensor_list.append(t)
-            #     segments_tensor=stack(segments_tensor_list,axis=0).to(get_device())
+    def forward(self, x, token_type_ids=None,past_key_values_length: int = 0,inputs_embeds=None):
+        seq_length = x.size(1)
+        position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
-        x = self.token(x) + self.position(x) + self.segment(segments_tensor)
-        x = self.norm(x)
-        if self.dropout_rate > 0 and self.training:
-            x = self.dropout(x)
-        return x
+        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
+        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
+        # issue #5664
+        if token_type_ids is None:
+            if hasattr(self, "token_type_ids"):
+                buffered_token_type_ids = self.token_type_ids[:, :seq_length]
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(x.size(0), seq_length)
+                token_type_ids = buffered_token_type_ids_expanded
+            else:
+                token_type_ids = torch.zeros(int_shape(x), dtype=torch.long, device=self.position_ids.device)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.token(x)
+        token_type_embeds = self.token_type(token_type_ids)
+
+        embeddings = inputs_embeds + token_type_embeds
+        if self.position_embedding_type == "absolute":
+            position_embeds  = self.position(position_ids)
+            embeddings += position_embeds
+        embeddings = self.norm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+
+
 
 
 class DropPath(Layer):
@@ -251,26 +268,28 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, axis: int = 1) ->
 
 
 
-class Attention(Layer):
-    """
-    Compute 'Scaled Dot Product Attention
-    """
-
-    def __init__(self, dropout_rate=0.1):
-        super().__init__()
-        self.dropout = Dropout(dropout_rate)
-
-    def forward(self, query, key, value, mask=None):
-        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(query.size(-1))
-
-        if mask is not None:
-            scores = scores.masked_fill(mask, -1e9 if scores.dtype == torch.float32 else -1e+4)
-        p_attn = softmax(scores, axis=-1)
-
-        if self.dropout is not None:
-            p_attn = self.dropout(p_attn)
-
-        return torch.matmul(p_attn, value), p_attn
+# class Attention(Layer):
+#     """
+#     Compute 'Scaled Dot Product Attention
+#     """
+#
+#     def __init__(self, dropout_rate=0.1):
+#         super().__init__()
+#         self.dropout = Dropout(dropout_rate)
+#
+#
+#
+#     def forward(self, query, key, value, mask=None):
+#         scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(query.size(-1))
+#
+#         if mask is not None:
+#             scores = scores.masked_fill(mask, -1e9 if scores.dtype == torch.float32 else -1e+4)
+#         p_attn = softmax(scores, axis=-1)
+#
+#         if self.dropout is not None:
+#             p_attn = self.dropout(p_attn)
+#
+#         return torch.matmul(p_attn, value), p_attn
 
 
 class MultiHeadedAttention(Layer):
@@ -281,29 +300,64 @@ class MultiHeadedAttention(Layer):
     def __init__(self, attn_heads, d_model, dropout_rate=0.1):
         super().__init__()
         assert d_model % attn_heads == 0
-
+        self.dropout = Dropout(dropout_rate)
         # We assume d_v always equals d_k
         self.d_k = d_model // attn_heads
         self.attn_heads = attn_heads
 
         self.linear_layers = ModuleList([Dense(d_model) for _ in range(3)])
         self.output_linear = Dense(d_model)
-        self.attention = Attention(dropout_rate=dropout_rate)
 
-    def forward(self, x, mask=None):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+        new_x_shape = x.size()[:-1] + (self.attn_heads ,self.d_k)
+        x = x.view(new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(self, x, attention_mask=None,head_mask: Optional[torch.FloatTensor] = None,past_key_values: Optional[List[torch.FloatTensor]] = None,):
         batch_size = x.size(0)
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        batch_size, seq_length, _ = x.shape
+
+
+
         # 1) Do all the linear projections in batch from d_model => h x d_k
-        query = self.linear_layers[0](x).view(batch_size, -1, self.attn_heads, self.d_k).transpose(1, 2)
-        key = self.linear_layers[1](x).view(batch_size, -1, self.attn_heads, self.d_k).transpose(1, 2)
-        value = self.linear_layers[2](x).view(batch_size, -1, self.attn_heads, self.d_k).transpose(1, 2)
+        query = self.transpose_for_scores(self.linear_layers[0](x))
+        key = self.transpose_for_scores(self.linear_layers[1](x))
+        value = self.transpose_for_scores(self.linear_layers[2](x))
 
-        # 2) Apply attention on all the projected vectors in batch.
-        x, attn = self.attention(query, key, value, mask=mask)
+        attention_scores = torch.matmul(query, key.transpose(-2, -1))/ math.sqrt(self.d_k)
 
-        # 3) "Concat" using a view and apply a final linear.
-        x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.attn_heads * self.d_k)
 
-        return self.output_linear(x)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        if attention_mask is None:
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=self.device)
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None and  not (isinstance(head_mask,(tuple,list)) and all([ m is None for m in head_mask]) ):
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value)
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.attn_heads * self.d_k ,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        self_outputs = (context_layer, attention_probs)
+
+        attention_output = self.output_linear(self_outputs[0])
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
 
 
 class MaskedMultiHeadedAttention(Layer):
@@ -464,7 +518,7 @@ class SublayerConnection(Layer):
 
     def __init__(self, dropout_rate=0.1,pre_norm=False):
         super(SublayerConnection, self).__init__()
-        self.norm = LayerNorm(eps=1e-12)
+        self.norm = LayerNorm(eps=1e-12,in_sequence=True)
         self.pre_norm=pre_norm
         self.dropout = DropPath(dropout_rate)
 
@@ -473,7 +527,9 @@ class SublayerConnection(Layer):
         if self.pre_norm:
             return x + self.dropout(sublayer(self.norm(x)))
         else:
-            return self.norm(x + self.dropout(sublayer(x)))
+            output=sublayer(x)
+            x=x + self.dropout(output if is_tensor(output) else output[0])
+            return self.norm(x)
 
 
 class TransformerBlock(Layer):
@@ -482,7 +538,7 @@ class TransformerBlock(Layer):
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
 
-    def __init__(self, hidden, attn_heads,feed_forward_hidden=None, pre_norm=False, dropout_rate=0.1):
+    def __init__(self, hidden, attn_heads,feed_forward_hidden=None, activation=Gelu(),pre_norm=False, dropout_rate=0.1):
         """
         param hidden: hidden size of transformer
         :param attn_heads: head sizes of multi-head attention
@@ -495,16 +551,15 @@ class TransformerBlock(Layer):
             feed_forward_hidden = 4 * hidden
         self.pre_norm = pre_norm
         self.attention = MultiHeadedAttention(attn_heads=attn_heads, d_model=hidden)
-        self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout_rate=dropout_rate)
-        self.input_sublayer = SublayerConnection(dropout_rate=dropout_rate,pre_norm=pre_norm)
-        self.output_sublayer = SublayerConnection(dropout_rate=dropout_rate,pre_norm=pre_norm)
+        self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout_rate=dropout_rate,activation=activation)
+        self.input_sublayer = SublayerConnection(dropout_rate=dropout_rate,pre_norm=self.pre_norm)
+        self.output_sublayer = SublayerConnection(dropout_rate=dropout_rate,pre_norm=self.pre_norm)
         self.dropout = Dropout(dropout_rate=dropout_rate)
 
-    def forward(self, x, mask=None):
-        if self.pre_norm:
-            x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, mask=mask))
-            x = self.output_sublayer(x, self.feed_forward)
-            return self.dropout(x)
+    def forward(self, x, attention_mask=None,head_mask: Optional[torch.FloatTensor] = None,past_key_values: Optional[List[torch.FloatTensor]] = None):
+        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, attention_mask=attention_mask,head_mask=head_mask,past_key_values=past_key_values))
+        x = self.output_sublayer(x, self.feed_forward)
+        return self.dropout(x)
 
 
 
@@ -514,7 +569,7 @@ class GptTransformerBlock(Layer):
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
 
-    def __init__(self, hidden, attn_heads, feed_forward_hidden=None,pre_norm=False,layer_idx=None, is_cross_attention=False,dropout_rate=0.1,use_cache=True):
+    def __init__(self, hidden, attn_heads, feed_forward_hidden=None,activation=Gelu(),pre_norm=False,layer_idx=None, is_cross_attention=False,dropout_rate=0.1,use_cache=True):
         """
         param hidden: hidden size of transformer
         :param attn_heads: head sizes of multi-head attention
@@ -531,19 +586,19 @@ class GptTransformerBlock(Layer):
         self.pre_norm=pre_norm
         self.d_model=hidden
         self.attn_heads=attn_heads
-        self.ln_1 =LayerNorm(eps=1e-5)
+        self.ln_1 =LayerNorm(eps=1e-5,in_sequence=True)
         self.attn = MaskedMultiHeadedAttention(attn_heads=self.attn_heads, d_model=hidden, dropout_rate=dropout_rate,layer_idx=layer_idx,use_cache=use_cache)
-        self.ln_2 = LayerNorm(eps=1e-5)
+        self.ln_2 = LayerNorm(eps=1e-5,in_sequence=True)
         self.is_cross_attention=is_cross_attention
         if self.is_cross_attention:
             self.crossattention = MaskedMultiHeadedAttention(attn_heads=self.attn_heads, d_model=hidden, dropout_rate=dropout_rate, is_cross_attention=True, layer_idx=layer_idx)
-            self.ln_cross_attn =  LayerNorm(eps=1e-5)
+            self.ln_cross_attn =  LayerNorm(eps=1e-5,in_sequence=True)
         else:
             self.crossattention =None
             self.ln_cross_attn =None
 
         self.dropout_rate=dropout_rate
-        self.mlp = ConvFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout_rate=dropout_rate)
+        self.mlp = ConvFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout_rate=dropout_rate,activation=activation)
 
     def __setattr__(self, name: str, value) -> None:
         def remove_from(*dicts_or_sets):
@@ -609,7 +664,7 @@ class GptTransformerBlock(Layer):
                         self.crossattention = MaskedMultiHeadedAttention(attn_heads=self.attn_heads, d_model=self.d_model,
                                                                          dropout_rate=self.dropout_rate,
                                                                          is_cross_attention=True, layer_idx=self.layer_idx)
-                        self.ln_cross_attn = LayerNorm(eps=1e-5)
+                        self.ln_cross_attn = LayerNorm(eps=1e-5,in_sequence=True)
 
 
 
@@ -687,7 +742,7 @@ class BERT(Layer):
     """
 
     def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1, pad_idx=0,
-                 max_seq_length=512,pre_norm=True,output_mode='last_hidden_layer'):
+                 max_seq_length=512,pre_norm=False,output_mode='last_hidden_layer'):
         """
         param vocab_size: vocab_size of total words
         :param hidden: BERT model hidden size
@@ -707,7 +762,6 @@ class BERT(Layer):
         self.pad_idx = pad_idx
         self.dropout_rate = dropout_rate
         self.num_filters = hidden
-        self.norm = LayerNorm()
         self.pre_norm=pre_norm
 
         # paper noted they used 4*hidden_size for ff_network_hidden_size
@@ -718,7 +772,7 @@ class BERT(Layer):
                                        max_seq_length=max_seq_length)
         for i in range(n_layers):
             self.add_module('transformer_block{0}'.format(i),
-                            TransformerBlock(hidden, attn_heads, hidden * 4, dropout_rate))
+                            TransformerBlock(hidden, attn_heads, hidden * 4, pre_norm=pre_norm,dropout_rate=dropout_rate))
         self.decoder = Dense(num_filters=vocab_size)
 
     # def build(self, input_shape: TensorShape):
@@ -736,33 +790,66 @@ class BERT(Layer):
     #
     #         self.to(get_device())
     #         self._built = True
+    def get_all_blocks(self):
+        return [module for name,module in self.named_children() if 'transformer_block' in name]
 
-    def forward(self, x, segments_tensor=None):
-        if int_shape(x)[1] == 2:
-            x, segments_tensor = split(x, num_splits=2, axis=1)
-            x = x.squeeze(1)
-            segments_tensor = segments_tensor.squeeze(1)
-        elif segments_tensor is None:
-            segments_tensor = zeros_like(x, dtype=x.dtype).to(get_device())
+    def get_head_mask(
+            self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
+    ) -> Tensor:
+        """
+        Prepare the head mask if needed.
+        Args:
+            head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
+                The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
+            num_hidden_layers (`int`):
+                The number of hidden layers in the model.
+            is_attention_chunked: (`bool`, *optional*, defaults to `False`):
+                Whether or not the attentions scores are computed by chunks or not.
+        Returns:
+            `torch.Tensor` with shape `[num_hidden_layers x batch x num_heads x seq_length x seq_length]` or list with
+            `[None]` for each layer.
+        """
+        if head_mask is not None:
+            if head_mask.dim() == 1:
+                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
+            elif head_mask.dim() == 2:
+                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+            # We can specify head_mask for each layer
+            if is_attention_chunked is True:
+                head_mask = head_mask.unsqueeze(-1)
+        else:
+            head_mask = [None] * num_hidden_layers
+
+        return head_mask
+    def forward(self, x, token_type_ids=None,attention_mask=None,head_mask: Optional[torch.FloatTensor] = None,past_key_values: Optional[List[torch.FloatTensor]] = None,):
+
+        #batch_size, seq_length = int_shape(x)[:2]
+        # if int_shape(x)[1] == 2:
+        #     x, token_type_ids = split(x, num_splits=2, axis=1)
+        #     x = x.squeeze(1)
+        #     token_type_ids = token_type_ids.squeeze(1)
+
         # attention masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
-        mask = (x == self.pad_idx).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
+        head_mask = self.get_head_mask(head_mask, self.n_layers)
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         # embedding the indexed sequence to sequence of vectors
-        x = self.embedding(x, segments_tensor)
+        x = self.embedding(x, token_type_ids=token_type_ids)
 
         # running over multiple transformer blocks
         outputs=[]
         for i,(name, transformer) in enumerate(self.named_children()):
             if 'transformer_block' in name:
-                x = transformer.forward(x, mask)
+                x = transformer.forward(x, attention_mask=attention_mask,head_mask=head_mask,past_key_values=past_key_values)
                 if self.output_mode == 'sum_last_4_hidden' and i >= self.n_layers - 4:
                     outputs.append(x)
                 elif self.output_mode == 'sum_all_hidden' :
                     outputs.append(x)
         if len(outputs)>0:
             x=reduce_mean(stack(outputs,axis=0),axis=0)
-        x = self.norm(x)
         return x
 
 class GPT2(Layer):
@@ -770,8 +857,8 @@ class GPT2(Layer):
     BERT model : Bidirectional Encoder Representations from Transformers.
     """
 
-    def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1, pad_idx=0,
-                 max_seq_length=512,pre_norm=True,use_cache=True):
+    def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1,activation=Gelu(), pad_idx=0,
+                 max_seq_length=1024,pre_norm=True,use_cache=True):
         """
         param vocab_size: vocab_size of total words
         :param hidden: BERT model hidden size
@@ -790,9 +877,9 @@ class GPT2(Layer):
         self.dropout_rate = dropout_rate
         self.drop=Dropout(dropout_rate)
         self.num_filters = hidden
-        self.norm=LayerNorm()
+        self.norm=LayerNorm(in_sequence=True)
         self.pre_norm=pre_norm
-        self.out =Dense(vocab_size, use_bias=False,activation=SoftMax())
+        self.out =Dense(vocab_size, use_bias=False,activation=SoftMax(-1))
 
         # paper noted they used 4*hidden_size for ff_network_hidden_size
         self.feed_forward_hidden = hidden * 4
@@ -803,7 +890,7 @@ class GPT2(Layer):
         self.position =Embedding(num_embeddings=max_seq_length, embedding_dim=hidden)
         for i in range(n_layers):
             self.add_module('transformer_block{0}'.format(i),
-                GptTransformerBlock(attn_heads=self.attn_heads, hidden=self.hidden,feed_forward_hidden=self.feed_forward_hidden, dropout_rate=dropout_rate,pre_norm=self.pre_norm,use_cache=use_cache,layer_idx=i))
+                GptTransformerBlock(attn_heads=self.attn_heads, hidden=self.hidden,feed_forward_hidden=self.feed_forward_hidden, activation=activation,dropout_rate=dropout_rate,pre_norm=self.pre_norm,use_cache=use_cache,layer_idx=i))
 
     def get_all_blocks(self):
         return [module for name,module in self.named_children() if 'transformer_block' in name]

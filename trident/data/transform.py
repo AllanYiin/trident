@@ -196,8 +196,8 @@ class VisionTransform(Transform):
 
 
             trans_boxes = np.concatenate((xmin, ymin,xmax,ymax), axis=1)
-            trans_boxes[:, 0::2] =clip(trans_boxes[:, 0::2] , 0, ew)
-            trans_boxes[:, 1::2] = clip(trans_boxes[:, 1::2],0, eh)
+            trans_boxes[:, 0::2] =trans_boxes[:, 0::2]# , 0, ew)
+            trans_boxes[:, 1::2] = trans_boxes[:, 1::2]#,0, eh)
             if class_info is not None  and class_info.shape[-1]>0 and keypoints is not None and len(keypoints)>0:
                 trans_boxes = np.concatenate((trans_boxes, class_info,keypoints), axis=1)
             elif class_info is not None  and class_info.shape[-1]>0:

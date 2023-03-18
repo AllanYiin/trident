@@ -1099,13 +1099,13 @@ class DqnPolicy(PolicyBase):
         self.steps_done = 0
 
     def setting_network(self):
-        super()._initial_graph(inputs=self.get_observation(), output=deepcopy(self.network))
+        super()._initial_graph(inputs=self.get_observation(), output=self.network.copy())
         self.policy_net = self._model
         self.policy_net.to(get_device())
         kaiming_normal(self.policy_net)
         self.policy_net.train()
 
-        self.target_net = copy.deepcopy(self.network)
+        self.target_net = self.network.copy()
         self.target_net.to(get_device())
         self.target_net.eval()
         self.summary()
@@ -1224,7 +1224,7 @@ class PGPolicy(PolicyBase):
         self.gamma = gamma
 
     def setting_network(self):
-        super()._initial_graph(inputs=self.get_observation(), output=deepcopy(self.network))
+        super()._initial_graph(inputs=self.get_observation(), output=self.network.copy())
         self.policy_net = self._model
 
         kaiming_normal(self._model)
@@ -1537,7 +1537,7 @@ class PPOPolicy(ActorCriticPolicy):
         self.critic.batch_loss_history.regist('critic_loss')
         self.actor.batch_loss_history.regist('actor_loss')
 
-        self.old_actor = copy.deepcopy(self._networks['actor'].model)
+        self.old_actor =self._networks['actor'].model.copy()
         self.old_actor.eval()
         self.old_actor.trainable = False
 

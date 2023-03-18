@@ -269,7 +269,7 @@ class _DenseNetFcn2(Layer):
             self.add_module('transition_up{0}'.format(i + 1), TransConv2d_Block((3,3),num_filters=num_filters,strides=2,auto_pad=True,activation='relu',normalization='batch',name='transition_up{0}'.format(i + 1)))
             self.add_module('denseblock_up{0}'.format(i + 1),DenseBlock(self.blocks[i], growth_rate=self.growth_rate, name='denseblock_up{0}'.format(i + 1)))
 
-        self.bottleneck=DenseBlock(self.blocks[4], growth_rate=self.growth_rate, name='bottleneck')
+        self.bottleneck=DenseBlock(self.blocks[-1], growth_rate=self.growth_rate, name='bottleneck')
         self.upsample= Upsampling2d(scale_factor=2,mode='bilinear')
         self.last_layer=Conv2d((1, 1), num_filters=self.num_classes, strides=1, activation=None)
         self.softmax=SoftMax()

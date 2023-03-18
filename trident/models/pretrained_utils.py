@@ -19,7 +19,7 @@ from trident.callbacks.lr_schedulers import AdjustLRCallback
 from trident.backend import iteration_tools
 from trident.data.dataset import ZipDataset
 from trident.backend.common import get_backend, to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, Signature, TensorShape
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, Signature, TensorShape,is_instance
 from trident.backend.model import ModelBase, progress_bar
 from trident.callbacks.visualization_callbacks import *
 from trident.data.data_provider import *
@@ -64,27 +64,39 @@ def _make_recovery_model_include_top(recovery_model:Layer,default_shape=None,inp
         recovery_model.trainable = False
         idx = -1
         is_last_dense=True
-        while (len(recovery_model[idx]._parameters) == 0 or isinstance(recovery_model[idx], Dense)) and len(recovery_model[idx].output_shape) >= 2:
-            layer = recovery_model[idx]
-            if layer.output_shape.rank > 2:
-                break
-            elif len(recovery_model[idx]._parameters) > 0:
-                if not include_top:
-                    recovery_model.remove_at(idx)
-                    idx+=1
-                elif size_change or (is_last_dense and classes != 1000 and  isinstance(recovery_model[idx], Dense)):
-                    if hasattr(recovery_model[idx],'num_filters') and recovery_model[idx].num_filters!=classes:
-                        recovery_model[idx].num_filters=classes
-                    recovery_model[idx]._built=False
-                    recovery_model[idx]._parameters.clear()
+        if isinstance(recovery_model,Sequential):
+            while (len(recovery_model[idx]._parameters) == 0 or isinstance(recovery_model[idx], Dense)) and len(recovery_model[idx].output_shape) >= 2:
+                layer = recovery_model[idx]
+                if layer.output_shape.rank > 2:
+                    break
+                elif len(recovery_model[idx]._parameters) > 0:
+                    if not include_top:
+                        recovery_model.remove_at(idx)
+                        idx+=1
+                    elif size_change or (is_last_dense and classes != 1000 and  isinstance(recovery_model[idx], Dense)):
+                        if hasattr(recovery_model[idx],'num_filters') and recovery_model[idx].num_filters!=classes:
+                            recovery_model[idx].num_filters=classes
+                        recovery_model[idx]._built=False
+                        recovery_model[idx]._parameters.clear()
 
+                    else:
+                        recovery_model[idx].trainable = True
                 else:
-                    recovery_model[idx].trainable = True
-            else:
-                if not include_top:
-                    recovery_model.remove_at(idx)
-                    idx+=1
-            idx -= 1
+                    if not include_top:
+                        recovery_model.remove_at(idx)
+                        idx+=1
+                idx -= 1
+        elif is_instance(recovery_model, 'VisionTransformer'):
+            recovery_model.trainable=False
+            if hasattr(recovery_model,'head'):
+                recovery_model.head.trainable=True
+            if hasattr(recovery_model, 'fc'):
+                recovery_model.fc.trainable = True
+            if hasattr(recovery_model,'norm'):
+                recovery_model.norm.trainable=True
+
+
+
 
 
     dims =list(default_shape)

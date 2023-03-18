@@ -29,8 +29,12 @@ bpmf_phonetic = 'ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙ
 numbers_string= '0123456789'
 alphabets = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 # Ideographic number zero+CJK Unified Ideographs
-chinese_characters = '\u3007'.encode('utf-8').decode('utf-8') + ''.join([chr(i) for i in range(19968, 40959)])
+#19968(\\u4e00), 40959(\\u9fff)
+#中日韓統一表意文字[4E00-9FFF]（20940字）
+chinese_characters = '\u3007'.encode('utf-8').decode('utf-8') + ''.join([chr(i) for i in range(19968,40869+1)])
 
+
+#zhPattern = re.compile(u'[\u4e00-\u9fa5]+')
 
 # CJK Unified Ideographs Extension A
 # ch2=''.join([chr(i) for i in range(13312,19903)] )

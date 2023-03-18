@@ -87,7 +87,6 @@ def _set_device(device='cpu'):
         print(e)
 
 
-
 _float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_enabled == True and _get_device() == 'cuda' else Dtype.float32
 
 Tensor = torch.Tensor
@@ -100,7 +99,6 @@ Tensor = torch.Tensor
 # NumPy consistency (https://numpy.org/devdocs/reference/constants.html)
 
 
-
 __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor',
            'to_scalar', 'ndim', 'numel', 'cast', 'str2dtype', 'int_shape', 'tensor_to_shape', 'is_sparse', 'is_nan',
            'is_inf',
@@ -110,7 +108,8 @@ __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_te
            'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add',
            'subtract',
-           'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
+           'true_divide', 'pi', 'sign', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sinh', 'cosh',
+           'tanh', 'asinh', 'acosh', 'atanh',
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'pad', 'identity', 'sigmoid', 'relu',
@@ -130,7 +129,8 @@ __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_te
            'xyxy2xywh', 'bbox_iou',
            'bbox_giou', 'bbox_ciou', 'bbox_diou', 'nms']
 
-from math import e , nan , inf , pi
+from math import e, nan, inf, pi
+
 __all__.extend(['e', 'pi', 'nan', 'inf'])
 
 
@@ -476,6 +476,15 @@ def to_scalar(x: Any) -> Optional[Union[_int, _float]]:
 
 
 def copy(x: Tensor) -> Tensor:
+    """Returns a copy of x.
+
+    Args:
+        x:: input tensor
+
+    Returns:
+        a copy of x..
+
+    """
     return x.clone()
 
 
@@ -705,7 +714,7 @@ def to(x, *args, **kwargs):
 # check operation
 ###########################
 @numpy_compatible
-def is_nan(x)->_bool:
+def is_nan(x) -> _bool:
     """
 
     Args:
@@ -842,7 +851,7 @@ def logical_and(left, right):
 
 
 @numpy_compatible
-def logical_not(x: Tensor):
+def logical_not(x: Tensor)->Tensor:
     """Element-wise `logical not: ~x`
     Args:
         x (Tensor): input boolean tensor
@@ -1283,6 +1292,20 @@ def matmul(a: Tensor, b: Tensor, transpose_a=False, transpose_b=False):
 
 
 @numpy_compatible
+def negate(x):
+    """Computes the element-wise negation of ``x``:
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns:
+      negation of ``x`` .
+
+    """
+    return torch.neg(x)
+
+
+@numpy_compatible
 def floor(x: Tensor) -> Tensor:
     """Returns element-wise greater integer not greater than x.
 
@@ -1380,6 +1403,22 @@ def prod(x: Tensor) -> Tensor:
     return torch.prod(x)
 
 
+@numpy_compatible
+def sign(x: Tensor) -> Tensor:
+    """The output of this operation is the element-wise sign of the two  inputtensor.
+
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns:
+        The sign of the input tensor.
+
+    """
+
+    return torch.sign(x)
+
+
 def pi() -> Tensor:
     """ The number π (/paɪ/)
     The number π (/paɪ/) is a mathematical constant. It is defined as the ratio of a circle's circumference to its diameter
@@ -1392,8 +1431,35 @@ def pi() -> Tensor:
 
 
 @numpy_compatible
+def reciprocal(x: Tensor) -> Tensor:
+    """Computes element-wise square root of the input tensor.
+
+    Note: This operation does not support integer types.
+
+    >>> x = to_tensor([[4.0], [16.0]])
+    >>> sqrt(x)
+    <Tensor: shape=(2, 1), dtype=float32, numpy=
+      array([[2.],
+             [4.]], dtype=float32>
+
+
+    Note: In order to support complex, please provide an input tensor
+    of `complex64` or `complex128`.
+
+    Args:
+        x: A `Tensor`
+
+
+    Returns:
+      A `Tensor` of same size, type and sparsity as `x`.
+
+    """
+    return torch.reciprocal(x)
+
+
+@numpy_compatible
 def sqrt(x: Tensor) -> Tensor:
-    r"""Computes element-wise square root of the input tensor.
+    """Computes element-wise square root of the input tensor.
 
     Note: This operation does not support integer types.
 
@@ -1450,7 +1516,7 @@ def rsqrt(x: Tensor) -> Tensor:
 
 @numpy_compatible
 def square(x: Tensor) -> Tensor:
-    r"""Computes square of x element-wise.
+    """Computes square of x element-wise.
 
     I.e., \\(y = x * x = x^2\\).
 
@@ -1472,7 +1538,7 @@ def square(x: Tensor) -> Tensor:
 
 @numpy_compatible
 def abs(x: Tensor) -> Tensor:
-    r"""Computes the absolute value of a tensor.
+    """Computes the absolute value of a tensor.
 
     Given a tensor of integer or floating-point values, this operation returns a
     tensor of the same type, where each element contains the absolute value of the
@@ -1504,7 +1570,7 @@ def abs(x: Tensor) -> Tensor:
 
 @numpy_compatible
 def pow(x: Tensor, y: Number) -> Tensor:
-    r"""Computes the power of one value to another.
+    """Computes the power of one value to another.
 
     Given a tensor `x` and a tensor `y`, this operation computes \\(x^y\\) for
     corresponding elements in `x` and `y`. For example:
@@ -1529,8 +1595,8 @@ def pow(x: Tensor, y: Number) -> Tensor:
 
 
 @numpy_compatible
-def log(x: Tensor):
-    r"""Computes natural logarithm of x element-wise.
+def log(x: Tensor)->Tensor:
+    """Computes natural logarithm of x element-wise.
 
     I.e., \\(y = \log_e x\\).
 
@@ -1556,8 +1622,8 @@ def log(x: Tensor):
 
 
 @numpy_compatible
-def exp(x: Tensor):
-    r"""Computes exponential of x element-wise.  \\(y = e^x\\).
+def exp(x: Tensor)->Tensor:
+    """Computes exponential of x element-wise.  \\(y = e^x\\).
 
     This function computes the exponential of the input tensor element-wise.
     i.e. `math.exp(x)` or \\(e^x\\), where `x` is the input tensor.
@@ -1619,7 +1685,7 @@ def clip(x: Tensor, min=None, max=None):
 
 
 @numpy_compatible
-def sin(x: Tensor):
+def sin(x: Tensor)->Tensor:
     """Computes the element-wise sine
 
     Args:
@@ -1637,7 +1703,7 @@ def sin(x: Tensor):
 
 
 @numpy_compatible
-def cos(x: Tensor):
+def cos(x: Tensor)->Tensor:
     """Computes the element-wise cosine
 
     Args:
@@ -1655,7 +1721,7 @@ def cos(x: Tensor):
 
 
 @numpy_compatible
-def tan(x: Tensor):
+def tan(x: Tensor)->Tensor:
     """Computes the element-wise tan
 
     Args:
@@ -1673,7 +1739,7 @@ def tan(x: Tensor):
 
 
 @numpy_compatible
-def asin(x: Tensor):
+def asin(x: Tensor)->Tensor:
     """Computes the element-wise arcsin (inverse sine)
 
     Args:
@@ -1701,28 +1767,11 @@ def acos(x: Tensor) -> Tensor:
 
     Examples:
         >>> acos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-        tensor([[0.0000, 1.0472],
-                [1.8235, 2.4189]])
+        Array([[0.0000e+00, 1.0472e+00],
+           [1.8235e+00, 2.4189e+00]], dtype=float32)
 
     """
     return torch.acos(x)
-
-
-@numpy_compatible
-def atan(x: Tensor) -> Tensor:
-    """Computes the element-wise arctan (inverse tan)
-
-    Args:
-        x (Tensor): input tensor.
-
-    Returns: element-wise arccos
-
-    Examples:
-        >>> atan(to_tensor([-1, 0, 1])).cpu()
-        tensor([-0.7854,  0.0000,  0.7854])
-
-    """
-    return torch.atan(x)
 
 
 @numpy_compatible
@@ -1743,7 +1792,7 @@ def atan(x: Tensor) -> Tensor:
 
 
 def atan2(x: Tensor, other: Tensor) -> Tensor:
-    """"Computes the element-wise arctangent (angles in radians between x and other )
+    """Computes the element-wise arctangent (angles in radians between x and other )
 
     Args:
         x (Tensor): input tensor.
@@ -1756,7 +1805,7 @@ def atan2(x: Tensor, other: Tensor) -> Tensor:
          tensor([-0.4636,  0.0000,  0.1651])
 
     """
-    return atan(x / (other + 1e-6))
+    return torch.atan(x / (other + 1e-6))
 
 
 @numpy_compatible
@@ -1813,9 +1862,142 @@ def tanh(x: Tensor) -> Tensor:
     return torch.tanh(x)
 
 
+@numpy_compatible
+def asinh(x: Tensor) -> Tensor:
+    """Computes the element-wise asinh
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns: element-wise asinh
+
+    Examples:
+        >>> asinh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        tensor([[ 0.8814,  0.4812],
+            [-0.2475, -0.6931]])
+
+    """
+    return torch.asinh(x)
+
+
+@numpy_compatible
+def acosh(x: Tensor) -> Tensor:
+    """Computes the element-wise acosh
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns: element-wise acosh
+
+    Examples:
+        >>> acosh(to_tensor([[1.5431, 1.1276],[1.0314, 1.2947]])).cpu()
+         tensor([[1.0000, 0.5000],
+            [0.2499, 0.7500]])
+
+    """
+    return torch.acosh(x)
+
+
+@numpy_compatible
+def atanh(x: Tensor) -> Tensor:
+    """Computes the element-wise atanh
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns: element-wise atanh
+
+    Examples:
+        >>> atanh(to_tensor([[ 0.7616,  0.4621],[-0.2449, -0.6351]])).cpu()
+         tensor([[ 1.0000,  0.5000],
+            [-0.2500, -0.7499]])
+
+    """
+    return torch.atanh(x)
+
+
 ############################
 # elementwise operation
 ###########################
+
+@numpy_compatible
+def element_and(left, right) -> Tensor:
+    """The output of this operation is the element-wise  logic AND of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise  logic AND of the two  input
+
+    Examples:
+        >>> element_and(to_tensor([1, 1, 0, 0]), to_tensor([1, 0, 1, 0])).cpu()
+        tensor([ True, False, False, False])
+
+    """
+    return torch.logical_and(left, right)
+
+
+@numpy_compatible
+def element_or(left, right) -> Tensor:
+    """The output of this operation is the element-wise  logic OR of the two  input
+    tensors. It supports broadcasting.
+
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise logic OR of the two  input
+
+    Examples:
+        >>> element_or(to_tensor([1, 1, 0, 0]), to_tensor([1, 0, 1, 0])).cpu()
+        tensor([0.5000, 0.2500, 0.1250, 0.0000])
+    """
+    return torch.logical_or(left, right)
+
+
+@numpy_compatible
+def element_not(left, right) -> Tensor:
+    """The output of this operation is the element-wise  logic NOT of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise logic NOT of the two  input
+
+    Examples:
+        >>> element_not(to_tensor([1, 1, 0, 0]), to_tensor([1, 0, 1, 0])).cpu()
+        tensor([0.5000, 0.2500, 0.1250, 0.0000])
+    """
+    return torch.logical_not(left, right)
+
+
+@numpy_compatible
+def element_xor(left, right) -> Tensor:
+    """The output of this operation is the element-wise  logic XOR of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise logic XOR of the two  input
+
+    Examples:
+        >>> element_not(to_tensor([1, 1, 0, 0]), to_tensor([1, 0, 1, 0])).cpu()
+        tensor([0.5000, 0.2500, 0.1250, 0.0000])
+    """
+    return torch.logical_xor(left, right)
+
+
 @numpy_compatible
 def element_times(left, right) -> Tensor:
     """
@@ -2103,7 +2285,7 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
     if axis is None or isinstance(axis, (int, list, tuple)):
         if axis is None and keepdims == False:
             result = x.max()
-        elif keepdims == False:
+        elif not keepdims:
             result = x.max(axis)
         else:
             result = x.max(axis, keepdims)
@@ -2536,7 +2718,7 @@ def smooth_relu(x):
 
 @numpy_compatible
 def celu(x, alpha: Tensor = 1.0):
-    r"""Continuously-differentiable exponential linear unit activation.
+    """Continuously-differentiable exponential linear unit activation.
 
      Computes the element-wise function:
 
@@ -2634,7 +2816,7 @@ def p_relu(x, weight):
 
 @numpy_compatible
 def sigmoid(x):
-    """softmax activation function
+    """sigmoid activation function
 
     Args:
         x (Tensor): input tensor.
@@ -2948,7 +3130,7 @@ def hard_mish(x):
 
 
 @numpy_compatible
-def softmax(x, axis=1):
+def softmax(x, axis=1,temperature=1):
     """
     Computes the gradient of :math:`f(z)=\\log\\sum_i\\exp(z_i)` at ``z = x``. Concretely,
     :math:`\\mathrm{softmax}(x)=\\left[\\frac{\\exp(x_1)}{\\sum_i\\exp(x_i)}\\quad\\frac{\\exp(x_1)}{\\sum_i\\exp(
@@ -2965,6 +3147,7 @@ def softmax(x, axis=1):
     Args:
         x (Tensor): input tensor.
         axis (int,list):  axis along which the reduction will be performed
+        temperature(float): Temperature
 
     Returns:
         (Tensor): output tensor and get same shape with x.
@@ -2983,11 +3166,11 @@ def softmax(x, axis=1):
              [0.8808, 0.9820]]])
 
     """
-    return torch.softmax(x, dim=axis)
+    return torch.softmax(x/temperature, dim=axis)
 
 
 @numpy_compatible
-def log_softmax(x, axis=1):
+def log_softmax(x, axis=1,temperature=1):
     """
     Computes the logsoftmax normalized values of x. That is, y = x - log(reduce_sum(exp(x), axis))
     (the implementation uses an equivalent formula for numerical stability).
@@ -2997,12 +3180,13 @@ def log_softmax(x, axis=1):
     Args:
         x (Tensor): input tensor.
         axis (int,list):  axis along which the reduction will be performed
+        temperature(float): Temperature
 
     Returns:
         (Tensor): output tensor and get same shape with x.
 
     """
-    return x - reduce_logsumexp(x, axis=axis, keepdims=True)
+    return F.log_softmax(x/temperature, axis=axis)
 
 
 def gelu(x):
@@ -3414,7 +3598,7 @@ def space_to_depth(x: Tensor, block_size=2):
 
 
 def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
-    r"""Pads tensor.
+    """Pads tensor.
 
     Padding size:
         The padding size by which to pad some dimensions of :attr:`input`
@@ -3928,7 +4112,7 @@ def scatter_min(x: Tensor, indices: Tensor, updates: Tensor):
 
 
 @numpy_compatible
-def gram_matrix(x: Tensor):
+def gram_matrix(x: Tensor)->Tensor:
     """
 
     Args:
@@ -3949,6 +4133,13 @@ def gram_matrix(x: Tensor):
     # by dividing by the number of element in each feature maps.
 
     return G
+
+
+
+def roll(x: Tensor, shifts,axis=None)->Tensor:
+    return torch.roll(x, shifts, dims=axis)
+
+
 
 
 ############################
@@ -3976,7 +4167,7 @@ def set_seed(seed: int) -> None:
         torch.backends.cudnn.deterministic = True
 
 
-def shuffle(x: Tensor):
+def shuffle(x: Tensor)->Tensor:
     """
 
     Args:
@@ -4011,7 +4202,8 @@ def random_choice(x: Tensor, n: int = 1):
         return [x[idx] for idx in idxes[:n]]
 
 
-def random_normal(shape, mean:Union[Tensor,float]=0.0, std:Union[Tensor,float]=1.0, dtype=None, device=None, seed=None):
+def random_normal(shape, mean: Union[Tensor, float] = 0.0, std: Union[Tensor, float] = 1.0, dtype=None, device=None,
+                  seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -4060,7 +4252,8 @@ def random_normal(shape, mean:Union[Tensor,float]=0.0, std:Union[Tensor,float]=1
 
 
 @numpy_compatible
-def random_normal_like(x, mean:Union[Tensor,float]=0.0, std:Union[Tensor,float]=1.0, dtype=None, device=None, seed=None):
+def random_normal_like(x, mean: Union[Tensor, float] = 0.0, std: Union[Tensor, float] = 1.0, dtype=None, device=None,
+                       seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -4111,7 +4304,8 @@ def random_normal_like(x, mean:Union[Tensor,float]=0.0, std:Union[Tensor,float]=
     return torch.normal(mean=mean, std=std, size=x.shape, dtype=x.dtype, device=x.device)
 
 
-def random_uniform(shape, min_value:Union[Tensor,float]=0.0, max_value:Union[Tensor,float]=None, dtype=None, device=None, seed=None):
+def random_uniform(shape, min_value: Union[Tensor, float] = 0.0, max_value: Union[Tensor, float] = None, dtype=None,
+                   device=None, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -4187,7 +4381,8 @@ def random_uniform(shape, min_value:Union[Tensor,float]=0.0, max_value:Union[Ten
 
 
 @numpy_compatible
-def random_uniform_like(x, min_value:Union[Tensor,float]=0.0, max_value:Union[Tensor,float]=1.0, dtype=None, device=None, seed=None):
+def random_uniform_like(x, min_value: Union[Tensor, float] = 0.0, max_value: Union[Tensor, float] = 1.0, dtype=None,
+                        device=None, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -4267,17 +4462,17 @@ def multinomial(x: Tensor, num_samples: int = 1):
     return torch.multinomial(x, num_samples)
 
 
-def random_bernoulli(x: Tensor):
+def random_bernoulli(x: Tensor)->Tensor:
     return torch.bernoulli(x)
 
 
 ############################
-## probability distribution
+# probability distribution
 ###########################
 
 
 ############################
-## loss
+# loss
 ###########################
 
 @numpy_compatible
@@ -4816,10 +5011,10 @@ def bbox_diou(bboxes1, bboxes2):
     >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
     >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
     >>> bbox_diou(boxes1,boxes2).cpu()
-    tensor([0.7947, 0.7826, 0.6071, 0.9464, 0.7253])
+    Array([7.9440e-01, 7.8078e-01, 6.0575e-01, 9.4634e-01, 7.2468e-01],      dtype=float32)
     >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0])
     >>> print(iou_loss.cpu())
-    tensor(0.2288)
+   Array(2.2961e-01, dtype=float32)
 
     """
     bboxes1 = bboxes1.to(_float_dtype)
@@ -4978,6 +5173,38 @@ def bbox_giou(bboxes1, bboxes2):
     return giouk
 
 
+
+def hard_nms(box_scores, iou_threshold: float = 0.5, top_k=-1, candidate_size=200):
+    """
+    Args:
+        box_scores (N, 5): boxes in corner-form and probabilities.
+        iou_threshold: intersection over union threshold.
+        top_k: keep top_k results. If k <= 0, keep all the results.
+        candidate_size: only consider the candidates with the highest scores.
+    Returns:
+         picked: a list of indexes of the kept boxes
+    """
+    scores = box_scores[:, -1]
+    boxes = box_scores[:, :-1]
+    picked = []
+    _, indexes = scores.sort(descending=True)
+    indexes = indexes[:candidate_size]
+    while len(indexes) > 0:
+        current = indexes[0]
+        picked.append(current.item())
+        if 0 < top_k == len(picked) or len(indexes) == 1:
+            break
+        current_box = boxes[current, :]
+        indexes = indexes[1:]
+        rest_boxes = boxes[indexes, :]
+        iou = iou_of(
+            rest_boxes,
+            current_box.unsqueeze(0),
+        )
+        indexes = indexes[iou <= iou_threshold]
+
+    return box_scores[picked, :]
+
 def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
     return visionop.nms(boxes, scores, iou_threshold)
 
@@ -4986,23 +5213,23 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
 # summary
 ###########################
 
-def torch_rot90_(x: Tensor):
+def torch_rot90_(x: Tensor)->Tensor:
     return x.transpose_(2, 3).flip(2)
 
 
-def torch_rot90(x: Tensor):
+def torch_rot90(x: Tensor)->Tensor:
     return x.transpose(2, 3).flip(2)
 
 
-def torch_rot180(x: Tensor):
+def torch_rot180(x: Tensor)->Tensor:
     return x.flip(2).flip(3)
 
 
-def torch_rot270(x: Tensor):
+def torch_rot270(x: Tensor)->Tensor:
     return x.transpose(2, 3).flip(3)
 
 
-def torch_flipud(x: Tensor):
+def torch_flipud(x: Tensor)->Tensor:
     """
     Flip image tensor vertically
     :param x:
@@ -5011,7 +5238,7 @@ def torch_flipud(x: Tensor):
     return x.flip(2)
 
 
-def torch_fliplr(x: Tensor):
+def torch_fliplr(x: Tensor)->Tensor:
     """
     Flip image tensor horizontally
     :param x:
@@ -5022,7 +5249,7 @@ def torch_fliplr(x: Tensor):
 
 def pad_image_tensor(image_tensor: Tensor, pad_size: int = 32):
     rows, cols = image_tensor.size(2), image_tensor.size(3)
-    if (isinstance(pad_size, Sized) and isinstance(pad_size, Iterable) and len(pad_size) == 2):
+    if isinstance(pad_size, Sized) and isinstance(pad_size, Iterable) and len(pad_size) == 2:
         pad_height, pad_width = [int(val) for val in pad_size]
     elif isinstance(pad_size, int):
         pad_height = pad_width = pad_size
@@ -5101,7 +5328,7 @@ def angle_to_rotation_matrix(angle) -> Tensor:
 
 
 def get_rotation_matrix2d(center: Tensor, angle, scale) -> Tensor:
-    r"""Calculates an affine matrix of 2D rotation.
+    """Calculates an affine matrix of 2D rotation.
 
     The function calculates the following matrix:
 
@@ -5249,7 +5476,7 @@ def dst_norm_to_dst_norm(dst_pix_trans_src_pix, dsize_src, dsize_dst):
 
 
 def transform_points(trans_01: Tensor, points_1: Tensor) -> Tensor:
-    r"""Function that applies transformations to a set of points.
+    """Function that applies transformations to a set of points.
     Args:
         trans_01 (Tensor): tensor for transformations of shape
           :math:`(B, D+1, D+1)`.
@@ -5288,7 +5515,7 @@ def transform_points(trans_01: Tensor, points_1: Tensor) -> Tensor:
 
 
 def warp_grid(dst_homo_src: Tensor, dsize) -> Tensor:
-    r"""Computes the grid to warp the coordinates grid by homography.
+    """Computes the grid to warp the coordinates grid by homography.
 
     Args:
         dsize ():
@@ -5317,7 +5544,7 @@ def warp_grid(dst_homo_src: Tensor, dsize) -> Tensor:
 
 def warp_affine(src: Tensor, M: Tensor, dsize: Tuple[int, int], mode: Optional[str] = 'bilinear',
                 padding_mode: Optional[str] = 'zeros') -> Tensor:
-    r"""Applies an affine transformation to a tensor.
+    """Applies an affine transformation to a tensor.
 
     The function warp_affine transforms the source tensor using
     the specified matrix:
@@ -5368,7 +5595,7 @@ def warp_affine(src: Tensor, M: Tensor, dsize: Tuple[int, int], mode: Optional[s
 
 
 def affine(tensor: Tensor, matrix: Tensor) -> Tensor:
-    r"""Apply an affine transformation to the image.
+    """Apply an affine transformation to the image.
 
     Args:
         tensor (Tensor): The image tensor to be warped.
@@ -5403,7 +5630,7 @@ def affine(tensor: Tensor, matrix: Tensor) -> Tensor:
 
 #
 # def get_rotation_matrix2d(center, angle, scale):
-#     r"""Calculates an affine matrix of 2D rotation.
+#     """Calculates an affine matrix of 2D rotation.
 #
 #     The function calculates the following matrix:
 #
@@ -5494,7 +5721,7 @@ def affine(tensor: Tensor, matrix: Tensor) -> Tensor:
 #     return matrix
 #
 # def rotate(tensor: Tensor, angle: Tensor) -> Tensor:
-#     r"""Rotate the image anti-clockwise about the centre.
+#     """Rotate the image anti-clockwise about the centre.
 #
 #     See :class:`~kornia.Rotate` for details.
 #     """
@@ -5519,7 +5746,7 @@ def affine(tensor: Tensor, matrix: Tensor) -> Tensor:
 #
 #
 # def translate(tensor: Tensor, translation: Tensor) -> Tensor:
-#     r"""Translate the tensor in pixel units.
+#     """Translate the tensor in pixel units.
 #
 #     See :class:`~kornia.Translate` for details.
 #     """
@@ -5539,7 +5766,7 @@ def affine(tensor: Tensor, matrix: Tensor) -> Tensor:
 #
 #
 # def scale(tensor: Tensor, scale_factor: Tensor) -> Tensor:
-#     r"""Scales the input image.
+#     """Scales the input image.
 #
 #     See :class:`~kornia.Scale` for details.
 #     """
@@ -5562,7 +5789,7 @@ def affine(tensor: Tensor, matrix: Tensor) -> Tensor:
 #
 #
 # def shear(tensor: Tensor, shear: Tensor) -> Tensor:
-#     r"""Shear the tensor.
+#     """Shear the tensor.
 #
 #     See :class:`~kornia.Shear` for details.
 #     """

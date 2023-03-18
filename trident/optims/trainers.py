@@ -426,7 +426,7 @@ class TrainingPlan(object):
                     else:
                         data_feed[inp] = None
             if 'output' in data_feed and data_feed['output'] is None:
-                data_feed['output'] = 'output'
+                data_feed['output'] = trainingitem.signature.outputs.key_list[0]
             if 'x' in data_feed and data_feed['x'] is None:
                 if len(data_symbols) == 1 and data_symbols[0] in available_items:
                     data_feed['x'] = data_symbols[0]
@@ -470,16 +470,19 @@ class TrainingPlan(object):
                         available_items.remove(label_symbols[0])
 
                 for key in data_feed.keys():
-                    if data_feed[key] == None and key in available_items:
+                    if data_feed[key]  is None and key in available_items:
                         data_feed[key] = key
                         available_items.remove(key)
-                    elif data_feed[key] == None:
+                    elif data_feed[key] is None:
                         data_feed[key] = key
 
                 # elif out.replace("output","target").replace("student","teacher") in available_items:
                 #     data_feed[out] =out.replace("output","target").replace("student","teacher")
                 #     available_items.remove(out.replace("output","target").replace("student","teacher"))
-
+            if existing_data_feed is not None:
+                print('existing_data_feed',existing_data_feed)
+                data_feed.update(existing_data_feed)
+                print('updated_data_feed', data_feed)
             trainingitem.training_context['data_feed'] = data_feed
             ctx.print('data_feed for {0} :'.format(trainingitem_name))
             ctx.print(json.dumps(data_feed, indent=4, sort_keys=True))
@@ -871,7 +874,7 @@ class GanTrainingPlan(TrainingPlan):
 
             eta = random_uniform((shp[0], 1, 1, 1), 0.0, 1.0).to(get_device())
             interpolated = eta * img_real + ((1 - eta) * img_fake)
-            gradients = None
+
             if get_backend() == 'pytorch':
                 from torch import autograd
                 interpolated.requires_grad = True
@@ -1725,8 +1728,8 @@ class CycleGanTrainingPlan(TrainingPlan):
             def real_loss(img_real, d_real):
                 return L1Loss()(img_real, d_real)
 
-            def fake_loss(img_fake, d_fake):
-                return L1Loss()(img_fake, d_fake)
+            # def fake_loss(img_fake, d_fake):
+            #     return L1Loss()(img_fake, d_fake)
 
             def weight_fake_loss(img_fake, d_fake):
                 return - self.k_t * L1Loss()(img_fake.detach(), d_fake)
@@ -1739,6 +1742,7 @@ class CycleGanTrainingPlan(TrainingPlan):
             self.discriminator.training_context['train_data']['measure'] = 1
             self.discriminator.with_loss(real_loss)
             self.discriminator.with_loss(weight_fake_loss, name='weight_fake_loss')
+
         elif self.gan_type == 'ebgan':  # Energy-based GAN
             if self.is_generator_first:
                 self.generator.training_context['retain_graph'] = True
@@ -1750,9 +1754,9 @@ class CycleGanTrainingPlan(TrainingPlan):
 
             def real_loss(img_real, d_real):
                 return L2Loss()(img_real, d_real)
-
-            def fake_loss(img_fake, d_fake):
-                return L2Loss()(img_fake, d_fake)
+            #
+            # def fake_loss(img_fake, d_fake):
+            #     return L2Loss()(img_fake, d_fake)
 
             def weight_fake_loss(img_fake, d_fake):
                 return clip(self.margin - L2Loss(reduction='mean')(img_fake.detach(), d_fake), min=0)

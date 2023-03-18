@@ -283,6 +283,10 @@ def get_image_from_google_drive(file_id):
     Returns:
         the file path of this downloaded image
 
+    Examples:
+        >>> detectorp=get_image_from_google_drive('1DO0iCg5Pmyk_F8s-ICgiy3OGcG_hbP6e')
+
+
     """
 
     import requests
@@ -304,12 +308,13 @@ def get_image_from_google_drive(file_id):
         content_type = response.headers.get('content-type')
         filename = file_id + '.' + content_type.split('/')[-1]
         fpath = os.path.join(dirname, filename)
-
-        token = _get_confirm_token(response)
-        if token:
-            params = {'id': file_id, 'confirm': token}
-            response = session.get(url, params=params, stream=True)
-        _save_response_content(response, fpath)
+        with open(fpath, 'wb') as f:
+            f.write(response.content)
+        # token = _get_confirm_token(response)
+        # if token:
+        #     params = {'id': file_id, 'confirm': token}
+        #     response = session.get(url, params=params, stream=True)
+        # _save_response_content(response, fpath)
         return fpath
     except Exception as e:
         print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)

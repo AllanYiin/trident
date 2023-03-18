@@ -19,6 +19,9 @@ if get_backend()=='pytorch':
 elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_ops import *
 
+elif get_backend()=='jax':
+    from trident.backend.jax_ops import *
+
 
 
 
@@ -27,6 +30,9 @@ if get_backend()=='pytorch':
 
 elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_backend import *
+
+elif get_backend()=='jax':
+    from trident.backend.jax_backend import *
 
 from trident.backend.tensorspec import *
 from trident.loggers.history import *
@@ -37,6 +43,7 @@ from trident.data.dataset import *
 from trident.data.data_provider import *
 from trident.callbacks import *
 from trident.misc import *
+
 
 if get_backend()=='pytorch':
     from trident.optims.pytorch_optimizers import *
@@ -73,8 +80,10 @@ elif get_backend()=='tensorflow':
     from trident.optims.tensorflow_metrics import *
     from trident.optims.tensorflow_trainer import *
 
-
-
+elif get_backend()=='jax':
+    from trident.backend.jax_serialization import *
+    from trident.layers.jax_activations import *
+    from trident.layers.jax_layers import *
 
 elif get_backend()=='onnx':
     import_or_install('onnx_runtime')

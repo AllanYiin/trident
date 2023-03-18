@@ -6,6 +6,7 @@ import builtins
 import inspect
 import math
 import numbers
+from abc import ABCMeta
 from itertools import repeat
 from typing import Optional
 
@@ -363,6 +364,7 @@ class Flatten(Layer):
 
     def __init__(self, keep_output: bool = False, name: Optional[str] = None):
         super(Flatten, self).__init__(name=name, keep_output=keep_output)
+        super().__setattr__('_built', True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x.view(x.size(0), -1)
@@ -374,6 +376,7 @@ class Concate(Layer):
     def __init__(self, axis=1, keep_output: bool = False, name: Optional[str] = None):
         super(Concate, self).__init__(name=name, keep_output=keep_output)
         self.axis = axis
+        super().__setattr__('_built', True)
 
     def forward(self, x, **kwargs) -> torch.Tensor:
         if not isinstance(x, list) or len(x) < 2:
@@ -477,7 +480,7 @@ class SoftMax(Layer):
 
     """
 
-    def __init__(self, axis=1, add_noise=False, noise_intensity=0.005, keep_output: bool = False,
+    def __init__(self, axis=1, temperature=1,add_noise=False, noise_intensity=0.005, keep_output: bool = False,
                  name: Optional[str] = None, **kwargs):
         """
         Args:
@@ -488,6 +491,7 @@ class SoftMax(Layer):
         """
         super(SoftMax, self).__init__(name=name, keep_output=keep_output)
         self.axis = kwargs.get('dim', axis)
+        self.temperature=builtins.min(builtins.max(temperature,epsilon()),100)
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
 
@@ -504,10 +508,9 @@ class SoftMax(Layer):
                 if is_nan(_std) or _std < 0.02:
                     _std = 0.02
 
-                noise = self.noise_intensity * random_normal_like(x, mean=_mean, std=_std, dtype=x.dtype).to(
-                    x.device).detach()
+                noise = self.noise_intensity * random_normal_like(x, mean=_mean, std=_std, dtype=x.dtype).to(x.device).detach()
                 x = x + noise
-            return F.log_softmax(x, dim=self.axis)
+            return F.log_softmax(x/self.temperature, dim=self.axis)
         else:
             return torch.softmax(x, dim=self.axis)
 
@@ -758,7 +761,7 @@ class _ConvNd(Layer):
 
         self.transposed = transposed
         self.use_bias = use_bias
-        self.to(self.device)
+        #self.to(self.device)
 
     def build(self, input_shape: TensorShape):
         if not self._built and input_shape is not None:
@@ -820,7 +823,7 @@ class _ConvNd(Layer):
                 self.bias = Parameter(torch.Tensor(int(self.num_filters)).to(self.get_root().device))
                 init.zeros_(self.bias)
 
-            self.to(self.get_root().device)
+
 
             self._built = True
 
@@ -851,7 +854,7 @@ class _ConvNd(Layer):
             state)  # if not hasattr(self, 'padding_mode'):  #     self.padding_mode = 'zeros'
 
 
-class Conv1d(_ConvNd):
+class Conv1d(_ConvNd, metaclass=ABCMeta):
     """Applies to create a 1D convolution layer
 
         Args:
@@ -1109,7 +1112,7 @@ class Conv2d(_ConvNd):
     def conv2d_forward(self, x, **kwargs):
         # for backward compatibility
 
-        if len(self.padding) != len(self.kernel_size) + 2:
+        if self.padding is None or (len(self.padding) != len(self.kernel_size) + 2):
             self.padding = normalize_padding(self.padding, len(self.kernel_size))
 
         if all([v == 0 for v in self.padding]):
@@ -1945,10 +1948,10 @@ class GcdConv1d(Layer):
         x = F.pad(x, [0, 0, 0, 0, pad_g // 2, pad_g - pad_g // 2], mode='reflect')
 
         x = F.conv2d(x, self.weight, self.bias, self.strides, self.padding, self.dilation, 1)
-        if self.is_shuffle == True:
-            x = x.transpose([2, 1])
+        if self.is_shuffle:
+            x = x.transpose(2, 1)
         x = x.view(x.size(0), x.size(1) * x.size(2), x.size(3))
-        if self.self_norm == True:
+        if self.self_norm:
             x = self.norm(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -2195,6 +2198,7 @@ class Reshape(Layer):
             dimension, as it will remain unchanged.
         """
         super(Reshape, self).__init__(keep_output=keep_output, name=name)
+        super().__setattr__('_built', True)
         self.batch_size = batch_size
         if isinstance(target_shape, numbers.Integral):
             self.target_shape = (target_shape,)
@@ -2218,7 +2222,7 @@ class Squeeze(Layer):
         remove a length=1 axis
 
     """
-    def __init__(self, axis=None,  name=None,**kwargs):
+    def __init__(self, axis=1,  name=None,**kwargs):
         """
         Squeeze the input tensor
         Args:
@@ -2226,6 +2230,7 @@ class Squeeze(Layer):
         """
         super(Squeeze, self).__init__(name=name)
         self.axis = axis
+        super().__setattr__('_built', True)
 
     def forward(self, x, **kwargs):
         return torch.squeeze(x,dim=self.axis)
@@ -2244,6 +2249,7 @@ class Permute(Layer):
         """
         super(Permute, self).__init__(name=name)
         self.pattern = args
+        super().__setattr__('_built', True)
 
     def forward(self, x, **kwargs):
         return permute(x, self.pattern)
@@ -2414,7 +2420,7 @@ class Upsampling2d(Layer):
         elif self.mode == 'nearest':
             return F.interpolate(x, self.size, self.scale_factor, self.mode, None)
         else:
-            return F.interpolate(x, self.size, self.scale_factor, self.mode, self.align_corners)
+            return F.interpolate(x, self.size, self.scale_factor, mode=self.mode, align_corners=self.align_corners)
 
     def extra_repr(self):
         if self.scale_factor is not None:
@@ -2473,6 +2479,7 @@ class Dropout(Layer):
         if dropout_rate < 0 or dropout_rate > 1:
             raise ValueError("dropout probability has to be between 0 and 1, ""but got {}".format(dropout_rate))
         self.dropout_rate = dropout_rate
+        self._built=True
 
     def forward(self, x, **kwargs):
         if not hasattr(self, 'inplace') and 'inplace' not in kwargs:
@@ -2562,7 +2569,7 @@ class SingleImageLayer(Layer):
         if isinstance(image, (np.ndarray, torch.Tensor)):
             self.origin_image = to_tensor(image, requires_grad=True).squeeze()
             self.input_shape = int_shape(self.origin_image)
-            self.weight = Parameter(self.origin_image.clone(), requires_grad=True)
+            self.weight = Parameter(self.origin_image.clone(), trainable=True)
             self.input_filters = int_shape(self.origin_image)[0]
             self._built = True
 

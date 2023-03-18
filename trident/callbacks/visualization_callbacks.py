@@ -58,33 +58,68 @@ class VisualizationCallbackBase(CallbackBase):
         if imshow is None and self.is_in_ipython:
             self.imshow = True
 
-    pass
+    def generate_datafeed(self,training_context):
+        dataprovider = ctx.get_data_provider()[-1]
+        if self.data_feed is None:
+            self.data_feed=OrderedDict()
+        self.data_feed['input']=dataprovider.traindata.data.symbol
+        dss=list(dataprovider.traindata.label.items) if isinstance(dataprovider.traindata.label,ZipDataset) else [dataprovider.traindata.label]
+        if len(dss)==1:
+            self.data_feed['target'] = dss[0].symbol
+        elif 'target' not in self.data_feed or self.data_feed[ 'target'] is None:
+            dss=[ds for ds in dss if isinstance(ds,MaskDataset) ]
+            if len(dss) == 1 or self.mask_type is  None:
+                self.data_feed['target'] = dss[0].symbol
+            else:
+                for ds in dss:
+                    if (ds.object_type==self.mask_type and self.mask_type is not None):
+                        self.data_feed['target']=ds.symbol
+                        break
+        outputs = training_context['current_model'].signature.outputs
+        if len(outputs) == 1:
+            self.data_feed['output'] = list(outputs.keys())[0]
+        if 'output' not in self.data_feed or self.data_feed['output'] is None:
+            alpha_candidate = [k for k, v in outputs.items() if 'alpha' in k or 'matting' in k]
+            labelmask_candidate = [k for k, v in outputs.items() if ('seg' in k or 'mask' in k) and k not in alpha_candidate]
+            if self.mask_type ==ObjectType.alpha_mask and len(alpha_candidate)>0:
+                self.data_feed['output'] = alpha_candidate[0]
+            elif (self.mask_type ==ObjectType.label_mask or self.mask_type ==ObjectType.color_mask) and len(labelmask_candidate)>0:
+                self.data_feed['output'] = labelmask_candidate[0]
+            else:
+                output_candidate = [k for k, v in outputs.items() if  ndim(training_context['train_data'][k])>=3 and training_context['train_data'][k].shape[-1]!=2 ]
+                if len(output_candidate)>0:
+                    self.data_feed['output'] = output_candidate[0]
+        return self.data_feed
 
 
 class TileImageCallback(VisualizationCallbackBase):
-    def __init__(self, frequency=-1, unit='batch', save_path: str = 'Results',
-                 name_prefix: str = 'tile_image_{0}.png', row=3, include_input=True, include_output=True, include_target=True,
+    def __init__(self, frequency=-1, unit='batch', data_feed=None,save_path: str = 'Results',
+                 name_prefix: str = 'tile_image_{0}.png', rows=3, include_input=True, include_output=True, include_target=True,
                  include_mask=None, reverse_image_transform=None, imshow=False):
         super(TileImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
         self.tile_image_name_prefix = name_prefix
         self.reverse_image_transform = reverse_image_transform
-        self.row = row
+        self.rows = rows
 
         self.include_input = include_input
         self.include_output = include_output
         self.include_target = include_target
         self.include_mask = include_mask
+        self.data_feed = data_feed
 
     def plot_tile_image(self, training_context):
+        if self.data_feed is None:
+            self.generate_datafeed(training_context)
+
         tile_images_list = []
 
         input = None
         target = None
         output = None
         mask = None
-        legend = []
+        legends = []
 
         data_feed = training_context['data_feed']
         data = training_context['train_data']
@@ -94,90 +129,41 @@ class TileImageCallback(VisualizationCallbackBase):
             self.reverse_image_transform = dataprovider.reverse_image_transform
             #self.reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
 
+        input_arr = to_numpy(data[self.data_feed['input']].copy())  if self.include_input else None
+        target_arr = to_numpy(data[self.data_feed['target']].copy()) if self.include_target else None
+        output_arr = to_numpy(data[self.data_feed['output']].copy()) if self.include_output else None
+        if _check_logsoftmax_logit(output_arr) or reduce_max(output_arr) <= 0:
+            output_arr = exp(output_arr)
+        
+        
+
+        input_arr_list = []
+        target_arr_list = []
+        output_arr_list=[]
+
+        for i in range(self.rows):
+            if self.include_input:
+                input_arr_list.append(self.reverse_image_transform(input_arr[i]))
+            if self.include_target:
+                target_arr_list.append(self.reverse_image_transform(target_arr[i]))
+            if self.include_output:
+                output_arr_list.append(self.reverse_image_transform(output_arr[i]))
+        #input_arr = np.stack(new_input_arr, axis=0)
 
         if self.include_input:
-            input = to_numpy(data[data_feed[model.signature.inputs.key_list[0]]])
-
-        if 'tensor' in model.__class__.__name__.lower():
-            output = to_numpy(model)
-        elif isinstance(model, Layer):
-            output = to_numpy(data[data_feed[model.signature.outputs.key_list[0]]])
+            tile_images_list.append(input_arr_list)
+            legends.append('input image')
         if self.include_target:
-            candidate = [k for k in data_feed.keys() if 'target' in k]
-            if len(candidate) == 1:
-                target = to_numpy(data[data_feed[candidate[0]]])
-            elif dataprovider.traindata.label is not None and not isinstance(dataprovider.traindata.label, ZipDataset):
-                target = to_numpy(data[data_feed[dataprovider.traindata.label.symbol]])
-            elif dataprovider.traindata.label is not None and isinstance(dataprovider.traindata.label, ZipDataset):
-                target = to_numpy(data[data_feed[dataprovider.traindata.label.items[0].symbol]])
+            tile_images_list.append(target_arr_list)
+            legends.append('target image')
+        if self.include_output:
+            tile_images_list.append(output_arr_list)
+            legends.append('output image')
 
-        if self.include_mask:
-            if isinstance(dataprovider.traindata.label, MaskDataset):
-                mask = to_numpy(data[dataprovider.traindata.label.symbol])
-            elif isinstance(dataprovider.traindata.label, ZipDataset):
-                for ds in dataprovider.traindata.label._datasets:
-                    if isinstance(ds, MaskDataset):
-                        mask = to_numpy(data[ds.symbol])
-
-        reverse_image_transform = self.reverse_image_transform
-        reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
-        if self.include_input and input is not None:
-            if len(reverse_image_transform_funcs) > 1:
-                input_arr = []
-                for i in range(len(input)):
-                    input_arr.append(reverse_image_transform(input[i]))
-                tile_images_list.append(input_arr)
-            else:
-                input_arr = to_numpy(input).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(input)
-                max_value = input_arr.max()
-                min_value = input_arr.min()
-                if max_value <= 1.1 and min_value >= 0:
-                    tile_images_list.append(input_arr * 255.0)
-                elif max_value <= 1.1 and min_value >= -1.1:
-                    tile_images_list.append(input_arr * 128 + 127)
-                else:
-                    print(max_value, min_value)
-                    tile_images_list.append(input_arr)
-            legend.append('input')
-        if self.include_target and target is not None:
-            if len(reverse_image_transform_funcs) > 1:
-                target_arr = []
-                for i in range(len(target)):
-                    target_arr.append(reverse_image_transform(target[i]))
-                tile_images_list.append(target_arr)
-            else:
-                target_arr = to_numpy(target).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(target)
-
-                if target_arr.max() <= 1.1 and target_arr.min() >= 0:
-                    tile_images_list.append(target_arr * 255)
-                elif target_arr.max() <= 1.1 and target_arr.min() >= -1.1:
-                    tile_images_list.append(target_arr * 128 + 127)
-                else:
-                    tile_images_list.append(target_arr)
-            legend.append('target')
-        if self.include_output and output is not None:
-            if len(reverse_image_transform_funcs) > 1:
-                output_arr = []
-                for i in range(len(output)):
-                    out = reverse_image_transform(output[i])
-                    output_arr.append(np.clip(out, 0, 255))
-                tile_images_list.append(output_arr)
-            else:
-                output_arr = to_numpy(output).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(output)
-
-                if output_arr.max() <= 1.2 and output_arr.min() >= 0:
-                    tile_images_list.append(np.clip(output_arr * 255, 0, 255))
-                elif output_arr.max() <= 1.2 and output_arr.min() >= -1.2:
-
-                    tile_images_list.append(np.clip(output_arr * 128 + 127, 0, 255))
-                else:
-                    tile_images_list.append(np.clip(output_arr, 0, 255))
-
-            legend.append('output')
 
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
-        fig = tile_rgb_images(*tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True, legend=legend)
+        fig = tile_rgb_images(*tile_images_list, row=self.rows, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True, legend=legends)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True, walltime=time.time())
         if ctx.enable_mlflow and ctx.mlflow_logger is not None:
@@ -190,7 +176,7 @@ class TileImageCallback(VisualizationCallbackBase):
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
-        if self.frequency > 0 and (self.unit == 'epoch' and (training_context['current_epoch'] + 1) % self.frequency == 0):
+        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (training_context['current_epoch'] % self.frequency )== 0):
             self.plot_tile_image(training_context)
 
 
@@ -274,20 +260,25 @@ class GanTileImageCallback(VisualizationCallbackBase):
 
 
 class SegTileImageCallback(VisualizationCallbackBase):
-    def __init__(self, frequency=-1, unit='batch', rows=3,save_path: str = None, reverse_image_transform=None,
+    def __init__(self, frequency=-1, unit='batch', rows=3,mask_type=ObjectType.label_mask,data_feed=None,save_path: str = None, reverse_image_transform=None,
                   palette=None, background=(120, 120, 120), name_prefix: str = 'segtile_image_{0}.png', imshow=False,**kwargs):
         super(SegTileImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
         self.rows=rows
-
+        self.mask_type=mask_type
+        self.data_feed=data_feed
         self.palette = palette
         self.tile_image_name_prefix = name_prefix
         self.reverse_image_transform = reverse_image_transform
 
         self.background = to_numpy(background)
 
+
     def plot_tile_image(self, training_context):
+        if self.data_feed is None:
+            self.generate_datafeed(training_context)
+
         legends=[]
         axis = 1
         if get_backend() == 'tensorflow':
@@ -297,48 +288,30 @@ class SegTileImageCallback(VisualizationCallbackBase):
         background = np.reshape(to_numpy(self.background), new_shape)
         tile_images_list = []
 
-        mask = None
-        output = None
 
-        data_feed = training_context['data_feed']
         data = training_context['train_data']
         model = training_context['current_model']
         dataprovider = ctx.get_data_provider()[-1]
         if self.reverse_image_transform is None:
             self.reverse_image_transform = dataprovider.reverse_image_transform
 
+        input_arr = to_numpy(data[self.data_feed['input']].copy())
+        target_arr = to_numpy(data[self.data_feed['target']].copy())
+        output_arr = to_numpy(data[self.data_feed['output']].copy())
 
-        input = to_numpy(data[data_feed[model.signature.inputs.key_list[0]]])
-        if 'tensor' in model.__class__.__name__.lower():
-            output = to_numpy(model.clone())
-        elif isinstance(model, Layer):
-            for k in model.signature.outputs.key_list:
-                if k in data and ndim(data[k])>=3:
-                    output = to_numpy(data[k].copy())
-                    break
-        mask_type=None
-        output_arr=output.copy()
         if _check_logsoftmax_logit(output_arr) or reduce_max(output_arr)<=0:
             output_arr=exp(output_arr)
-        if isinstance(dataprovider.traindata.label, MaskDataset):
-            mask_type=dataprovider.traindata.label.object_type
-            mask = to_numpy(data[dataprovider.traindata.label.symbol])
-        elif isinstance(dataprovider.traindata.label, ZipDataset):
-            for ds in dataprovider.traindata.label.items:
-                if isinstance(ds, MaskDataset):
-                    mask_type =ds.object_type
-                    mask = to_numpy(data[ds.symbol])
-                    break
-        if mask_type==ObjectType.label_mask or mask_type==ObjectType.color_mask:
-            mask = label2color(mask, palette=self.palette).astype(np.uint8)
+
+        if self.mask_type==ObjectType.label_mask or self.mask_type==ObjectType.color_mask:
+            target_arr = label2color(target_arr, palette=self.palette).astype(np.uint8)
             if ndim(output_arr)==4:
                 output_arr=argmax(output_arr,axis)
             output_arr = label2color(output_arr, palette=self.palette).astype(np.uint8)
-        elif  mask_type==ObjectType.binary_mask:
+        elif  self.mask_type==ObjectType.binary_mask:
             if ndim(output_arr)==4:
                 output_arr=argmax(output_arr,1)
 
-        elif mask_type == ObjectType.alpha_mask:
+        elif self.mask_type == ObjectType.alpha_mask:
             if get_backend() == 'tensorflow':
                 output_arr = output_arr[:, :, :, 1:2] * argmax(output_arr, axis)
             else:
@@ -353,37 +326,34 @@ class SegTileImageCallback(VisualizationCallbackBase):
         #     output_arr  = argmax(output_arr, 1 if get_backend() == 'pytorch' else -1)
         #
 
+        new_input_arr = []
 
-
-        input_arr = []
-        input = to_numpy(input)
         for i in range(self.rows):
-            input_arr.append(self.reverse_image_transform(input[i]))
-        input_arr = np.stack(input_arr, axis=0)
-        # input_arr=np.asarray(input_arr)
+            new_input_arr.append(self.reverse_image_transform(input_arr[i]))
+        input_arr = np.stack(new_input_arr, axis=0)
+
         tile_images_list.append(input_arr)
         legends.append('input image')
 
-        if mask_type==ObjectType.label_mask or mask_type==ObjectType.color_mask:
-            tile_images_list.append(mask[:self.rows])
+        if self.mask_type==ObjectType.label_mask or self.mask_type==ObjectType.color_mask:
+            tile_images_list.append(target_arr[:self.rows])
             legends.append('color_mask')
             tile_images_list.append(output_arr[:self.rows])
             legends.append('predict')
         else:
-            target_arr = mask
 
-            if len(mask.shape) < len(int_shape(input)):
+            if len(target_arr.shape) < len(int_shape(input)):
                 if get_backend() == 'tensorflow':
-                    target_arr = np.expand_dims(mask, -1)
+                    target_arr = np.expand_dims(target_arr, -1)
                 else:
-                    target_arr = np.expand_dims(mask, axis=axis)
+                    target_arr = np.expand_dims(target_arr, axis=axis)
             if len(output_arr.shape) < len(int_shape(input)):
                 if get_backend() == 'tensorflow':
                     output_arr = np.expand_dims(output_arr, -1)
                 else:
                     output_arr = np.expand_dims(output_arr, axis=axis)
 
-            if 'alpha' not  in data:
+            if self.mask_type!=ObjectType.alpha_mask:
                 target_arr[target_arr > 0] = 1
 
             tile_images_list.append((target_arr * input_arr + (1 - target_arr) * background)[:self.rows])
@@ -407,7 +377,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
-        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (training_context['current_epoch'] + 1) % self.frequency == 0):
+        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (training_context['current_epoch'] % self.frequency )== 0):
             self.plot_tile_image(training_context)
 
 
@@ -472,7 +442,7 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
             self.plot_detection_image(training_context)
 
     def on_epoch_end(self, training_context):
-        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (training_context['current_epoch'] + 1) % self.frequency == 0):
+        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (training_context['current_epoch'] % self.frequency )== 0):
             self.plot_detection_image(training_context)
 
 
@@ -521,7 +491,7 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
 
 
     def on_overall_epoch_end(self, training_context):
-        if self.unit == 'epoch' and (training_context['epochs'] + 1) % self.frequency == 0 :
+        if self.unit == 'epoch' and training_context['epochs'] % self.frequency == 0 :
             if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
                 display.clear_output(wait=True)
                 self.counter = 0

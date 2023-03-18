@@ -92,7 +92,7 @@ def list_images(directory, ext='jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'):
     #         re.match(r'([\w]+\.(?:' + ext + '))', f)]
     filelist = []
     for root, dirs, files in os.walk(directory):
-        filelist = filelist + [os.path.join(root,f) for f in files if re.match( "([^\\s]+(\\.(?i)({0}))$)".format(ext), f)]
+        filelist = filelist + [os.path.join(root,f) for f in files if re.match( "(\S+(\\.(?i)({0}))$)".format(ext), f)]
     return filelist
 
 

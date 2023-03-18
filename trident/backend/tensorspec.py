@@ -12,7 +12,8 @@ from trident.backend import dtype
 import typing
 from typing import Optional, Union,Dict,Tuple,List, overload
 import numpy as np
-
+import operator
+from typing_extensions import  Annotated
 
 class _AnnotatedAlias(typing._GenericAlias, _root=True):
     """Runtime representation of an annotated type.
@@ -74,6 +75,7 @@ _primes = [1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61
 
 class ObjectType(Enum):
     array_data = 'array_data'
+    index_data = 'index_data'
     gray = 'gray_image'
     rgb = 'rgb_image'
     rgba = 'rgba_image'
@@ -89,6 +91,7 @@ class ObjectType(Enum):
     landmarks = 'landmarks'
     random_noise = 'random_noise'
     classification_label = 'classification_label'
+    regression_label = 'regression_label'
     corpus = 'corpus'
     sequence_label = 'sequence_label'
     sequence_mask = 'sequence_mask'
@@ -299,6 +302,21 @@ class TensorSpec(object):
         elif isinstance(t, (numbers.Number,bool)) :
             return cls(shape=TensorShape([None]), dtype=type(t), object_type=object_type, optional=True,
                    default=t,name=name)
+        elif isinstance(t, tuple) and all([is_tensor(item) for item in t]) :
+            shapes=[tensor_to_shape(item,is_singleton=True,need_exclude_batch_axis=False) for item in t]
+            return cls(shape=TensorShape([None]+shapes[0].ndims), dtype=type(t), object_type=object_type, optional=False,
+                       default=None, name=name)
+        elif isinstance(t, tuple) and all([isinstance(item, tuple) for item in t]) :
+            try:
+                shapes=[[int_shape(subitem) for subitem in item ] for item in t]
+                return cls(shape=TensorShape([None]+[len(shapes)]+[len(shapes[0])]+shapes[0][0]), dtype=type(t), object_type=object_type, optional=False,
+                           default=None, name=name)
+            except Exception as e:
+                print(e)
+                return cls(shape=TensorShape([None,None]), dtype=type(t), object_type=object_type,
+                           optional=False,
+                           default=None, name=name)
+
         else:
             t = to_tensor(t)
             return cls(shape=tensor_to_shape(t, need_exclude_batch_axis=need_exclude_batch_axis, is_singleton=is_singleton), dtype=t.dtype, object_type=object_type, optional=optional,
@@ -427,7 +445,7 @@ class TensorSpec(object):
             return None
 
     def __hash__(self):
-        return hash((self._shape_tuple, self.dtype))
+        return hash((self._shape_tuple, str(self.dtype)))
 
     def __eq__(self, other):
         # pylint: disable=protected-access
@@ -716,13 +734,19 @@ def get_signature(fn, name=None):
     if signature is None:
         signature=Signature()
     if hasattr(fn, 'forward'):
-        base_fn = fn.forward
+        if is_instance(fn,'Sequential') and len(fn)>0:
+            base_fn= fn[0].forward
+        else:
+            base_fn = fn.forward
     sig = inspect.signature(base_fn)
     paras = list(sig.parameters.items())
+    return_anno=sig.return_annotation
+    returns = get_args(return_anno)
+    if is_instance(fn, 'Sequential') and len(fn) > 0:
+        return_anno = inspect.signature( fn[-1].forward).return_annotation
+        returns = get_args(return_anno)
 
-    returns = get_args(sig.return_annotation)
-
-    if sig.return_annotation is not inspect._empty and returns is not None and len(returns)>0:
+    if return_anno is not inspect._empty and returns is not None and len(returns)>0:
         if isinstance(returns, str):
             signature.outputs[returns] = TensorSpec(TensorShape([None]), optional=False, name=returns)
         elif isinstance(returns, list):
@@ -736,7 +760,8 @@ def get_signature(fn, name=None):
                 for i in range(len(returns)):
                     signature.outputs['output_{0}'.format(i)] = TensorSpec(TensorShape([None]), optional=False, name='output_{0}'.format(i))
     else:
-        signature.outputs['output'] = TensorSpec(TensorShape([None]), optional=False, name='output')
+        pass
+        #signature.outputs['output'] = TensorSpec(TensorShape([None]), optional=False, name='output')
 
     for k, v in paras:
         if k not in ['kwargs', 'self', 'args']:

@@ -1,5 +1,6 @@
 # inspired by https://github.com/onelivesleft/PrettyErrors
 import sys, re, os, time, linecache, json
+from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType, Dict
 from trident import context
 
 _context=context._context()
@@ -154,7 +155,6 @@ class ReadableErrorsConfig(dict):
             self.postfix = instance.postfix
             self.reset_stdout = instance.reset_stdout
             self.show_suppressed = instance.show_suppressed
-
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
@@ -625,7 +625,7 @@ exception_writer = ExceptionWriter()
 
 def excepthook(exception_type, exception_value, traceback):
     "Replaces sys.excepthook to output pretty errors."
-    print("Oops! There's an Error.\n")
+    #print("Oops! There's an Error.\n")
     writer = exception_writer
     writer.config = writer.default_config = _context._errors_config
 
@@ -714,7 +714,7 @@ def excepthook(exception_type, exception_value, traceback):
             check_for_pathed_config(path)
 
             if writer.config.infix is not None and count != 0:
-                output_stderr.write(writer.config.infix)
+                output_stderr.write(str(writer.config.infix))
 
             frame = traceback.tb_frame
             code = frame.f_code
@@ -958,5 +958,5 @@ def activate():
     #replace_stderr(True)
 
 
-if (not interactive_tty_only or terminal_is_interactive):
-    activate()
+# if (not interactive_tty_only or terminal_is_interactive):
+#     activate()

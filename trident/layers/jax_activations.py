@@ -10,14 +10,13 @@ from functools import partial
 from pydoc import locate
 
 import six
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.nn.modules.activation as af
+import jax
+import jax.numpy as jnp
+import jaxlib
 
 from trident.backend.common import get_function, get_class, camel2snake,snake2camel, enforce_singleton,TensorShape
-from trident.backend.pytorch_backend import Layer,Parameter
-from trident.backend.pytorch_ops import *
+from trident.backend.jax_backend import Layer,Parameter
+from trident.backend.jax_ops import *
 
 __all__ = ['Identity', 'Sigmoid', 'Tanh','TanhExp','ExpTanh', 'Relu', 'Relu6','SquaredRelu', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu','CRelu','Silu', 'PRelu', 'Swish',
            'Elu', 'HardSigmoid', 'HardSwish', 'Selu', 'LecunTanh', 'SoftSign', 'SoftPlus', 'HardTanh', 'Logit',
@@ -75,10 +74,10 @@ class Relu(Layer):
         """
         if not hasattr(self,'inplace'):
             self.inplace=False
-        if self.inplace and not x.is_leaf:
-            return torch.relu_(x)
-        else:
-            return torch.relu(x)
+        # if self.inplace and not x.is_leaf:
+        #     return relu_(x)
+        # else:
+        return relu(x)
 
 
 class Relu6(Layer):
@@ -107,10 +106,10 @@ class Relu6(Layer):
     def forward(self, x, **kwargs):
         if not hasattr(self,'inplace'):
             self.inplace=False
-        if self.inplace and not x.is_leaf:
-            return torch.clip_(F.relu_(x),max=6)
-        else:
-            return torch.clip(F.relu(x),max=6)
+        # if self.inplace and not x.is_leaf:
+        #     return clip_(F.relu_(x),max=6)
+        # else:
+        return clip(relu(x),max=6)
 
 
 class LeakyRelu(Layer):
@@ -138,10 +137,10 @@ class LeakyRelu(Layer):
     def forward(self, x, **kwargs):
         if not hasattr(self,'inplace'):
             self.inplace=False
-        if self.inplace and not x.is_leaf:
-            return F.leaky_relu(x,self.alpha,inplace=True)
-        else:
-            return F.leaky_relu(x,self.alpha,inplace=False)
+        # if self.inplace and not x.is_leaf:
+        #     return F.leaky_relu(x,self.alpha,inplace=True)
+        # else:
+        return leaky_relu(x,self.alpha,inplace=False)
         
 
 
@@ -174,10 +173,10 @@ class LeakyRelu6(Layer):
     def forward(self, x, **kwargs):
         if not hasattr(self,'inplace'):
             self.inplace=False
-        if self.inplace and not x.is_leaf:
-            return torch.clip_(F.leaky_relu(x, self.alpha, inplace=True),min=-6,max=6)
-        else:
-            return torch.clip(F.leaky_relu(x, self.alpha, inplace=False),min=-6,max=6)
+        # if self.inplace and not x.is_leaf:
+        #     return clip_(leaky_relu(x, self.alpha, inplace=True),min=-6,max=6)
+        # else:
+        return clip(leaky_relu(x, self.alpha, inplace=False),min=-6,max=6)
 
     def extra_repr(self):
         s = 'alpha={alpha}'
@@ -216,10 +215,10 @@ class SquaredRelu(Layer):
         """
         if not hasattr(self,'inplace'):
             self.inplace=False
-        if self.inplace and not x.is_leaf:
-            return torch.square(torch.relu_(x))
-        else:
-            return torch.square(torch.relu(x))
+        # if self.inplace and not x.is_leaf:
+        #     return square(relu_(x))
+        # else:
+        return square(relu(x))
 
 
 
@@ -270,7 +269,7 @@ class Silu(Layer):
     """Applies the silu function, element-wise.
 
     .. math::
-        \text{silu}(x) = x * \sigma(x), \text{where } \sigma(x) \text{ is the logistic sigmoid.}
+        \text{silu}(x) = x * \\sigma(x), \text{where } \\sigma(x) \\text{ is the logistic sigmoid.}
 
     .. note::
         See `Gaussian Error Linear Units (GELUs) <https://arxiv.org/abs/1606.08415>`_
@@ -288,7 +287,7 @@ class Silu(Layer):
     Examples::
 
         >>> m = Silu()
-        >>> input = torch.randn(2)
+        >>> input = randn(2)
         >>> output = m(input)
     """
 
@@ -297,7 +296,7 @@ class Silu(Layer):
         self._built = True
 
     def forward(self, x, **kwargs):
-        return torch.nn.functional.silu(x)
+        return silu(x)
 
 class PRelu(Layer):
     """Parametric Rectified Linear Unit.
@@ -325,14 +324,14 @@ class PRelu(Layer):
         self.weight = None
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             if self.num_parameters is None:
                 self.num_parameters = self.input_filters
-            self.weight = Parameter(ones((self.num_parameters))*self.init)
+            self.weight = Parameter(ones((self.num_parameters)) * self.init)
             self._built = True
 
     def forward(self, x, **kwargs):
-        return F.prelu(x, self.weight)
+        return p_relu(x, self.weight)
 
 
 
@@ -398,7 +397,7 @@ class TanhExp(Layer):
         self._built = True
 
     def forward(self, x, **kwargs):
-        return x*torch.tanh(torch.exp(x))
+        return x*tanh(exp(x))
 
 
 class ExpTanh(Layer):
@@ -419,7 +418,7 @@ class ExpTanh(Layer):
         self._built = True
 
     def forward(self, x, **kwargs):
-        return torch.tanh(torch.exp(x))
+        return tanh(exp(x))
 
 
 class Swish(Layer):
@@ -453,10 +452,10 @@ class HardSigmoid(Layer):
     it follows:
       .. math::
         \text{Hardsigmoid}(x) = \begin{cases}
-            0 & \text{if~} x \le -3, \\
-            1 & \text{if~} x \ge +3, \\
+            0 & \text{if~} x \\le -3, \\
+            1 & \text{if~} x \\ge +3, \\
             x / 6 + 1 / 2 & \text{otherwise}
-        \end{cases}
+        \\end{cases}
     Examples:
         >>> HardSigmoid()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
 
@@ -697,7 +696,7 @@ class Softmax(Layer):
            ValueError: In case `dim(x) == 1`.
     """
 
-    def __init__(self, axis=1,keep_output=False,name=None):
+    def __init__(self, axis=-1,keep_output=False,name=None):
         super(Softmax, self).__init__(keep_output=keep_output,name=name)
         self.axis=axis
         self._built = True
@@ -723,7 +722,7 @@ class Gelu(Layer):
     it follows:
         ```
         f(x) =x∗Φ(x)
-        where \Phi(x)Φ(x) is the Cumulative Distribution Function for Gaussian Distribution.
+        where \\Phi(x)Φ(x) is the Cumulative Distribution Function for Gaussian Distribution.
 
         ```
 
@@ -800,11 +799,11 @@ def get_activation(fn_name,only_layer=False):
     """
     if fn_name is None:
         return None
-    fn_modules = ['trident.layers.pytorch_activations', 'trident.backend.pytorch_ops', 'torch.nn.functional']
-    trident_fn_modules = ['trident.layers.pytorch_activations', 'trident.backend.pytorch_ops']
+    fn_modules = ['trident.layers.jax_activations', 'trident.backend.jax_ops', 'jax.nn']
+    trident_fn_modules = ['trident.layers.jax_activations', 'trident.backend.jax_ops']
     if only_layer:
-        fn_modules = ['trident.layers.pytorch_activations']
-        trident_fn_modules = ['trident.layers.pytorch_activations']
+        fn_modules = ['trident.layers.jax_activations']
+        trident_fn_modules = ['trident.layers.jax_activations']
     try:
         if isinstance(fn_name, str):
             if not only_layer and (camel2snake(fn_name)== fn_name or fn_name.lower()== fn_name):
@@ -819,14 +818,14 @@ def get_activation(fn_name,only_layer=False):
                 except Exception:
                     activation_fn = get_class(fn_name, fn_modules)
                     return activation_fn()
-        elif isinstance(fn_name,(nn.Module,Layer)) or  getattr(fn_name, '__module__', None) == 'trident.layers.pytorch_activations':
+        elif isinstance(fn_name,(Layer)) or getattr(fn_name, '__module__', None) == 'trident.layers.jax_activations':
             if inspect.isfunction(fn_name):
                 return partial(fn_name)
-            elif inspect.isclass(fn_name) and  fn_name.__class__.__name__=="type":
+            elif inspect.isclass(fn_name) and fn_name.__class__.__name__=="type":
                 return fn_name()
             elif isinstance(fn_name, Layer):
                 return fn_name
-        elif inspect.isfunction(fn_name) and getattr(fn_name, '__module__', None) == 'trident.backend.pytorch_ops':
+        elif inspect.isfunction(fn_name) and getattr(fn_name, '__module__', None) == 'trident.backend.jax_ops':
             if only_layer:
                 activation_layer = get_class(snake2camel(fn_name.__name__), trident_fn_modules)
                 return activation_layer()

@@ -151,9 +151,9 @@ class BatchNorm(Layer):
                 self.register_parameter('bias', None)
 
             if self.track_running_stats:
-                self.register_buffer('running_mean', zeros(self.input_filters))
-                self.register_buffer('running_var', ones(self.input_filters))
-                self.register_buffer('num_batches_tracked',to_tensor(0, dtype=torch.long),persistent=False)
+                self.register_buffer('running_mean', zeros(self.input_filters,requires_grad=False))
+                self.register_buffer('running_var', ones(self.input_filters,requires_grad=False))
+                self.register_buffer('num_batches_tracked',to_tensor(0, dtype=torch.long,requires_grad=False),persistent=False)
             else:
                 self.register_buffer('running_mean', None)
                 self.register_buffer('running_var', None)
@@ -244,7 +244,7 @@ class GroupNorm(Layer):
 
     The input channels are separated into :attr:`num_groups` groups, each containing
     ``num_channels / num_groups`` channels. The mean and standard-deviation are calculated
-    separately over the each group. :math:`\gamma` and :math:`\beta` are learnable
+    separately over each group. :math:`\gamma` and :math:`\beta` are learnable
     per-channel affine transform parameter vectors of size :attr:`num_channels` if
     :attr:`affine` is ``True``.
 
@@ -295,8 +295,8 @@ class GroupNorm(Layer):
             else:
                 self.register_parameter('weight', None)
                 self.register_parameter('bias', None)
-
-                self._built = True
+            self.to(get_device())
+            self._built = True
     def forward(self, x, **kwargs):
 
         if hasattr(self,'in_sequence') and self.in_sequence:
@@ -525,7 +525,10 @@ class LayerNorm(Layer):
         """
         super().__init__(name=name)
         self.in_sequence=in_sequence
-        self.filter_index = -1
+        if self.in_sequence:
+            self.filter_index = -1
+        else:
+            self.filter_index = 1
         self.eps = eps
         self.elementwise_affine = elementwise_affine
 
@@ -533,9 +536,15 @@ class LayerNorm(Layer):
 
     def build(self, input_shape:TensorShape):
         if self._built == False :
-            self.normalized_shape=(input_shape[-1],)
-            self.register_parameter('weight',Parameter(ones(*self.normalized_shape)))
-            self.register_parameter('bias', Parameter(zeros(*self.normalized_shape)))
+            self.normalized_shape=(input_shape[self.filter_index],)
+            if self.elementwise_affine:
+                self.register_parameter('weight', Parameter(ones(*self.normalized_shape)))
+                self.register_parameter('bias', Parameter(zeros(*self.normalized_shape)))
+            else:
+                self.register_parameter('weight', None)
+                self.register_parameter('bias', None)
+
+
             self._built=True
     def forward(self, x, **kwargs):
         x= F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)

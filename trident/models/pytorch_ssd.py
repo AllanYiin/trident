@@ -19,7 +19,7 @@ from trident.backend.tensorspec import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList
 from trident.backend.pytorch_ops import *
 from trident.backend.pillow_backend import image2array, array2image
-from trident.data.bbox_common import xywh2xyxy, xyxy2xywh, bbox_giou, bbox_giou_numpy
+#from trident.data.bbox_common import xywh2xyxy, xyxy2xywh, bbox_giou, bbox_giou_numpy
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu, softmax
@@ -712,9 +712,10 @@ class SsdDetectionModel(ImageDetectionModel):
         super(SsdDetectionModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
         self.palette = OrderedDict()
-
-        object.__setattr__(self, 'detection_threshold', 0.2)
-        object.__setattr__(self, 'nms_threshold', 0.1)
+        self.detection_threshold= 0.2
+        self.nms_threshold=0.1
+        # object.__setattr__(self, 'detection_threshold', 0.2)
+        # object.__setattr__(self, 'nms_threshold', 0.1)
 
     def area_of(self, left_top, right_bottom):
         """Compute the areas of rectangles given two corners.
@@ -746,6 +747,22 @@ class SsdDetectionModel(ImageDetectionModel):
         area0 = self.area_of(boxes0[..., :2], boxes0[..., 2:])
         area1 = self.area_of(boxes1[..., :2], boxes1[..., 2:])
         return overlap_area / (area0 + area1 - overlap_area + eps),overlap_area, (area0 + area1 - overlap_area + eps)
+
+    @property
+    def detection_threshold(self):
+        return self._model.detection_threshold
+
+    @detection_threshold.setter
+    def detection_threshold(self,value):
+        self._model.detection_threshold=value
+
+    @property
+    def nms_threshold(self):
+        return self._model.nms_threshold
+
+    @nms_threshold.setter
+    def nms_threshold(self, value):
+        self._model.nms_threshold = value
 
     def hard_nms(self, box_scores, nms_threshold, top_k=-1, candidate_size=200):
         """
@@ -862,11 +879,11 @@ class SsdDetectionModel(ImageDetectionModel):
                 for func in self.preprocess_flow:
                     if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                         img = func(img, spec=self._model.input_spec)
-                        if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                        if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and 'resize' in func.__class__.__name__.lower()):
                             rescale_scale = func.scale
                     else:
                         print(func)
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                #img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                 img = image_backend_adaption(img)
                 inp = to_tensor(np.expand_dims(img, 0)).to(
                     torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
@@ -878,8 +895,8 @@ class SsdDetectionModel(ImageDetectionModel):
                 if len(self.palette) == 0:
                     self.palette = generate_palette(confidence.shape[-1])
 
-                probs = 1 - confidence[:, 0]
-                label = argmax(confidence[:, :], -1)
+                probs =1-confidence[:, 0]
+                label = argmax(confidence[:,1:], -1)+1
 
                 # mask = label > 0
                 # probs = probs[mask]
@@ -928,9 +945,9 @@ class SsdDetectionModel(ImageDetectionModel):
                     this_box = boxes[m]
                     this_label = labels[m]
                     if int(this_label) >0:
-                        thiscolor = tuple([int(c) for c in self.palette[int(this_label) - 1][:3]])
-                        print(img, self.class_names[int(this_label) - 1], this_box, probs[m],flush=True)
-                        pillow_img = plot_bbox(this_box, pillow_img, thiscolor, self.class_names[int(this_label) - 1] if self.class_names is not None else '', line_thickness=2)
+                        thiscolor = tuple([int(c) for c in self.palette[int(this_label)][:3]])
+                        print(img, self.class_names[int(this_label)], this_box, probs[m],flush=True)
+                        pillow_img = plot_bbox(this_box, pillow_img, thiscolor, self.class_names[int(this_label)] if self.class_names is not None else '', line_thickness=2)
             rgb_image = np.array(pillow_img.copy())
 
         return rgb_image, boxes, labels, probs

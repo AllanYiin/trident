@@ -199,7 +199,7 @@ class Model(model.ModelBase,Layer):
                         output._signature.inputs[k].dtype = Dtype.float32
                         for module in output.modules():
                             if isinstance(module, (Embedding, nn.Embedding)):
-                                output._signature.inputs[k].dtype = dtype.int64
+                                output._signature.inputs[k].dtype = Dtype.int64
                                 break
 
 
@@ -254,7 +254,7 @@ class Model(model.ModelBase,Layer):
                 output.to(get_device())
                 output.eval()
                 out = output(*dummay_input)
-
+            output.to(get_device())
             if is_tensor(out):
                 if  len(output.signature.outputs)==0:
                     output.signature.outputs['output']=TensorSpec.tensor_to_spec(out,need_exclude_batch_axis=True,is_singleton=False) if out is not None else TensorSpec(
@@ -344,7 +344,7 @@ class Model(model.ModelBase,Layer):
 
     def get_root(self):
         if self._model is not None:
-            if isinstance(self._model,n.Module):
+            if isinstance(self._model,nn.Module):
                 self._model.is_root=True
                 return self._model
         return self
@@ -1268,7 +1268,7 @@ class Model(model.ModelBase,Layer):
         state_dict = None
         pretrained_dict = None
         if ext == '.pth.tar':
-            state_dict = torch.load(file_path, map_location=torch.device(get_device()))
+            state_dict = torch.load(file_path, map_location=torch.device('cpu'))
         elif ext == '.pth':
             load_path = file_path
             if not os.path.exists(file_path):
@@ -1276,7 +1276,7 @@ class Model(model.ModelBase,Layer):
                     load_path = file_path.replace(ext, '.pth.tar')
                 elif os.path.exists(os.path.join(working_directory, filename + ext)):
                     load_path = os.path.join(working_directory, filename + ext)
-            recovery_pth = torch.load(load_path, map_location=torch.device(get_device()))
+            recovery_pth = fix_layer(torch.load(load_path, map_location=torch.device('cpu')))
 
             if isinstance(recovery_pth, dict):
                 state_dict = recovery_pth
@@ -1957,6 +1957,9 @@ class ImageDetectionModel(Model):
 
         object.__setattr__(self, 'detection_threshold', detection_threshold)
         object.__setattr__(self, 'nms_threshold', nms_threshold)
+        if self._model is not None:
+            object.__setattr__(self._model, 'detection_threshold', detection_threshold)
+            object.__setattr__(self._model, 'nms_threshold', nms_threshold)
 
         if self._model is not None and self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
                 self._model.signature.inputs.value_list[0].object_type is None:

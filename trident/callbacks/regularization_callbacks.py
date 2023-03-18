@@ -23,13 +23,14 @@ if get_backend() == 'pytorch':
     import torch.nn as nn
     from trident.backend.pytorch_backend import get_device
     from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape,ndim
-    from trident.optims.pytorch_losses import SmoothL1Loss
+    from trident.optims.pytorch_losses import SmoothL1Loss,CrossEntropyLoss
 
 elif get_backend() == 'tensorflow':
     import tensorflow as tf
     from trident.backend.tensorflow_backend import get_device
     from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like,argmax,ndim
-    from trident.optims.tensorflow_losses import SmoothL1Loss
+    from trident.optims.tensorflow_losses import SmoothL1Loss,CrossEntropyLoss
+
 ctx=get_session()
 working_directory = ctx.working_directory
 __all__ = ['RegularizationCallbacksBase', 'MixupCallback', 'CutMixCallback']
@@ -60,7 +61,7 @@ class MixupCallback(RegularizationCallbacksBase):
         super(MixupCallback, self).__init__()
         self.alpha = alpha
         if loss_criterion is None:
-            loss_criterion = get_class('CrossEntropyLoss', 'trident.optims.pytorch_losses' if get_backend() == 'pytorch' else 'trident.optims.tensorflow_losses')
+            loss_criterion = CrossEntropyLoss
 
         self.loss_criterion = loss_criterion()
         self.loss_weight = loss_weight
@@ -74,8 +75,11 @@ class MixupCallback(RegularizationCallbacksBase):
 
     def on_loss_calculation_end(self, training_context):
         """Returns mixed inputs, pairs of targets, and lambda"""
+
         model = training_context['current_model']
         train_data = training_context['train_data']
+
+        _device =model.device
 
         x = train_data.value_list[0].copy().detach().to(model.device)  # input
         y = train_data.value_list[1].copy().detach().to(model.device)  # label
@@ -83,15 +87,15 @@ class MixupCallback(RegularizationCallbacksBase):
         lam = builtins.min(builtins.max(np.random.beta(self.alpha, self.alpha), 0.3), 0.7)
 
         batch_size = int_shape(x)[0]
-        index = arange(batch_size)
+        index = arange(batch_size).to(get_device())
         index = cast(shuffle(index), 'long')
 
         mixed_x = None
         if get_backend() == 'pytorch':
             mixed_x = lam * x + (1 - lam) * x[index, :]
-            pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
+            pred = model(to_tensor(mixed_x, requires_grad=True, device=get_device()))
             y_a, y_b = y, y[index]
-            this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
+            this_loss = lam * self.loss_criterion(pred, y_a.long().to(get_device())) + (1 - lam) * self.loss_criterion(pred, y_b.long().to(get_device()))
             training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
 
             training_context['tmp_losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
@@ -163,8 +167,8 @@ class DetectionMixupCallback(RegularizationCallbacksBase):
         train_data = training_context['train_data']
         x = None
         y = None
-        x = train_data.value_list[0].copy().detach().to(model.device)  # input
-        y = train_data.value_list[1].copy().detach().to(model.device)  # label
+        x = train_data.value_list[0].copy().detach().to(get_device())  # input
+        y = train_data.value_list[1].copy().detach().to(get_device())  # label
 
         lam = builtins.min(builtins.max(np.random.beta(self.alpha, self.alpha), 0.3), 0.7)
 
@@ -176,7 +180,7 @@ class DetectionMixupCallback(RegularizationCallbacksBase):
         if get_backend() == 'pytorch':
             mixed_x = lam * x + (1 - lam) * x[index, :]
             mixed_x=y+y[index]
-            pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
+            pred = model(to_tensor(mixed_x, requires_grad=True, device=get_device()))
             #y_a, y_b = y, y[index]
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
             training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
@@ -301,9 +305,9 @@ class CutMixCallback(RegularizationCallbacksBase):
             mixed_x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
             if is_superresolution:
                 mixed_y[:, :, int(bbx1*scale):int(bbx2*scale), int(bby1*scale):int(bby2*scale)] = y[index, :, int(bbx1*scale):int(bbx2*scale), int(bby1*scale):int(bby2*scale)]
-                pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
+                pred = model(to_tensor(mixed_x, requires_grad=True, device=get_device()))
 
-                this_loss=SmoothL1Loss()(pred,mixed_y.to(model.device).detach())
+                this_loss=SmoothL1Loss()(pred,mixed_y.to(get_device()).detach())
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
                 training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'],float(to_numpy(this_loss) * self.loss_weight))
 
@@ -312,8 +316,8 @@ class CutMixCallback(RegularizationCallbacksBase):
 
                 # adjust lambda to exactly match pixel ratio
                 lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
-                pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
-                this_loss = lam * self.loss_criterion(pred, y_a.to(model.device).long()) + (1 - lam) * self.loss_criterion(pred, y_b.to(model.device).long())
+                pred = model(to_tensor(mixed_x, requires_grad=True, device=get_device()))
+                this_loss = lam * self.loss_criterion(pred, y_a.to(get_device()).long()) + (1 - lam) * self.loss_criterion(pred, y_b.to(get_device()).long())
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
                 training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
 
@@ -429,8 +433,8 @@ class CutBlurCallback(RegularizationCallbacksBase):
         """Returns mixed inputs, pairs of targets, and lambda"""
         model = training_context['current_model']
         train_data = training_context['train_data']
-        x = train_data.value_list[0].copy().detach().to(model.device)  # low resolution input
-        y = train_data.value_list[1].copy().detach().to(model.device)  # high resolution label
+        x = train_data.value_list[0].copy().detach().to(get_device())  # low resolution input
+        y = train_data.value_list[1].copy().detach().to(get_device())  # high resolution label
 
         lam = builtins.max(np.random.beta(self.alpha, self.alpha)*0.3,0.1)
 
@@ -447,7 +451,7 @@ class CutBlurCallback(RegularizationCallbacksBase):
             mixed_x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
             # adjust lambda to exactly match pixel ratio
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
-            pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
+            pred = model(to_tensor(mixed_x, requires_grad=True, device=get_device()))
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
             training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
 

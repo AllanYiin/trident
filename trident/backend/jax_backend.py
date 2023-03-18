@@ -4,32 +4,35 @@ import uuid
 import copy
 import warnings
 import weakref
-from collections import defaultdict, abc,namedtuple
+from collections import defaultdict, abc, namedtuple
 from types import MethodType
-from typing import List, Tuple, Optional, Union, Callable, Any, Iterable,Iterator,Mapping, TypeVar,overload,Dict,Set
+from typing import List, Tuple, Optional, Union, Callable, Any, Iterable, Iterator, Mapping, TypeVar, overload, Dict, Set
 from functools import partial
 import builtins
 import numbers
 import numpy as np
 import gc
 import jax
+import jaxlib
 import jax.numpy as jnp
 from jax.lib import xla_bridge
 from trident.backend import common
-from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
-    PrintException, Signature, TensorShape,  get_args_spec,is_instance
+from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, \
+    get_session, set_session, get_session_value, \
+    PrintException, Signature, TensorShape, get_args_spec, is_instance
 from trident.backend.tensorspec import *
 from trident.backend import jax_ops as jops
 from trident.backend import dtype as Dtype
 from trident import context
-from trident.data.utils import pickle_it,unpickle
+from trident.data.utils import pickle_it, unpickle
 from trident.context import split_path, make_dir_if_need, sanitize_path
 from trident.backend.jax_ops import *
+from trident.backend import jax_serialization as serialization
 
 ctx = context._context()
 _backend = ctx.get_backend()
 
-__all__ = ['get_device', 'set_device', 'Layer', 'Parameter', 'DTYPE_MAPPING']
+__all__ = ['get_device', 'set_device', 'Layer','Sequential','Parameter', 'DTYPE_MAPPING']
 
 _int = builtins.int
 _float = builtins.float
@@ -93,25 +96,72 @@ def set_device(device='cpu'):
         print(e)
 
 
+sys.stdout.write('JAX version:{0}.\n'.format(jaxlib.version.__version__))
+sys.stdout.write('use device:{0}.\n'.format(get_device()))
+
+
+def load(path):
+    """load model from *.pth or *.pth.tar
+
+    Args:
+        path (str):
+
+    Returns:
+
+    """
+    if '.tar' in path:
+        return serialization.load_pthtar(path)
+    else:
+        return serialization.load(path)
+
+
+def save(obj, path, is_compressed=False):
+    serialization.save(obj, path, is_compressed=is_compressed)
+    return True
+
+
 class RemovableHandle(object):
-    """A handle which provides the capability to remove a hook."""
+    r"""
+    A handle which provides the capability to remove a hook.
 
-    next_id = 0
+    Args:
+        hooks_dict (dict): A dictionary of hooks, indexed by hook ``id``.
+        extra_dict (dict): An additional dictionary whose keys will be deleted
+            when the same keys are removed from ``hooks_dict``.
+    """
 
-    def __init__(self, hooks_dict):
+    id: int
+    next_id: int = 0
+
+    def __init__(self, hooks_dict: Any, *, extra_dict: Any = None) -> None:
         self.hooks_dict_ref = weakref.ref(hooks_dict)
         self.id = RemovableHandle.next_id
         RemovableHandle.next_id += 1
 
-    def remove(self):
+        self.extra_dict_ref = (
+            weakref.ref(extra_dict)
+            if extra_dict is not None
+            else None
+        )
+
+    def remove(self) -> None:
         hooks_dict = self.hooks_dict_ref()
         if hooks_dict is not None and self.id in hooks_dict:
             del hooks_dict[self.id]
 
-    def __getstate__(self):
-        return self.hooks_dict_ref(), self.id
+        if self.extra_dict_ref is not None:
+            extra_dict = self.extra_dict_ref()
+            if extra_dict is not None and self.id in extra_dict:
+                del extra_dict[self.id]
 
-    def __setstate__(self, state):
+    def __getstate__(self):
+        return (
+            (self.hooks_dict_ref(), self.id)
+            if self.extra_dict_ref is None
+            else (self.hooks_dict_ref(), self.id, self.extra_dict_ref())
+        )
+
+    def __setstate__(self, state) -> None:
         if state[0] is None:
             # create a dead reference
             self.hooks_dict_ref = weakref.ref(OrderedDict())
@@ -120,151 +170,21 @@ class RemovableHandle(object):
         self.id = state[1]
         RemovableHandle.next_id = max(RemovableHandle.next_id, self.id + 1)
 
-    def __enter__(self):
+        self.extra_dict_ref = (
+            None
+            if len(state) < 3
+            else weakref.ref(OrderedDict() if state[2] is None else state[2])
+        )
+
+    def __enter__(self) -> "RemovableHandle":
         return self
 
-    def __exit__(self, type, value, tb):
+    def __exit__(self, type: Any, value: Any, tb: Any) -> None:
         self.remove()
-#
-# class BackwardHook(object):
-#     """
-#     A wrapper class to implement nn.Module backward hooks.
-#     It handles:
-#       - Ignoring non-Tensor inputs and replacing them by None before calling the user hook
-#       - Generating the proper Node to capture a set of Tensor's gradients
-#       - Linking the gradients captures for the outputs with the gradients captured for the input
-#       - Calling the user hook once both output and input gradients are available
-#     """
-#
-#     def __init__(self, module, user_hooks):
-#         self.user_hooks = user_hooks
-#         self.module = module
-#
-#         self.grad_outputs = None
-#         self.n_outputs = -1
-#         self.output_tensors_index = None
-#         self.n_inputs = -1
-#         self.input_tensors_index = None
-#
-#     def _pack_with_none(self, indices, values, size):
-#         res = [None] * size
-#         for idx, val in zip(indices, values):
-#             res[idx] = val
-#
-#         return tuple(res)
-#
-#     def _unpack_none(self, indices, values):
-#         res = []
-#         for idx in indices:
-#             res.append(values[idx])
-#
-#         return tuple(res)
-#
-#     def _set_user_hook(self, grad_fn, user_hook):
-#         @functools.wraps(user_hook)
-#         def hook(grad_input, _):
-#             if self.grad_outputs is None:
-#                 raise RuntimeError("Module backward hook for grad_input is called before "
-#                                    "the grad_output one. This happens because the gradient "
-#                                    "in your nn.Module flows to the Module's input without "
-#                                    "passing through the Module's output. Make sure that the "
-#                                    "output depends on the input and that the loss is computed "
-#                                    "based on the output.")
-#
-#             grad_input = self._pack_with_none(self.input_tensors_index, grad_input, self.n_inputs)
-#             res = user_hook(self.module, grad_input, self.grad_outputs)
-#             if res is None:
-#                 return res
-#
-#             if len(res) != len(grad_input):
-#                 raise RuntimeError("Backward hook returned an invalid number of grad_input, "
-#                                    "got {}, but expected {}".format(len(res), len(grad_input)))
-#             return self._unpack_none(self.input_tensors_index, res)
-#         grad_fn.register_hook(hook)
-#
-#     def _apply_on_tensors(self, fn, args):
-#         # Can be used to apply the given function to the tensors contained in the
-#         # args. Will return updated args and the tensors indices
-#         tensors_idx = []
-#         tensors = []
-#
-#         requires_grad = False
-#         for i, arg in enumerate(args):
-#             if is_tensor(arg):
-#                 tensors_idx.append(i)
-#                 tensors.append(arg)
-#                 requires_grad |= arg.requires_grad
-#
-#         if not requires_grad:
-#             return args, None
-#
-#         new_tensors = torch.nn.modules._functions.BackwardHookFunction.apply(*tensors)
-#         if len(new_tensors) == 0:
-#             raise RuntimeError("Cannot set Module backward hook for a Module with no input Tensors.")
-#         grad_fn = new_tensors[0].grad_fn
-#         if not grad_fn.name() == "BackwardHookFunctionBackward":
-#             raise RuntimeError("Error while setting up backward hooks. Please open "
-#                                "an issue with a code sample to reproduce this.")
-#
-#         fn(grad_fn)
-#
-#         arg_list = list(args)
-#         for idx, val in zip(tensors_idx, new_tensors):
-#             arg_list[idx] = val
-#
-#         return tuple(arg_list), tensors_idx
-#
-#     def setup_input_hook(self, args):
-#         def fn(grad_fn):
-#             for hook in self.user_hooks:
-#                 self._set_user_hook(grad_fn, hook)
-#
-#         res, input_idx = self._apply_on_tensors(fn, args)
-#         self.n_inputs = len(args)
-#         self.input_tensors_index = input_idx
-#         return res
-#
-#     def setup_output_hook(self, args):
-#         def fn(grad_fn):
-#             def hook(_, grad_output):
-#                 self.grad_outputs = self._pack_with_none(self.output_tensors_index,
-#                                                          grad_output,
-#                                                          self.n_outputs)
-#             grad_fn.register_hook(hook)
-#
-#         is_tuple = True
-#         if not isinstance(args, tuple):
-#             args = (args,)
-#             is_tuple = False
-#
-#         res, output_idx = self._apply_on_tensors(fn, args)
-#         self.n_outputs = len(args)
-#         self.output_tensors_index = output_idx
-#
-#         if not is_tuple:
-#             res = res[0]
-#         return res
-
-
 
 
 # def _is_not_trainable_variable(obj):
 #     return module._is_variable(obj) and not getattr(obj, "trainable", False)
-
-
-# The internal graph maintained by Keras and used by the symbolic Keras APIs
-# while executing eagerly (such as the functional API for model-building).
-# This is thread-local to allow building separate models in different threads
-# concurrently, but comes at the cost of not being able to build one model
-# across threads.
-
-
-
-
-# A global dictionary mapping graph objects to an index of counters used
-# for various layer/optimizer names in each graph.
-# Allows to give unique autogenerated names to layers, in a graph-specific way.
-PER_GRAPH_OBJECT_NAME_UIDS = weakref.WeakKeyDictionary()
 
 
 def reset_name(module, prefix_dict=None):
@@ -276,7 +196,8 @@ def reset_name(module, prefix_dict=None):
     if not hasattr(module, '_uid_prefixs') or prefix_dict is not None:
         module._uid_prefixs = prefix_dict
     if not hasattr(module, 'default_name'):
-        module.default_name = camel2snake(module.__class__.__name__) + '_' + str(get_global_uid(camel2snake(module.__class__.__name__)))
+        module.default_name = camel2snake(module.__class__.__name__) + '_' + str(
+            get_global_uid(camel2snake(module.__class__.__name__)))
     prefix, seq = module.default_name.rsplit('_', 1)  # if '_' in module.default_name else
     seq = int(seq)
     module.default_name = prefix + '_' + str(seq - get_uid(prefix, seq) + 1)
@@ -287,14 +208,16 @@ def reset_name(module, prefix_dict=None):
 
 class PRNG(object):
     """Just a stateful wrapper for a jax.random.PRNGKey."""
+
     def __init__(self, key):
         self.key = key
+
     def split(self):
         (self.key, subkey) = jax.random.split(self.key)
         return subkey
 
-_UID_PREFIX = defaultdict(int)
 
+_UID_PREFIX = defaultdict(int)
 
 
 def get_global_uid(prefix=''):
@@ -323,12 +246,15 @@ def _addindent(s_, numSpaces):
     return s
 
 
-r"""This tracks hooks common to all modules that are executed before/after
+"""This tracks hooks common to all modules that are executed before/after
 calling forward and backward. This is global state used for debugging/profiling
 purposes"""
 _global_backward_hooks = OrderedDict()
 _global_forward_pre_hooks = OrderedDict()
 _global_forward_hooks = OrderedDict()
+
+_global_backward_pre_hooks: Dict[int, Callable] = OrderedDict()
+_global_is_full_backward_hook: Optional[bool] = None
 
 _grad_t = Union[Tuple[Tensor, ...], Tensor]
 # See https://mypy.readthedocs.io/en/latest/generics.html#generic-methods-and-generic-self for the use
@@ -336,13 +262,87 @@ _grad_t = Union[Tuple[Tensor, ...], Tensor]
 # the type of the subclass, not the looser type of `Module`.
 T = TypeVar('T', bound='Layer')
 
+_EXTRA_STATE_KEY_SUFFIX = '_extra_state'
+
+
+def register_module_buffer_registration_hook(hook: Callable[..., None]) -> RemovableHandle:
+    r"""Registers a buffer registration hook common to all modules.
+
+    .. warning ::
+
+        This adds global state to the `Layer` module
+
+    The hook will be called every time :func:`register_buffer` is invoked.
+    It should have the following signature::
+
+        hook(module, name, buffer) -> None or new buffer
+
+    The hook can modify the input or return a single modified value in the hook.
+
+    Returns:
+        :class:`torch.utils.hooks.RemovableHandle`:
+            a handle that can be used to remove the added hook by calling
+            ``handle.remove()``
+    """
+    handle = RemovableHandle(_global_buffer_registration_hooks)
+    _global_buffer_registration_hooks[handle.id] = hook
+    return handle
+
+
+def register_module_module_registration_hook(hook: Callable[..., None]) -> RemovableHandle:
+    r"""Registers a module registration hook common to all modules.
+
+    .. warning ::
+
+        This adds global state to the `Layer` module
+
+    The hook will be called every time :func:`register_module` is invoked.
+    It should have the following signature::
+
+        hook(module, name, submodule) -> None or new submodule
+
+    The hook can modify the input or return a single modified value in the hook.
+
+    Returns:
+        :class:`torch.utils.hooks.RemovableHandle`:
+            a handle that can be used to remove the added hook by calling
+            ``handle.remove()``
+    """
+    handle = RemovableHandle(_global_module_registration_hooks)
+    _global_module_registration_hooks[handle.id] = hook
+    return handle
+
+
+def register_module_parameter_registration_hook(hook: Callable[..., None]) -> RemovableHandle:
+    r"""Registers a parameter registration hook common to all modules.
+
+    .. warning ::
+
+        This adds global state to the `Layer` module
+
+    The hook will be called every time :func:`register_parameter` is invoked.
+    It should have the following signature::
+
+        hook(module, name, param) -> None or new parameter
+
+    The hook can modify the input or return a single modified value in the hook.
+
+    Returns:
+        :class:`torch.utils.hooks.RemovableHandle`:
+            a handle that can be used to remove the added hook by calling
+            ``handle.remove()``
+    """
+    handle = RemovableHandle(_global_parameter_registration_hooks)
+    _global_parameter_registration_hooks[handle.id] = hook
+    return handle
+
 
 def register_module_forward_pre_hook(hook: Callable[..., None]) -> RemovableHandle:
     r"""Registers a forward pre-hook common to all modules.
 
     .. warning ::
 
-        This adds global state to the `nn.module` module
+        This adds global state to the `Layer` module
         and it is only intended for debugging/profiling purposes.
 
     The hook will be called every time before :func:`forward` is invoked.
@@ -374,7 +374,7 @@ def register_module_forward_hook(hook: Callable[..., None]) -> RemovableHandle:
 
     .. warning ::
 
-        This adds global state to the `nn.module` module
+        This adds global state to the `Layer` module
         and it is only intended for debugging/profiling purposes.
 
     The hook will be called every time after :func:`forward` has computed an output.
@@ -402,32 +402,96 @@ def register_module_forward_hook(hook: Callable[..., None]) -> RemovableHandle:
 
 
 def register_module_backward_hook(
-        hook: Callable[['Layer', _grad_t, _grad_t], Union[None, Tensor]]
+        hook: Callable[['Layer', _grad_t, _grad_t], Union[None, _grad_t]]
+) -> RemovableHandle:
+    r"""Registers a backward hook common to all the modules.
+
+    This function is deprecated in favor of
+    :func:`torch.Layers.module.register_module_full_backward_hook`
+    and the behavior of this function will change in future versions.
+
+    Returns:
+        :class:`torch.utils.hooks.RemovableHandle`:
+            a handle that can be used to remove the added hook by calling
+            ``handle.remove()``
+
+    """
+    global _global_is_full_backward_hook
+    if _global_is_full_backward_hook is True:
+        raise RuntimeError("Cannot use both regular backward hooks and full backward hooks as a "
+                           "global Module hook. Please use only one of them.")
+
+    _global_is_full_backward_hook = False
+
+    handle = RemovableHandle(_global_backward_hooks)
+    _global_backward_hooks[handle.id] = hook
+    return handle
+
+
+def register_module_full_backward_pre_hook(
+        hook: Callable[['Layer', _grad_t], Union[None, _grad_t]]
+) -> RemovableHandle:
+    r"""Registers a backward pre-hook common to all the modules.
+
+    .. warning ::
+        This adds global state to the `Layer` module
+        and it is only intended for debugging/profiling purposes.
+
+    The hook will be called every time the gradients for the module are computed.
+    The hook should have the following signature::
+
+        hook(module, grad_output) -> Tensor or None
+
+    The :attr:`grad_output` is a tuple. The hook should
+    not modify its arguments, but it can optionally return a new gradient with
+    respect to the output that will be used in place of :attr:`grad_output` in
+    subsequent computations. Entries in :attr:`grad_output` will be ``None`` for
+    all non-Tensor arguments.
+
+    For technical reasons, when this hook is applied to a Module, its forward function will
+    receive a view of each Tensor passed to the Module. Similarly the caller will receive a view
+    of each Tensor returned by the Module's forward function.
+
+    Global hooks are called before hooks registered with `register_backward_pre_hook`
+
+    Returns:
+        :class:`torch.utils.hooks.RemovableHandle`:
+            a handle that can be used to remove the added hook by calling
+            ``handle.remove()``
+
+    """
+    handle = RemovableHandle(_global_backward_pre_hooks)
+    _global_backward_pre_hooks[handle.id] = hook
+    return handle
+
+
+def register_module_full_backward_hook(
+        hook: Callable[['Layer', _grad_t, _grad_t], Union[None, _grad_t]]
 ) -> RemovableHandle:
     r"""Registers a backward hook common to all the modules.
 
     .. warning ::
-        This adds global state to the `nn.module` module
+        This adds global state to the `Layer` module
         and it is only intended for debugging/profiling purposes.
 
-        The current implementation will not have the presented behavior
-        for complex :class:`Module` that perform many operations.
-        In some failure cases, :attr:`grad_input` and :attr:`grad_output` will only
-        contain the gradients for a subset of the inputs and outputs.
-        For such :class:`Module`, you should use :func:`torch.Tensor.register_hook`
-        directly on a specific input or output to get the required gradients.
-
-    The hook will be called every time the gradients with respect to module
-    inputs are computed. The hook should have the following signature::
+    The hook will be called every time the gradients with respect to a module
+    are computed, i.e. the hook will execute if and only if the gradients with
+    respect to module outputs are computed. The hook should have the following
+    signature::
 
         hook(module, grad_input, grad_output) -> Tensor or None
 
-    The :attr:`grad_input` and :attr:`grad_output` may be tuples if the
-    module has multiple inputs or outputs. The hook should not modify its
-    arguments, but it can optionally return a new gradient with respect to
-    input that will be used in place of :attr:`grad_input` in subsequent
-    computations. :attr:`grad_input` will only correspond to the inputs given
-    as positional arguments.
+    The :attr:`grad_input` and :attr:`grad_output` are tuples. The hook should
+    not modify its arguments, but it can optionally return a new gradient with
+    respect to the input that will be used in place of :attr:`grad_input` in
+    subsequent computations. :attr:`grad_input` will only correspond to the inputs given
+    as positional arguments and all kwarg arguments will not appear in the hook. Entries
+    in :attr:`grad_input` and :attr:`grad_output` will be ``None`` for all non-Tensor
+    arguments.
+
+    For technical reasons, when this hook is applied to a Module, its forward function will
+    receive a view of each Tensor passed to the Module. Similarly the caller will receive a view
+    of each Tensor returned by the Module's forward function.
 
     Global hooks are called before hooks registered with `register_backward_hook`
 
@@ -437,6 +501,13 @@ def register_module_backward_hook(
             ``handle.remove()``
 
     """
+    global _global_is_full_backward_hook
+    if _global_is_full_backward_hook is False:
+        raise RuntimeError("Cannot use both regular backward hooks and full backward hooks as a "
+                           "global Module hook. Please use only one of them.")
+
+    _global_is_full_backward_hook = True
+
     handle = RemovableHandle(_global_backward_hooks)
     _global_backward_hooks[handle.id] = hook
     return handle
@@ -456,7 +527,8 @@ def _forward_unimplemented(self, *input: Any) -> None:
         instead of this since the former takes care of running the
         registered hooks while the latter silently ignores them.
     """
-    raise NotImplementedError
+    raise NotImplementedError(f"Module [{type(self).__name__}] is missing the required \"forward\" function")
+
 
 # def Parameter(data, trainable=True, dtype=None, name=None, **kwargs):
 #     if dtype is None:
@@ -482,10 +554,11 @@ class Parameter(object):
         name(string, optional): parameter name
 
     """
-    def __init__(self, data:Tensor, trainable=True, name=None):
-        self._data=data
-        self._trainable=trainable
-        self.name=name
+
+    def __init__(self, data: Tensor, trainable=True, name=None):
+        self._data = data
+        self._trainable = trainable
+        self.name = name
 
     @property
     def trainable(self):
@@ -508,7 +581,7 @@ class Parameter(object):
         if id(self) in memo:
             return memo[id(self)]
         else:
-            result = type(self)(self.data.clone(), self._trainable,self.name)
+            result = type(self)(self.data.copy(), self._trainable, self.name)
             memo[id(self)] = result
             return result
 
@@ -519,11 +592,8 @@ class Parameter(object):
             return super().__repr__()
 
 
-
-
-
 class Layer(object):
-    """Trident base layer class, just like nn.Module in pytorch
+    """Trident base layer class, just like Layer in pytorch
 
    Your models should also subclass of this class.
     Layer contains :
@@ -566,23 +636,34 @@ class Layer(object):
     """
     _version = 1
     _built: bool
+    training: bool
     _parameters: Dict[str, Optional[Parameter]]
     _buffers: Dict[str, Optional[Tensor]]
     _non_persistent_buffers_set: Set[str]
+    _backward_pre_hooks: Dict[int, Callable]
     _backward_hooks: Dict[int, Callable]
     _is_full_backward_hook: Optional[bool]
     _forward_hooks: Dict[int, Callable]
+    # Marks whether the corresponding _forward_hooks accept kwargs or not.
+    # As JIT does not support Set[int], this dict is used as a set, where all
+    # hooks represented in this dict accept kwargs.
+    _forward_hooks_with_kwargs: Dict[int, bool]
     _forward_pre_hooks: Dict[int, Callable]
+    # Marks whether the corresponding _forward_hooks accept kwargs or not.
+    # As JIT does not support Set[int], this dict is used as a set, where all
+    # hooks represented in this dict accept kwargs.
+    _forward_pre_hooks_with_kwargs: Dict[int, bool]
     _state_dict_hooks: Dict[int, Callable]
     _load_state_dict_pre_hooks: Dict[int, Callable]
+    _state_dict_pre_hooks: Dict[int, Callable]
     _load_state_dict_post_hooks: Dict[int, Callable]
-    _modules: Dict[str, Optional['Module']]
+    _modules: Dict[str, Optional['Layer']]
 
     def __init__(self,
                  name=None,
                  keep_output=False,
                  device=None,
-                 dtype=None ,
+                 dtype=None,
                  **kwargs):
         """
         Args:
@@ -594,21 +675,23 @@ class Layer(object):
         object.__setattr__(self, 'uuid', uuid.uuid4().node)
         super().__setattr__('training', True)
         super().__setattr__('_built', False)
+
         super().__setattr__('_parameters', OrderedDict())
         super().__setattr__('_buffers', OrderedDict())
         super().__setattr__('_non_persistent_buffers_set', set())
+        super().__setattr__('_backward_pre_hooks', OrderedDict())
         super().__setattr__('_backward_hooks', OrderedDict())
         super().__setattr__('_is_full_backward_hook', None)
         super().__setattr__('_forward_hooks', OrderedDict())
+        super().__setattr__('_forward_hooks_with_kwargs', OrderedDict())
         super().__setattr__('_forward_pre_hooks', OrderedDict())
+        super().__setattr__('_forward_pre_hooks_with_kwargs', OrderedDict())
         super().__setattr__('_state_dict_hooks', OrderedDict())
+        super().__setattr__('_state_dict_pre_hooks', OrderedDict())
         super().__setattr__('_load_state_dict_pre_hooks', OrderedDict())
         super().__setattr__('_load_state_dict_post_hooks', OrderedDict())
         super().__setattr__('_modules', OrderedDict())
-        super().__setattr__('factory_kwargs',{'device': get_device(), 'dtype': Dtype.float32})
-        self.to(self.factory_kwargs['device'])
-
-
+        super().__setattr__('factory_kwargs', {'device': get_device(), 'dtype': Dtype.float32})
 
         prefix = self.__class__.__name__
         self._uid_prefixs = {}
@@ -619,14 +702,9 @@ class Layer(object):
         reset_name(self, self._uid_prefixs)
         super(Layer, self).__init__()
 
-
-
-
         self.batch_index = 0
         self.filter_index = -1
-        self.in_sequence = kwargs.get('in_sequence', False)
-        if self.in_sequence:
-            self.filter_index = -1
+
 
         self.rank = kwargs.get('rank', None)
         self._nodes = OrderedDict()
@@ -634,18 +712,8 @@ class Layer(object):
         self._output_shape: Optional[None, TensorShape, List[TensorShape]] = None
 
 
-        # self._modules = OrderedDict()
-        # self._parameters = OrderedDict()
-        # self._buffers = OrderedDict()
-        # self._backward_hooks = OrderedDict()
-        # self._forward_hooks = OrderedDict()
-        # self._forward_pre_hooks = OrderedDict()
-        # self._state_dict_hooks = OrderedDict()
-        # self._load_state_dict_pre_hooks = OrderedDict()
-
         # self._non_persistent_buffers_set = set()
-        self._input_shape = None
-        self._output_shape = None
+
 
         self.input_filters = None
         self.input_spec = None
@@ -656,13 +724,12 @@ class Layer(object):
 
         self.dump_patches = True
 
-        self._device = get_device()
+
 
     # Trick mypy into not applying contravariance rules to inputs by defining
     # forward as a value, rather than a function.  See also
     # https://github.com/python/mypy/issues/8795
     forward: Callable[..., Any] = _forward_unimplemented
-
 
     def get_root(self):
         if not hasattr(self, '_nodes') or self._nodes is None:
@@ -685,9 +752,6 @@ class Layer(object):
     def name(self, value):
         self._name = value
 
-
-
-
     @property
     def nodes(self):
         """The whole tree structured OrderedDict { uuid : module } , for module to access any node in this structures, ex. Shortcut"""
@@ -700,7 +764,7 @@ class Layer(object):
             for mod in self.modules():
                 mod._nodes = value
 
-    def add_module(self, name, module):
+    def add_module(self, name: str, module: Optional['Module']) -> None:
         """Adds a child module to the current module.
 
         The module can be accessed as an attribute using the given name.
@@ -754,7 +818,8 @@ class Layer(object):
         if module is None:
             raise KeyError("module  can't be None")
         elif isinstance(module, Layer):
-            self.add_module(str(len(self._modules)), module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
+            self.add_module(str(len(self._modules)),
+                            module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
 
         else:
             raise ValueError('Not valid module')
@@ -781,11 +846,12 @@ class Layer(object):
             input_shape (tensor):  the shape representation exclude the batch axis.
 
         """
-        print('Your model will start to rebuild, it will cause lost all existing trainable parameters, will you want to rebuild it?')
+        print(
+            'Your model will start to rebuild, it will cause lost all existing trainable parameters, will you want to rebuild it?')
         ans = input('(Y/N) << ').lower()
         if ans in ['yes', 'y']:
             for name, module in self.named_modules():
-                if module.trainable == True:
+                if module.trainable:
                     module._input_shape = None
                     module._output_shape = None
                     module._built = False
@@ -794,7 +860,7 @@ class Layer(object):
             out = self.forward(dummay_input)
 
     def register_backward_hook(self, hook):
-        r"""Registers a backward hook on the module.
+        """Registers a backward hook on the module.
 
         The hook will be called every time the gradients with respect to module
         inputs are computed. The hook should have the following signature::
@@ -826,53 +892,137 @@ class Layer(object):
         self._backward_hooks[handle.id] = hook
         return handle
 
-    def register_forward_pre_hook(self, hook):
+
+    def register_forward_pre_hook(
+        self,
+        hook: Union[
+            Callable[[T, Tuple[Any, ...]], Optional[Any]],
+            Callable[[T, Tuple[Any, ...], Dict[str, Any]], Optional[Tuple[Any, Dict[str, Any]]]],
+        ],
+        *,
+        prepend: bool = False,
+        with_kwargs: bool = False,
+    ) -> RemovableHandle:
         r"""Registers a forward pre-hook on the module.
 
         The hook will be called every time before :func:`forward` is invoked.
-        It should have the following signature::
 
-            hook(module, input) -> None or modified input
 
-        The hook can modify the input. User can either return a tuple or a
-        single modified value in the hook. We will wrap the value into a tuple
-        if a single value is returned(unless that value is already a tuple).
+        If ``with_kwargs`` is false or not specified, the input contains only
+        the positional arguments given to the module. Keyword arguments won't be
+        passed to the hooks and only to the ``forward``. The hook can modify the
+        input. User can either return a tuple or a single modified value in the
+        hook. We will wrap the value into a tuple if a single value is returned
+        (unless that value is already a tuple). The hook should have the
+        following signature::
+
+            hook(module, args) -> None or modified input
+
+        If ``with_kwargs`` is true, the forward pre-hook will be passed the
+        kwargs given to the forward function. And if the hook modifies the
+        input, both the args and kwargs should be returned. The hook should have
+        the following signature::
+
+            hook(module, args, kwargs) -> None or a tuple of modified input and kwargs
+
+        Args:
+            hook (Callable): The user defined hook to be registered.
+            prepend (bool): If true, the provided ``hook`` will be fired before
+                all existing ``forward_pre`` hooks on this
+                :class:`torch.Layers.Module`. Otherwise, the provided
+                ``hook`` will be fired after all existing ``forward_pre`` hooks
+                on this :class:`torch.Layers.Module`. Note that global
+                ``forward_pre`` hooks registered with
+                :func:`register_module_forward_pre_hook` will fire before all
+                hooks registered by this method.
+                Default: ``False``
+            with_kwargs (bool): If true, the ``hook`` will be passed the kwargs
+                given to the forward function.
+                Default: ``False``
 
         Returns:
             :class:`torch.utils.hooks.RemovableHandle`:
                 a handle that can be used to remove the added hook by calling
                 ``handle.remove()``
         """
-        handle = RemovableHandle(self._forward_pre_hooks)
+        handle = hooks.RemovableHandle(
+            self._forward_pre_hooks,
+            extra_dict=self._forward_pre_hooks_with_kwargs
+        )
         self._forward_pre_hooks[handle.id] = hook
+        if with_kwargs:
+            self._forward_pre_hooks_with_kwargs[handle.id] = True
+
+        if prepend:
+            self._forward_pre_hooks.move_to_end(handle.id, last=False)  # type: ignore[attr-defined]
         return handle
 
-    def register_forward_hook(self, hook):
+    def register_forward_hook(
+        self,
+        hook: Union[
+            Callable[[T, Tuple[Any, ...], Any], Optional[Any]],
+            Callable[[T, Tuple[Any, ...], Dict[str, Any], Any], Optional[Any]],
+        ],
+        *,
+        prepend: bool = False,
+        with_kwargs: bool = False,
+    ) -> RemovableHandle:
         r"""Registers a forward hook on the module.
 
         The hook will be called every time after :func:`forward` has computed an output.
-        It should have the following signature::
 
-            hook(module, input, output) -> None or modified output
+        If ``with_kwargs`` is ``False`` or not specified, the input contains only
+        the positional arguments given to the module. Keyword arguments won't be
+        passed to the hooks and only to the ``forward``. The hook can modify the
+        output. It can modify the input inplace but it will not have effect on
+        forward since this is called after :func:`forward` is called. The hook
+        should have the following signature::
 
-        The hook can modify the output. It can modify the input inplace but
-        it will not have effect on forward since this is called after
-        :func:`forward` is called.
+            hook(module, args, output) -> None or modified output
+
+        If ``with_kwargs`` is ``True``, the forward hook will be passed the
+        ``kwargs`` given to the forward function and be expected to return the
+        output possibly modified. The hook should have the following signature::
+
+            hook(module, args, kwargs, output) -> None or modified output
+
+        Args:
+            hook (Callable): The user defined hook to be registered.
+            prepend (bool): If ``True``, the provided ``hook`` will be fired
+                before all existing ``forward`` hooks on this
+                :class:`torch.Layers.Module`. Otherwise, the provided
+                ``hook`` will be fired after all existing ``forward`` hooks on
+                this :class:`torch.Layers.Module`. Note that global
+                ``forward`` hooks registered with
+                :func:`register_module_forward_hook` will fire before all hooks
+                registered by this method.
+                Default: ``False``
+            with_kwargs (bool): If ``True``, the ``hook`` will be passed the
+                kwargs given to the forward function.
+                Default: ``False``
 
         Returns:
-            :class:`tensorflow.utils.hooks.RemovableHandle`:
+            :class:`torch.utils.hooks.RemovableHandle`:
                 a handle that can be used to remove the added hook by calling
                 ``handle.remove()``
         """
-        handle = RemovableHandle(self._forward_hooks)
+        handle = hooks.RemovableHandle(
+            self._forward_hooks,
+            extra_dict=self._forward_hooks_with_kwargs
+        )
         self._forward_hooks[handle.id] = hook
+        if with_kwargs:
+            self._forward_hooks_with_kwargs[handle.id] = True
+
+        if prepend:
+            self._forward_hooks.move_to_end(handle.id, last=False)  # type: ignore[attr-defined]
         return handle
 
     def _get_name(self):
         return self.__class__.__name__
 
-    def register_buffer(self, name, tensor, persistent: bool = True):
-        r"""Adds a persistent buffer to the module.
+    def register_buffer(self, name: str, tensor: Optional[Tensor], persistent: bool = True) -> None:
+        """Adds a persistent buffer to the module.
 
         This is typically used to register a buffer that should not to be
         considered a model parameter. For example, BatchNorm's ``running_mean``
@@ -905,7 +1055,7 @@ class Layer(object):
             raise KeyError("attribute '{}' already exists".format(name))
         elif tensor is not None and not isinstance(tensor, Tensor) and not is_tensor(tensor):
             raise TypeError("cannot assign '{}' object to buffer '{}' "
-                            "(tensorflow Tensor or None required)".format(type(tensor).__name__, name))
+                            "(jax Tensor or None required)".format(type(tensor).__name__, name))
         else:
 
             self._buffers[name] = tensor
@@ -914,8 +1064,8 @@ class Layer(object):
             else:
                 self._non_persistent_buffers_set.add(name)
 
-    def register_parameter(self, name, param):
-        r"""Adds a parameter to the module.
+    def register_parameter(self, name: str, param: Optional[Parameter]) -> None:
+        """Adds a parameter to the module.
 
         The parameter can be accessed as an attribute using given name.
 
@@ -987,7 +1137,7 @@ class Layer(object):
                 PrintException()
 
     def cuda(self: T, device: Optional[Union[int, str]] = None) -> T:
-        r"""Moves all model parameters and buffers to the GPU.
+        """Moves all model parameters and buffers to the GPU.
 
         This also makes associated parameters and buffers different objects. So
         it should be called before constructing optimizer if the module will
@@ -1010,17 +1160,17 @@ class Layer(object):
             sys.stderr.write('GPU is not available in this machone./n')
 
     def cpu(self: T) -> T:
-        r"""Moves all model parameters and buffers to the CPU.
+        """Moves all model parameters and buffers to the CPU.
 
         Returns:
             Module: self
         """
         if self.get_root()._device != 'cpu':
             self.get_root()._device = 'cpu'
-        return self._apply(lambda t:jax.device_put(t, device=jax.devices("cpu")[0]))
+        return self._apply(lambda t: jax.device_put(t, device=jax.devices("cpu")[0]))
 
     def gpu(self: T, device: Optional[Union[int, str]] = None) -> T:
-        r"""Moves all model parameters and buffers to the GPU.
+        """Moves all model parameters and buffers to the GPU.
 
         This also makes associated parameters and buffers different objects. So
         it should be called before constructing optimizer if the module will
@@ -1071,8 +1221,8 @@ class Layer(object):
 
         return self
 
-    def apply(self: T, fn: Callable[['Module'], None]) -> T:
-        r"""Applies ``fn`` recursively to every submodule (as returned by ``.children()``)
+    def apply(self: T, fn: Callable[['Layer'], None]) -> T:
+        """Applies ``fn`` recursively to every submodule (as returned by ``.children()``)
         as well as self. Typical use includes initializing the parameters of a model
         (see also :ref:`nn-init-doc`).
 
@@ -1091,7 +1241,7 @@ class Layer(object):
 
     #
     # def cuda(self: T, device: Optional[Union[int, str]] = None) -> T:
-    #     r"""Moves all model parameters and buffers to the GPU.
+    #     """Moves all model parameters and buffers to the GPU.
     #
     #     This also makes associated parameters and buffers different objects. So
     #     it should be called before constructing optimizer if the module will
@@ -1108,23 +1258,23 @@ class Layer(object):
     #         return self._apply(lambda t: t)
     #     #return self._apply(lambda t: t.cuda(device))
 
-
-
     @property
     def device(self):
-        return self._device
+        _root = self.get_root()
+        if self.is_root or _root is None:
+            if len(self.weights) == 0:
+                return self.factory_kwargs['device']
+            else:
+                return self.weights[0].device.type
+        else:
+            return _root.device
 
     @device.setter
     def device(self, value):
-        if isinstance(value, str):
-            self._device = value
-            self.to(value)
-
-        elif isinstance(value,  jax._src.lib.xla_client.Device):
-            self._device = value.__str__()
-            self.to(self._device)
-        else:
-            print(value)
+        if isinstance(value,jax._src.lib.Device):
+            value = value.platform
+        self.factory_kwargs['device'] = value
+        self.to(value)
 
     @property
     def built(self):
@@ -1139,9 +1289,11 @@ class Layer(object):
 
         if is_tensor(value) and value.ndim == 1 and value.dtype == Dtype.int32:
             value = TensorShape([None, ] + to_list(to_numpy(value)))
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all(
+                [isinstance(item, numbers.Integral) for item in value]):
             value = TensorShape((None,) + value)
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == Dtype.int32 for item in value]):
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all(
+                [is_tensor(item) and ndim(item) == 1 and item.dtype == Dtype.int32 for item in value]):
             value = [TensorShape(to_list(to_numpy(sh))) for sh in value]
         elif isinstance(value, TensorShape):
             pass
@@ -1163,7 +1315,8 @@ class Layer(object):
 
                 elif isinstance(self._input_shape, list):
                     for k in range(len(self._input_shape)):
-                        self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
+                        self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k],
+                                                                                   name='input_{0}'.format(k))
 
     @property
     def output_shape(self):
@@ -1177,9 +1330,11 @@ class Layer(object):
         else:
             if is_tensor(value) and value.ndim == 1 and value.dtype == Dtype.int32:
                 value = TensorShape([None, ] + to_list(to_numpy(value)))
-            elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
+            elif isinstance(value, (list, tuple)) and len(value) > 0 and all(
+                    [isinstance(item, numbers.Integral) for item in value]):
                 value = TensorShape((None,) + value)
-            elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == Dtype.int32 for item in value]):
+            elif isinstance(value, (list, tuple)) and len(value) > 0 and all(
+                    [is_tensor(item) and ndim(item) == 1 and item.dtype == Dtype.int32 for item in value]):
                 value = [TensorShape(to_list(to_numpy(sh))) for sh in value]
             elif isinstance(value, TensorShape):
                 pass
@@ -1196,11 +1351,12 @@ class Layer(object):
                     self._signature.outputs['output'] = TensorSpec(shape=self._output_shape, name='output')
 
                 elif is_tensor(self._output_shape):
-                    self._signature.outputs['output'] = TensorSpec(shape=TensorShape(to_list(to_numpy(self._output_shape))), name='output')
+                    self._signature.outputs['output'] = TensorSpec(
+                        shape=TensorShape(to_list(to_numpy(self._output_shape))), name='output')
                 else:
                     for k in range(len(self._output_shape)):
-                        self._signature.outputs['output_{0}'.format(k)] = TensorSpec(shape=self._output_shape[k], name='output_{0}'.format(k))
-
+                        self._signature.outputs['output_{0}'.format(k)] = TensorSpec(shape=self._output_shape[k],
+                                                                                     name='output_{0}'.format(k))
 
     @property
     def signature(self):
@@ -1214,19 +1370,20 @@ class Layer(object):
         inspect_args = [arg for arg in list(arg_spec.args) if arg not in ['self', 'kwargs']]
         if isinstance(arg_spec.varargs, str):
             inspect_args.append(arg_spec.varargs)
-        inspect_args=unpack_singleton(inspect_args)
+        inspect_args = unpack_singleton(inspect_args)
 
         if self._signature is None or len(self._signature) == 0 or len(self._signature.inputs) == 0:
             self._signature = Signature(name=self.name)
 
-
             if self._input_shape is not None:
-                if isinstance(self._input_shape, TensorShape) and isinstance(inspect_args,str):
-                    self._signature.inputs[inspect_args] = TensorSpec(shape=TensorShape(self._input_shape), name=inspect_args)
+                if isinstance(self._input_shape, TensorShape) and isinstance(inspect_args, str):
+                    self._signature.inputs[inspect_args] = TensorSpec(shape=TensorShape(self._input_shape),
+                                                                      name=inspect_args)
 
                 elif isinstance(self._input_shape, tuple):
                     for i in range(len(self._input_shape)):
-                        self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
+                        self._signature.inputs["input_{0}".format(i)] = TensorSpec(
+                            shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
             else:
                 for arg in inspect_args:
                     self._signature.inputs[arg] = TensorSpec(shape=None)
@@ -1236,19 +1393,19 @@ class Layer(object):
                     self._signature.outputs["output"] = TensorSpec(shape=TensorShape(self._output_shape), name="output")
                 elif isinstance(self._output_shape, tuple):
                     for i in range(len(self._output_shape)):
-                        self._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
+                        self._signature.outputs["output_{0}".format(i)] = TensorSpec(
+                            shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
             else:
-                self._signature.outputs["output"] =TensorSpec(shape=None)
-        if isinstance(inspect_args,str) and len(self._signature.inputs)==1 and self._signature.inputs.key_list[0] !=inspect_args:
-            self._signature.inputs[inspect_args]=self._signature.inputs.value_list[0]
-            self._signature.inputs.pop(self._signature.inputs.key_list[0] )
-        elif isinstance(inspect_args,list) and len(self._signature.inputs)==len(inspect_args):
-            for  k1,k2 in zip(inspect_args,self._signature.inputs.key_list.copy()):
-                if k1!=k2:
-                    self._signature.inputs[k1]=self._signature.inputs[k2]
+                self._signature.outputs["output"] = TensorSpec(shape=None)
+        if isinstance(inspect_args, str) and len(self._signature.inputs) == 1 and self._signature.inputs.key_list[0] != inspect_args:
+            self._signature.inputs[inspect_args] = self._signature.inputs.value_list[0]
+            self._signature.inputs.pop(self._signature.inputs.key_list[0])
+        elif isinstance(inspect_args, list) and len(self._signature.inputs) == len(inspect_args):
+            for k1, k2 in zip(inspect_args, self._signature.inputs.key_list.copy()):
+                if k1 != k2:
+                    self._signature.inputs[k1] = self._signature.inputs[k2]
                     self._signature.inputs.pop(k2)
         return self._signature
-
 
     @signature.setter
     def signature(self, value):
@@ -1298,20 +1455,10 @@ class Layer(object):
         # The user can pass an optional arbitrary mappable object to `state_dict`, in which case `state_dict` returns
         # back that same object. But if they pass nothing, an `OrederedDict` is created and returned.
 
-    T_destination = TypeVar('T_destination', bound=Mapping[str, Tensor])
 
-    @overload
-    def state_dict(self, destination: T_destination, prefix: str = ..., keep_vars: bool = ...) -> T_destination:
-        ...
-
-    # TODO: annotate with OrderedDict not Dict, but there is a problem:
-    # https://docs.python.org/3/library/typing.html#typing.OrderedDict
-    @overload
-    def state_dict(self, prefix: str = ..., keep_vars: bool = ...) -> Dict[str, Tensor]:
-        ...
 
     def _save_to_state_dict(self, destination, prefix, keep_vars):
-        r"""Saves module state to `destination` dictionary, containing a state
+        """Saves module state to `destination` dictionary, containing a state
         of the module, but not its descendants. This is called on every
         submodule in :meth:`Layer.state_dict`.
         In rare cases, subclasses can achieve class-specific behavior by
@@ -1328,6 +1475,8 @@ class Layer(object):
             if buf is not None and name not in self._non_persistent_buffers_set:
                 destination[prefix + name] = buf if keep_vars else buf.copy().detach()
 
+    T_destination = TypeVar('T_destination', bound=Dict[str, Any])
+
     @overload
     def state_dict(self, destination: T_destination, prefix: str = ..., keep_vars: bool = ...) -> T_destination:
         ...
@@ -1335,7 +1484,7 @@ class Layer(object):
     # TODO: annotate with OrderedDict not Dict, but there is a problem:
     # https://docs.python.org/3/library/typing.html#typing.OrderedDict
     @overload
-    def state_dict(self, prefix: str = ..., keep_vars: bool = ...) -> Dict[str, Tensor]:
+    def state_dict(self, *, prefix: str = ..., keep_vars: bool = ...) -> Dict[str, Any]:
         ...
 
     def state_dict(self, destination=None, prefix='', keep_vars=False):
@@ -1354,16 +1503,18 @@ class Layer(object):
             ['bias', 'weight']
 
         """
-
         if destination is None:
             destination = OrderedDict()
             destination._metadata = OrderedDict()
-        destination._metadata[prefix[:-1]] = local_metadata = dict(version=self._version)
+
+        local_metadata = dict(version=self._version)
+        if hasattr(destination, "_metadata"):
+            destination._metadata[prefix[:-1]] = local_metadata
 
         self._save_to_state_dict(destination, prefix, keep_vars)
         for name, module in self._modules.items():
             if module is not None:
-                module.state_dict(destination, prefix + name + '.', keep_vars=keep_vars)
+                module.state_dict(destination=destination, prefix=prefix + name + '.', keep_vars=keep_vars)
         for hook in self._state_dict_hooks.values():
             hook_result = hook(self, destination, prefix, local_metadata)
             if hook_result is not None:
@@ -1371,7 +1522,7 @@ class Layer(object):
         return destination
 
     def _register_load_state_dict_pre_hook(self, hook):
-        r"""These hooks will be called with arguments: `state_dict`, `prefix`,
+        """These hooks will be called with arguments: `state_dict`, `prefix`,
         `local_metadata`, `strict`, `missing_keys`, `unexpected_keys`,
         `error_msgs`, before loading `state_dict` into `self`. These arguments
         are exactly the same as those of `_load_from_state_dict`.
@@ -1382,9 +1533,9 @@ class Layer(object):
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):
-        r"""Copies parameters and buffers from :attr:`state_dict` into only
+        """Copies parameters and buffers from :attr:`state_dict` into only
         this module, but not its descendants. This is called on every submodule
-        in :meth:`~tensorflow.nn.Module.load_state_dict`. Metadata saved for this
+        in :meth:`~Layer.load_state_dict`. Metadata saved for this
         module in input :attr:`state_dict` is provided as :attr:`local_metadata`.
         For state dicts without metadata, :attr:`local_metadata` is empty.
         Subclasses can achieve class-specific backward compatible loading using
@@ -1392,7 +1543,7 @@ class Layer(object):
 
         .. note::
             :attr:`state_dict` is not the same object as the input
-            :attr:`state_dict` to :meth:`~tensorflow.nn.Module.load_state_dict`. So
+            :attr:`state_dict` to :meth:`~Layer.load_state_dict`. So
             it can be modified.
 
         Arguments:
@@ -1411,7 +1562,7 @@ class Layer(object):
                 keys to this list
             error_msgs (list of str): error messages should be added to this
                 list, and will be reported together in
-                :meth:`~tensorflow.nn.Module.load_state_dict`
+                :meth:`~Layer.load_state_dict`
         """
         for hook in self._load_state_dict_pre_hooks.values():
             hook(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
@@ -1457,16 +1608,16 @@ class Layer(object):
                         unexpected_keys.append(key)
 
     def load_state_dict(self, state_dict, strict=True):
-        r"""Copies parameters and buffers from :attr:`state_dict` into
+        """Copies parameters and buffers from :attr:`state_dict` into
         this module and its descendants. If :attr:`strict` is ``True``, then
         the keys of :attr:`state_dict` must exactly match the keys returned
-        by this module's :meth:`~tensorflow.nn.Module.state_dict` function.
+        by this module's :meth:`~Layer.state_dict` function.
         Args:
             state_dict (dict): a dict containing parameters and
                 persistent buffers.
             strict (bool, optional): whether to strictly enforce that the keys
                 in :attr:`state_dict` match the keys returned by this module's
-                :meth:`~tensorflow.nn.Module.state_dict` function. Default: ``True``
+                :meth:`~Layer.state_dict` function. Default: ``True``
         Returns:
             ``NamedTuple`` with ``missing_keys`` and ``unexpected_keys`` fields:
                 * **missing_keys** is a list of str containing the missing keys
@@ -1518,7 +1669,7 @@ class Layer(object):
         pass
 
     # def forward(self, *input, **kwargs):
-    #     r"""Defines the computation performed at every call.
+    #     """Defines the computation performed at every call.
     #
     #     Should be overridden by all subclasses.
     #
@@ -1533,50 +1684,38 @@ class Layer(object):
     def _slow_forward(self, *input, **kwargs):
         return self._call_impl(*input, **kwargs)
 
-
-    def _call_impl(self, *input, **kwargs):
+    def _call_impl(self, *args, **kwargs):
         forward_call = self.forward
-
-        # Do not call functions when jit is used
-        full_backward_hooks, non_full_backward_hooks = [], []
-        if self._backward_hooks or _global_backward_hooks:
-            full_backward_hooks, non_full_backward_hooks = self._get_backward_hooks()
 
         is_all_numpy = False
         is_built = self._built
 
+        # only do in the root
         if self.is_root:
-            if isinstance(input, (tuple)):
-                is_all_numpy = all([isinstance(inp, np.ndarray) for inp in input])
-                input = tuple([to_tensor(inp, device=get_device()) for inp in input])
+
+            if isinstance(args, tuple):
+                is_all_numpy = all([isinstance(inp, np.ndarray) for inp in args])
+                args = tuple([to_tensor(inp, device=get_device()) for inp in args])
             else:
-                if isinstance(input, np.ndarray):
+                if isinstance(args, np.ndarray):
                     is_all_numpy = True
-                input = to_tensor(input, device=get_device())
-                input = (input,)
-
-        if _global_forward_pre_hooks or self._forward_pre_hooks:
-            for hook in (*_global_forward_pre_hooks.values(), *self._forward_pre_hooks.values()):
-                result = hook(self, input)
-                if result is not None:
-                    if not isinstance(result, tuple):
-                        result = (result,)
-                    input = result
-
-
-
+                args = to_tensor(args, device=get_device())
+                args = (args,)
 
         if not self._built:
-            inp = unpack_singleton(input)
+            inp = unpack_singleton(args)
             if is_tensor(inp):
                 shp = tensor_to_shape(inp, need_exclude_batch_axis=True)
-                self.input_filters = shp[self.filter_index]
                 self.input_shape = shp
+                self.input_filters = shp[self.filter_index]
+
                 if self.is_root:
                     if self._signature is None:
                         self._signature = get_signature(self)
                     if self._signature is not None and len(self._signature.inputs) > 0:
-                        self._signature.inputs[self._signature.inputs.key_list[0]].shape = tensor_to_shape(inp, need_exclude_batch_axis=True, is_singleton=False)
+                        self._signature.inputs[self._signature.inputs.key_list[0]].shape = tensor_to_shape(inp,
+                                                                                                           need_exclude_batch_axis=True,
+                                                                                                           is_singleton=False)
                 del inp
             elif isinstance(inp, (tuple, list)):
                 if isinstance(inp[0], numbers.Number):
@@ -1591,16 +1730,10 @@ class Layer(object):
 
             self._built = True
 
-        bw_hook = None
-        # if full_backward_hooks:
-        #     bw_hook = hooks.BackwardHook(self, full_backward_hooks)
-        #     input = bw_hook.setup_input_hook(input)
-
-
-        # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
-        try:
-
-            result = self.forward(*input, **kwargs)
+        if not (self._backward_hooks or self._backward_pre_hooks or self._forward_hooks or self._forward_pre_hooks
+                or _global_backward_pre_hooks or _global_backward_hooks
+                or _global_forward_hooks or _global_forward_pre_hooks):
+            result = forward_call(*args, **kwargs)
             result = unpack_singleton(result)
 
             if hasattr(self, 'keep_output') and self.keep_output == True:
@@ -1611,19 +1744,95 @@ class Layer(object):
                 if is_tensor(output):  # one output
                     self._output_shape = tensor_to_shape(output)
                 elif isinstance(output, (list, tuple)):
-                    output_shape = tuple(
-                        [tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
+                    output_shape = tuple([tensor_to_shape(item) for item in output if
+                                          item is not None and not isinstance(item, (list, tuple))])
+                    # if not isinstance(item, (list,tuple)) lstm
+                    self._output_shape = unpack_singleton(output_shape)
+            if is_all_numpy == True and self.training == False and self.is_root == True:
+                if is_tensor(result):
+                    return to_numpy(result)
+                elif isinstance(result, (list, tuple)):
+                    result = list(result)
+                    return tuple([to_numpy(res) if is_tensor(res) else res for res in result])
+            return result
+
+
+
+
+        if not (self._backward_hooks or self._backward_pre_hooks or self._forward_hooks or self._forward_pre_hooks
+                or _global_backward_pre_hooks or _global_backward_hooks
+                or _global_forward_hooks or _global_forward_pre_hooks):
+            return forward_call(*args, **kwargs)
+
+        # Do not call functions when jit is used
+        full_backward_hooks, non_full_backward_hooks = [], []
+        backward_pre_hooks = []
+        if self._backward_pre_hooks or _global_backward_pre_hooks:
+            backward_pre_hooks = self._get_backward_pre_hooks()
+
+        if self._backward_hooks or _global_backward_hooks:
+            full_backward_hooks, non_full_backward_hooks = self._get_backward_hooks()
+
+        if _global_forward_pre_hooks or self._forward_pre_hooks:
+            for hook_id, hook in (
+                    *_global_forward_pre_hooks.items(),
+                    *self._forward_pre_hooks.items(),
+            ):
+                if hook_id in self._forward_pre_hooks_with_kwargs:
+                    result = hook(self, args, kwargs)  # type: ignore[misc]
+                    if result is not None:
+                        if isinstance(result, tuple) and len(result) == 2:
+                            args, kwargs = result
+                        else:
+                            raise RuntimeError(
+                                "forward pre-hook must return None or a tuple "
+                                f"of (new_args, new_kwargs), but got {result}."
+                            )
+                else:
+                    result = hook(self, args)
+                    if result is not None:
+                        if not isinstance(result, tuple):
+                            result = (result,)
+                        args = result
+
+
+        bw_hook = None
+        # if full_backward_hooks:
+        #     bw_hook = hooks.BackwardHook(self, full_backward_hooks)
+        #     input = bw_hook.setup_input_hook(input)
+
+        # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
+        try:
+
+            result = forward_call(*args, **kwargs)
+            result = unpack_singleton(result)
+
+            if hasattr(self, 'keep_output') and self.keep_output == True:
+                # make a op
+                self._output_tensor = result
+            if self._output_shape is None or is_built == False:
+                output = result
+                if is_tensor(output):  # one output
+                    self._output_shape = tensor_to_shape(output)
+                elif isinstance(output, (list, tuple)):
+                    output_shape = tuple([tensor_to_shape(item) for item in output if
+                                          item is not None and not isinstance(item, (list, tuple))])
                     # if not isinstance(item, (list,tuple)) lstm
                     self._output_shape = unpack_singleton(output_shape)
 
             if _global_forward_hooks or self._forward_hooks:
-                for hook in (*_global_forward_hooks.values(), *self._forward_hooks.values()):
-                    hook_result = hook(self, input, result)
+                for hook_id, hook in (
+                        *_global_forward_hooks.items(),
+                        *self._forward_hooks.items(),
+                ):
+                    if hook_id in self._forward_hooks_with_kwargs:
+                        hook_result = hook(self, args, kwargs, result)
+                    else:
+                        hook_result = hook(self, args, result)
+
                     if hook_result is not None:
                         result = hook_result
 
-            if bw_hook:
-                result = bw_hook.setup_output_hook(result)
 
             if is_all_numpy == True and self.training == False and self.is_root == True:
                 if is_tensor(result):
@@ -1703,7 +1912,7 @@ class Layer(object):
             elif modules is not None and name in modules:
                 if value is not None:
                     raise TypeError("cannot assign '{}' as child module '{}' "
-                                    "(torch.nn.Module or None expected)"
+                                    "(torch.Layer or None expected)"
                                     .format(value, name))
                 modules[name] = value
             else:
@@ -1728,7 +1937,7 @@ class Layer(object):
             object.__delattr__(self, name)
 
     def _named_members(self, get_members_fn, prefix='', recurse=True):
-        r"""Helper method for yielding various names + members of modules."""
+        """Helper method for yielding various names + members of modules."""
         memo = set()
         modules = self.named_modules(prefix=prefix) if recurse else [(prefix, self)]
         for module_prefix, module in modules:
@@ -1743,7 +1952,7 @@ class Layer(object):
                 yield name, v
 
     def parameters(self, recurse=True):
-        r"""Returns an iterator over module parameters.
+        """Returns an iterator over module parameters.
 
         This is typically passed to an optimizer.
 
@@ -1767,7 +1976,7 @@ class Layer(object):
             yield param
 
     def named_parameters(self, prefix: str = '', recurse: bool = True) -> Iterator[Tuple[str, Tensor]]:
-        r"""Returns an iterator over module parameters, yielding both the
+        """Returns an iterator over module parameters, yielding both the
         name of the parameter as well as the parameter itself.
 
         Args:
@@ -1793,7 +2002,7 @@ class Layer(object):
             yield elem
 
     def buffers(self, recurse=True):
-        r"""Returns an iterator over module buffers.
+        """Returns an iterator over module buffers.
 
         Args:
             recurse (bool): if True, then yields buffers of this module
@@ -1815,7 +2024,7 @@ class Layer(object):
             yield buf
 
     def named_buffers(self, prefix='', recurse=True):
-        r"""Returns an iterator over module buffers, yielding both the
+        """Returns an iterator over module buffers, yielding both the
         name of the buffer as well as the buffer itself.
 
         Args:
@@ -1839,7 +2048,7 @@ class Layer(object):
             yield elem
 
     def children(self):
-        r"""Returns an iterator over immediate children modules.
+        """Returns an iterator over immediate children modules.
 
         Yields:
             Module: a child module
@@ -1848,7 +2057,7 @@ class Layer(object):
             yield module
 
     def named_children(self):
-        r"""Returns an iterator over immediate children modules, yielding both
+        """Returns an iterator over immediate children modules, yielding both
         the name of the module as well as the module itself.
 
         Yields:
@@ -1868,7 +2077,7 @@ class Layer(object):
                 yield name, module
 
     def modules(self):
-        r"""Returns an iterator over all modules in the network.
+        """Returns an iterator over all modules in the network.
 
         Yields:
             Module: a module in the network
@@ -1895,7 +2104,7 @@ class Layer(object):
             yield module
 
     def named_modules(self, memo=None, prefix=''):
-        r"""Returns an iterator over all modules in the network, yielding
+        """Returns an iterator over all modules in the network, yielding
         both the name of the module as well as the module itself.
 
         Yields:
@@ -1933,7 +2142,7 @@ class Layer(object):
                     yield m
 
     def train(self: T, mode: bool = True) -> T:
-        r"""Sets the module in training mode.
+        """Sets the module in training mode.
 
         This has any effect only on certain modules. See documentations of
         particular modules for details of their behaviors in training/evaluation
@@ -1953,14 +2162,14 @@ class Layer(object):
         return self
 
     def eval(self: T) -> T:
-        r"""Sets the module in evaluation mode.
+        """Sets the module in evaluation mode.
 
         This has any effect only on certain modules. See documentations of
         particular modules for details of their behaviors in training/evaluation
         mode, if they are affected, e.g. :class:`Dropout`, :class:`BatchNorm`,
         etc.
 
-        This is equivalent with :meth:`self.train(False) <torch.nn.Module.train>`.
+        This is equivalent with :meth:`self.train(False) <torch.Layer.train>`.
 
         Returns:
             Module: self
@@ -1969,7 +2178,7 @@ class Layer(object):
 
     @property
     def trainable_weights(self) -> List[Parameter]:
-        r"""The list of trainable variables (parameters) of the module.
+        """The list of trainable variables (parameters) of the module.
         Parameters of this module and all its submodules are included.
 
         .. note::
@@ -1982,7 +2191,7 @@ class Layer(object):
 
     @property
     def non_trainable_weights(self) -> List[Parameter]:
-        r"""The list of trainable variables (parameters) of the module.
+        """The list of trainable variables (parameters) of the module.
         Parameters of this module and all its submodules are included.
         .. note::
             The list returned may contain duplicate parameters (e.g. output
@@ -1996,7 +2205,7 @@ class Layer(object):
         return list(self.parameters())
 
     def get_weights(self):
-        return [p.numpy() for p in list(self.parameters())]
+        return [to_numpy(p.data) for p in list(self.parameters())]
 
     def set_weights(self, weights):
         params = self.weights
@@ -2006,11 +2215,10 @@ class Layer(object):
         param_values = [w for w in params]
         for pv, p, w in zip(param_values, params, weights):
             if pv.shape != w.shape:
-                raise ValueError('Layer weight shape ' + str(pv.shape) + ' not compatible with '
-                                                                         'provided weight shape ' + str(w.shape))
+                raise ValueError('Layer weight shape ' + str(pv.shape) + ' not compatible with provided weight shape ' + str(w.shape))
             weight_value_tuples.append((p, w))
         for p, w in weight_value_tuples:
-            p.assign(w.value())
+            p.data=to_tensor(w.value(),requires_grad=True)
 
     @property
     def trainable(self):
@@ -2051,10 +2259,12 @@ class Layer(object):
         else:
             print('{0} parameters have set untrainable'.format(n))
 
-    def extra_repr(self):
+    def _get_name(self):
+        return self.__class__.__name__
+    def extra_repr(self) -> str:
         r"""Set the extra representation of the module
 
-        To print customized extra information, you should reimplement
+        To print customized extra information, you should re-implement
         this method in your own modules. Both single-line and multi-line
         strings are acceptable.
         """
@@ -2110,3 +2320,297 @@ class Layer(object):
         replica._is_replica = True
 
         return replica
+
+
+
+class Sequential(Layer):
+    r"""A sequential container.
+    Modules will be added to it in the order they are passed in the constructor.
+    Alternatively, an ordered dict of modules can also be passed in.
+
+    To make it easier to understand, here is a small example::
+
+        # Example of using Sequential
+        model = nn.Sequential(
+                  nn.Conv2d(1,20,5),
+                  nn.ReLU(),
+                  nn.Conv2d(20,64,5),
+                  nn.ReLU()
+                )
+
+        # Example of using Sequential with OrderedDict
+        model = nn.Sequential(OrderedDict([
+                  ('conv1', nn.Conv2d(1,20,5)),
+                  ('relu1', nn.ReLU()),
+                  ('conv2', nn.Conv2d(20,64,5)),
+                  ('relu2', nn.ReLU())
+                ]))
+    """
+
+    _modules: Dict[str, Layer]  # type: ignore[assignment]
+
+    @overload
+    def __init__(self, *args: Layer) -> None:
+        ...
+
+    @overload
+    def __init__(self, arg: Dict[str, Layer]) -> None:
+        ...
+
+    def __init__(self, *args, name=None):
+        super().__setattr__('_modules', OrderedDict())
+        super(Sequential, self).__init__(name=name)
+        self._built = False
+        args = unpack_singleton(args)
+        if isinstance(args, OrderedDict):
+            for key, module in args.items():
+                self.add_module(key, module)
+        elif len(args) == 1 and isinstance(args, OrderedDict):
+            for key, module in args[0].items():
+                self.add_module(key, module)
+        else:
+            for idx, module in enumerate(args):
+                self.add_module(str(idx), module)
+
+        # self.to(self.device)
+
+    # @property
+    # def output_shape(self):
+    #     if len(self)>0:
+    #         return self[-1]._output_shape
+    #     else:
+    #         return None
+    #
+    # @output_shape.setter
+    # def output_shape(self, value):
+    #     if len(self) > 0:
+    #         if isinstance(value, tf.TensorShape):
+    #             value = to_tensor(value.as_list()).to('int')
+    #         elif isinstance(value, (list, tuple)) and len(value) > 0:
+    #             value = tuple(
+    #                 [to_tensor(tensor_shape.as_list()).to('int') if isinstance(tensor_shape, tf.TensorShape) else to_tensor(tensor_shape).to('int') for tensor_shape in value])
+    #
+    #         else:
+    #             value = to_tensor(value).to('int')
+    #         self[-1]._output_shape = value
+    #         self._signature=None
+
+    def build(self, input_shape: TensorShape):
+        if self._built == False and len(self._modules) > 0:
+            self.__getitem__(0).input_shape = input_shape
+            self._built = True
+
+    def add_module(self, name, module):
+        r"""Adds a child module to the current module.
+
+        The module can be accessed as an attribute using the given name.
+
+        Args:
+            name (string): name of the child module. The child module can be
+                accessed from this module using the given name
+            module (Module): child module to be added to the module.
+        """
+
+        if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
+            last_output = self[-1]._output_shape
+            dummay_input = to_tensor(last_output.get_dummy_tensor()).to(self.device)
+            out = module(dummay_input)
+            self._modules[name] = module
+            if isinstance(out, OrderedDict):
+                self._output_shape = tuple([tensor_to_shape(o, need_exclude_batch_axis=True, is_singleton=False) for o in out.value_list])
+                self.get_root().signature.outputs = OrderedDict()
+                for k, v in out.item_list:
+                    self.get_root().signature.outputs[k] = tensor_to_shape(v, need_exclude_batch_axis=True,
+                                                                           is_singleton=False)
+            else:
+                out = enforce_singleton(out)
+                self._output_shape = tensor_to_shape(out, need_exclude_batch_axis=True, is_singleton=False)
+                self._signature.outputs[self._signature.outputs.key_list[0]].shape = self._output_shape
+                # if len(self.get_root().signature.outputs) > 0:
+                #     self.get_root().signature=get_signature(self)
+                # else:
+                #     self.get_root().signature.outputs['output'] = self._output_shape.copy()
+
+        else:
+            # if not hasattr(module, '_signature') or module._signature is None:
+            #     module._signature = get_signature(module)
+            # sig = copy.deepcopy(module._signature)
+            super(Sequential, self).add_module(name, module)
+            # if len(self) == 1 or self._signature is None:
+            #     self._signature = sig
+            # elif len(self) > 1:
+            #     self._signature.outputs = copy.deepcopy(sig.outputs)
+
+    def remove_at(self, idx):
+        self.__delitem__(idx)
+        if len(self._modules) > 0:
+            self._output_shape = self[-1]._output_shape
+            if isinstance(self._signature, Signature):
+                self._signature.outputs[self._signature.outputs.key_list[0]].shape = self[-1]._output_shape
+
+    def _get_item_by_idx(self, iterator, idx):
+        """Get the idx-th item of the iterator"""
+        size = len(self)
+        idx = idx.__index__()
+        if not -size <= idx < size:
+            raise IndexError('index {} is out of range'.format(idx))
+        idx %= size
+        return next(islice(iterator, idx, None))
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return self.__class__(OrderedDict(list(self._modules.items())[idx]))
+        else:
+            return self._get_item_by_idx(self._modules.values(), idx)
+
+
+    def __setitem__(self, idx, module):
+        key: str = self._get_item_by_idx(self._modules.keys(), idx)
+        return setattr(self, key, module)
+
+    def __delitem__(self, idx):
+        if isinstance(idx, slice):
+            for key in list(self._modules.keys())[idx]:
+                delattr(self, key)
+        else:
+            key = self._get_item_by_idx(self._modules.keys(), idx)
+            delattr(self, key)
+
+        # To preserve numbering
+        str_indices = [str(i) for i in range(len(self._modules))]
+        self._modules = OrderedDict(list(zip(str_indices, self._modules.values())))
+
+    def __len__(self) -> int:
+        return len(self._modules)
+
+
+    def __add__(self, other) -> 'Sequential':
+        if isinstance(other, Sequential):
+            ret = Sequential()
+            for layer in self:
+                ret.append(layer)
+            for layer in other:
+                ret.append(layer)
+            return ret
+        else:
+            raise ValueError('add operator supports only objects '
+                             'of Sequential class, but {} is given.'.format(
+                                 str(type(other))))
+
+    def pop(self, key: Union[int, slice]) -> Layer:
+        v = self[key]
+        del self[key]
+        return v
+
+    def __iadd__(self, other) -> 'Sequential':
+        if isinstance(other, Sequential):
+            offset = len(self)
+            for i, module in enumerate(other):
+                self.add_module(str(i + offset), module)
+            return self
+        else:
+            raise ValueError('add operator supports only objects '
+                             'of Sequential class, but {} is given.'.format(
+                                 str(type(other))))
+
+    def __mul__(self, other: int) -> 'Sequential':
+        if not isinstance(other, int):
+            raise TypeError(f"unsupported operand type(s) for *: {type(self)} and {type(other)}")
+        elif (other <= 0):
+            raise ValueError(f"Non-positive multiplication factor {other} for {type(self)}")
+        else:
+            combined = Sequential()
+            offset = 0
+            for _ in range(other):
+                for module in self:
+                    combined.add_module(str(offset), module)
+                    offset += 1
+            return combined
+
+    def __rmul__(self, other: int) -> 'Sequential':
+        return self.__mul__(other)
+
+    def __imul__(self, other: int) -> 'Sequential':
+        if not isinstance(other, int):
+            raise TypeError(f"unsupported operand type(s) for *: {type(self)} and {type(other)}")
+        elif (other <= 0):
+            raise ValueError(f"Non-positive multiplication factor {other} for {type(self)}")
+        else:
+            len_original = len(self)
+            offset = len(self)
+            for _ in range(other - 1):
+                for i in range(len_original):
+                    self.add_module(str(i + offset), self._modules[str(i)])
+                offset += len_original
+            return self
+
+
+    def __dir__(self):
+        keys = super(Sequential, self).__dir__()
+        keys = [key for key in keys if not key.isdigit()]
+        return keys
+
+
+
+    def __iter__(self) -> Iterator[Layer]:
+        return iter(self._modules.values())
+
+
+    # NB: We can't really type check this function as the type of input
+    # may change dynamically (as is tested in
+    # TestScript.test_sequential_intermediary_types).  Cannot annotate
+    # with Any as TorchScript expects a more precise type
+    # def forward(self, input):
+    #     for module in self:
+    #         input = module(input)
+    #     return input
+
+    def forward(self, *x, **kwargs):
+        x = unpack_singleton(x)
+        for module in self._modules.values():
+            # x = enforce_singleton(x)
+            if isinstance(x, tuple):
+                if len(module.signature.inputs) == len(x):  # self,x
+                    x = module(*x, **kwargs)
+                else:
+                    x = enforce_singleton(x)
+                    x = module(x, **kwargs)
+            else:
+                x = module(x, **kwargs)
+            # class_name=module.__class__.__name__.lower()
+            # if 'lstm' in class_name or 'gru' in class_name:
+            #     if isinstance(x,tuple):
+            #         x,hx=x
+            #         kwargs['hx']=hx
+
+        return x
+
+
+    def append(self, module: Layer) -> 'Sequential':
+        r"""Appends a given module to the end.
+
+        Args:
+            module (Layer): module to append
+        """
+        self.add_module(str(len(self)), module)
+        return self
+
+    def insert(self, index: int, module: Layer) -> 'Sequential':
+        if not isinstance(module, Module):
+            raise AssertionError(
+                'module should be of type: {}'.format(Module))
+        n = len(self._modules)
+        if not (-n <= index <= n):
+            raise IndexError(
+                'Index out of range: {}'.format(index))
+        if index < 0:
+            index += n
+        for i in range(n, index, -1):
+            self._modules[str(i)] = self._modules[str(i - 1)]
+        self._modules[str(index)] = module
+        return self
+
+    def extend(self, sequential) -> 'Sequential':
+        for layer in sequential:
+            self.append(layer)
+        return self

@@ -15,6 +15,8 @@ if get_backend()=='pytorch':
     from trident.backend.pytorch_ops import to_numpy,to_tensor
 elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_ops import  to_numpy,to_tensor
+elif get_backend()=='jax':
+    from trident.backend.jax_ops import  to_numpy,to_tensor
 
 __all__ = ['SavingStrategyCallback','CyclicSavingStrategyCallback']
 

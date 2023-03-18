@@ -18,13 +18,14 @@ import numpy as np
 from trident.backend import iteration_tools
 from trident.data.dataset import ZipDataset
 from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict
 from trident.backend.model import ModelBase, progress_bar
 from trident.callbacks.visualization_callbacks import *
 from trident.data.data_provider import *
 from trident.misc.ipython_utils import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 from trident.backend.tensorspec import TensorSpec, assert_spec_compatibility
+from trident.context import split_path, make_dir_if_need, sanitize_path
 
 __all__ = ['load_torch_as_tf_model']
 

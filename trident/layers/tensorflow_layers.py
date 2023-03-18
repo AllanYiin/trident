@@ -223,7 +223,7 @@ class Embedding(Layer):
             _std=x.std()
             if is_abnormal_number(_mean):
                 _mean=0
-            if is_abnormal_number(_std):
+            if is_abnormal_number(_std) or _std is None or _std<0.02:
                 _std=0.02
             noise = self.noise_intensity * random_normal_like(x, mean=_mean, std=_std, dtype=x.dtype).detach().to(x.device)
             x = x + noise
@@ -383,8 +383,14 @@ class SoftMax(Layer):
             self.add_noise = False
             self.noise_intensity = 0.005
         if self.training:
-            if self.add_noise == True:
-                noise = self.noise_intensity * tf.random.uniform(shape=x.get_shape(),minval=0.0,maxval=1.0,dtype=x.dtype).detach()
+            if self.add_noise:
+                _mean=x.mean()
+                _std=x.var().sqrt()
+                if is_nan(_mean):
+                    _mean=0.0
+                if _std is None or _std < 0.02:
+                    _std = 0.02
+                noise = self.noise_intensity * random_normal_like(x,mean=_mean, std=_std,dtype=x.dtype).to(x.device).detach()
                 x = x + noise
             x = tf.math.log_softmax(x, self.axis)
         else:
@@ -1560,6 +1566,8 @@ class Dropout(Layer):
 class Noise(Layer):
     def __init__(self, stddev=0.1, name=None):
         super(Noise, self).__init__(stddev=stddev, name=name)
+        if stddev is None or stddev < 0.02:
+            stddev = 0.02
         self.stddev=stddev
     def build(self, input_shape:TensorShape):
         if self._built == False:
