@@ -913,7 +913,7 @@ class Layer(nn.Module):
         if isinstance(module, Combine) and module is not None:
             raise TypeError("{} cannot be added".format(
                 torch.typename(module)))
-        elif not isinstance(name, torch._six.string_classes):
+        elif not isinstance(name, str):
             raise TypeError("module name should be a string. Got {}".format(torch.typename(name)))
         elif hasattr(self, name) and name not in self._modules:
             raise KeyError("attribute '{}' already exists".format(name))
@@ -2794,7 +2794,7 @@ class Combine(Layer):
         if not isinstance(module, (nn.Module, Layer)) and module is not None:
             raise TypeError("{} is not a Module subclass".format(
                 torch.typename(module)))
-        elif not isinstance(name, torch._six.string_classes):
+        elif not isinstance(name, str):
             raise TypeError("module name should be a string. Got {}".format(torch.typename(name)))
         elif hasattr(self, name) and name not in self._modules:
             raise KeyError("attribute '{}' already exists".format(name))
