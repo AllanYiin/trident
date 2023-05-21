@@ -5,7 +5,7 @@ from __future__ import print_function
 import os
 import threading
 
-from trident.data.image_common import *
+#from trident.data.image_common import *
 
 from trident.data.utils import *
 from trident.data.samplers import *
