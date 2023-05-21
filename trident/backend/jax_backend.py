@@ -798,7 +798,7 @@ class Layer(object):
             for mod in module.modules():
                 mod.nodes = self.nodes
                 mod.is_root = False
-                mod._device = self._device
+                mod.device = self.device
                 reset_name(mod, self._uid_prefixs)
                 mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
 
@@ -1131,7 +1131,7 @@ class Layer(object):
                             module._buffers[name] = None
                         else:
                             module._buffers[name] = identity(cast(buff, dtype))
-                module._device = self._device
+                module.device = self.device
             except Exception as e:
                 print(e)
                 PrintException()
@@ -1152,8 +1152,8 @@ class Layer(object):
         """
 
         if is_gpu_available:
-            if self.get_root()._device != 'cuda:0':
-                self.get_root()._device = 'cuda:0'
+            if self.get_root().device != 'cuda:0':
+                self.get_root().device = 'cuda:0'
             return self._apply(lambda t: jax.device_put(t, device=jax.devices("gpu")[0]))
 
         else:
@@ -1165,8 +1165,8 @@ class Layer(object):
         Returns:
             Module: self
         """
-        if self.get_root()._device != 'cpu':
-            self.get_root()._device = 'cpu'
+        if self.get_root().device != 'cpu':
+            self.get_root().device = 'cpu'
         return self._apply(lambda t: jax.device_put(t, device=jax.devices("cpu")[0]))
 
     def gpu(self: T, device: Optional[Union[int, str]] = None) -> T:
@@ -1185,8 +1185,8 @@ class Layer(object):
         """
 
         if is_gpu_available:
-            if self.get_root()._device != 'cuda:0':
-                self.get_root()._device = 'cuda:0'
+            if self.get_root().device != 'cuda:0':
+                self.get_root().device = 'cuda:0'
             return self._apply(lambda t: jax.device_put(t, device=jax.devices("gpu")[0]))
         else:
             sys.stderr.write('GPU is not available in this machone./n')

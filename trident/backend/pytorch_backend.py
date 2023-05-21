@@ -1074,10 +1074,11 @@ class Layer(nn.Module):
             if para.requires_grad != value:
                 para.requires_grad = value
                 n += np.prod(list(para.size()))
-        if value:
-            print('{0} parameters have set trainable'.format(n))
-        else:
-            print('{0} parameters have set untrainable'.format(n))
+        if n>0:
+            if value:
+                print('{0} parameters have set trainable'.format(n))
+            else:
+                print('{0} parameters have set untrainable'.format(n))
 
     @property
     def device(self) -> str:

@@ -3550,6 +3550,28 @@ def split(x: Tensor, num_splits=2, axis=-1):
 #         onehot = jnp.transpose(axes)
 #     return onehot
 
+@numpy_compatible
+def binary_cross_entropy(output, target, from_logits=False):
+    """Binary crossentropy between an output tensor and a target tensor.
+      Args:
+          target: A tensor with the same shape as `output`.
+          output: A tensor.
+          from_logits: Whether `output` is expected to be a logits tensor.
+              By default, we consider that `output`
+              encodes a probability distribution.
+      Returns:
+          A tensor.
+      """
+    if from_logits:
+        pass
+    else:
+        output = sigmoid(output)
+    if isinstance(target,(_float,_int )):
+        target=(ones_like(output)*float(target)).to(output.dtype).to(output.device)
+    bce = target *  jnp.log(jnp.clip(output,1e-7,1))
+    bce =bce+ (1 - target) * jnp.log(jnp.clip(1 - output,1e-7,1))
+    return -bce
+
 
 def bbox_iou(bboxes1: Tensor, bboxes2: Tensor):
     """

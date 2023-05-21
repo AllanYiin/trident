@@ -10,7 +10,7 @@ Welcome to trident's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-.. image:: images/trident_logo.png
+.. image:: _static/trident_logo.png
    :width: 500px
    :scale: 50 %
    :alt: alternate text

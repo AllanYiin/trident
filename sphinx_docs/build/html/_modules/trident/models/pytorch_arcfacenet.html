@@ -1,28 +1,27 @@
 <!DOCTYPE html>
 
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     
-    <title>trident.models.pytorch_arcfacenet &#8212; trident 5.5.0 documentation</title>
+    <title>trident.models.pytorch_arcfacenet &#8212; trident 0.7.5 documentation</title>
 
-    <link rel="stylesheet" href="../../../_static/material-icons.css" type="text/css" />
-    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/material-icons.css" />
     <link rel="stylesheet" href="../../../_static/notosanscjkjp.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/roboto.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/material-design-lite-1.3.0/material.deep_orange-indigo.min.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/sphinx_materialdesign_theme.css" type="text/css" />
-    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
     <script src="../../../_static/jquery.js"></script>
     <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="../../../_static/doctools.js"></script>
-    <script src="../../../_static/language_data.js"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
     <script src="../../../_static/sphinx_materialdesign_theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -34,7 +33,7 @@
         <!-- Title -->
         <span class="mdl-layout-title">
             <a class="brand" href="../../../index.html">
-                trident
+                <img class="logo" src="../../../_static/trident_logo.png" alt="trident"/>
             </a>
         </span>
         
@@ -92,9 +91,7 @@
           <!-- Title -->
       <span class="mdl-layout-title">
           <a class="title" href="../../../index.html">
-              <span class="title-text">
-                  trident
-              </span>
+              <img class="logo" src="../../../_static/trident_logo.png" alt="trident"/>
           </a>
       </span>
     
@@ -115,9 +112,7 @@
           <!-- Title -->
       <span class="mdl-layout-title">
           <a class="title" href="../../../index.html">
-              <span class="title-text">
-                  trident
-              </span>
+              <img class="logo" src="../../../_static/trident_logo.png" alt="trident"/>
           </a>
       </span>
     
@@ -137,46 +132,47 @@
         <div class="page-content">
         
   <h1>Source code for trident.models.pytorch_arcfacenet</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">division</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">print_function</span>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">division</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
 
 
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">math</span>
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">uuid</span>
-<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">deque</span>
-<span class="kn">from</span> <span class="nn">copy</span> <span class="k">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
-<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">partial</span>
-<span class="kn">from</span> <span class="nn">itertools</span> <span class="k">import</span> <span class="n">repeat</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">deque</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">repeat</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
-<span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">container_abcs</span>
-<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="k">import</span> <span class="n">init</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">abc</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">init</span>
+<span class="kn">from</span> <span class="nn">trident.models.pretrained_utils</span> <span class="kn">import</span> <span class="n">_make_recovery_model_include_top</span>
+<span class="kn">from</span> <span class="nn">trident.data.vision_transforms</span> <span class="kn">import</span> <span class="n">Resize</span><span class="p">,</span><span class="n">Normalize</span>
+<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="kn">import</span> <span class="n">to_numpy</span><span class="p">,</span> <span class="n">to_tensor</span><span class="p">,</span> <span class="n">Layer</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">,</span> <span class="n">summary</span><span class="p">,</span> <span class="n">fix_layer</span><span class="p">,</span> <span class="n">load</span><span class="p">,</span><span class="n">get_device</span>
+<span class="kn">from</span> <span class="nn">trident.data.image_common</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.data.utils</span> <span class="kn">import</span> <span class="n">download_model_from_google_drive</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_activations</span> <span class="kn">import</span> <span class="n">get_activation</span><span class="p">,</span> <span class="n">Identity</span><span class="p">,</span> <span class="n">Relu</span><span class="p">,</span> <span class="n">PRelu</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_blocks</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_layers</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_normalizations</span> <span class="kn">import</span> <span class="n">get_normalization</span><span class="p">,</span> <span class="n">BatchNorm2d</span><span class="p">,</span> <span class="n">BatchNorm</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_pooling</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.optims.pytorch_trainer</span> <span class="kn">import</span> <span class="o">*</span>
 
-<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="k">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="k">import</span> <span class="n">to_numpy</span><span class="p">,</span> <span class="n">to_tensor</span><span class="p">,</span> <span class="n">Layer</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">,</span>  <span class="n">summary</span>
-<span class="kn">from</span> <span class="nn">trident.data.image_common</span> <span class="k">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">trident.data.utils</span> <span class="k">import</span> <span class="n">download_model_from_google_drive</span>
-<span class="kn">from</span> <span class="nn">trident.layers.pytorch_activations</span> <span class="k">import</span> <span class="n">get_activation</span><span class="p">,</span> <span class="n">Identity</span><span class="p">,</span> <span class="n">Relu</span><span class="p">,</span> <span class="n">PRelu</span>
-<span class="kn">from</span> <span class="nn">trident.layers.pytorch_blocks</span> <span class="k">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">trident.layers.pytorch_layers</span> <span class="k">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">trident.layers.pytorch_normalizations</span> <span class="k">import</span> <span class="n">get_normalization</span><span class="p">,</span> <span class="n">BatchNorm2d</span><span class="p">,</span> <span class="n">BatchNorm</span>
-<span class="kn">from</span> <span class="nn">trident.layers.pytorch_pooling</span> <span class="k">import</span> <span class="o">*</span>
-<span class="kn">from</span> <span class="nn">trident.optims.pytorch_trainer</span> <span class="k">import</span> <span class="o">*</span>
-
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;SEResNet_IR&#39;</span><span class="p">,</span><span class="s1">&#39;BottleNeck_IR_SE&#39;</span><span class="p">,</span><span class="s1">&#39;BottleNeck_IR&#39;</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;SEResNet_IR&#39;</span><span class="p">,</span><span class="s1">&#39;load&#39;</span><span class="p">,</span><span class="s1">&#39;BottleNeck_IR_SE&#39;</span><span class="p">,</span><span class="s1">&#39;BottleNeck_IR&#39;</span><span class="p">,</span><span class="s1">&#39;SEResNet_IR_50_512&#39;</span><span class="p">]</span>
 
 <span class="n">_session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">()</span>
-<span class="n">_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="n">_device</span> <span class="o">=</span> <span class="n">get_device</span><span class="p">()</span>
 <span class="n">_epsilon</span><span class="o">=</span><span class="n">_session</span><span class="o">.</span><span class="n">epsilon</span>
 <span class="n">_trident_dir</span><span class="o">=</span><span class="n">_session</span><span class="o">.</span><span class="n">trident_dir</span>
-<span class="n">_backend</span> <span class="o">=</span> <span class="n">_session</span><span class="o">.</span><span class="n">backend</span>
+<span class="n">_backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">()</span>
 
 <span class="n">dirname</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_trident_dir</span><span class="p">,</span> <span class="s1">&#39;models&#39;</span><span class="p">)</span>
 <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">dirname</span><span class="p">):</span>
@@ -225,7 +221,7 @@
 
 
 
-<div class="viewcode-block" id="SEResNet_IR"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_arcfacenet.SEResNet_IR">[docs]</a><span class="k">def</span> <span class="nf">SEResNet_IR</span><span class="p">(</span><span class="n">num_layers</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span><span class="n">Bottleneck</span><span class="o">=</span><span class="n">BottleNeck_IR_SE</span><span class="p">,</span><span class="n">drop_ratio</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span><span class="n">feature_dim</span><span class="o">=</span><span class="mi">128</span><span class="p">):</span>
+<div class="viewcode-block" id="SEResNet_IR"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_arcfacenet.SEResNet_IR">[docs]</a><span class="k">def</span> <span class="nf">SEResNet_IR</span><span class="p">(</span><span class="n">include_top</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">num_layers</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span><span class="n">Bottleneck</span><span class="o">=</span><span class="n">BottleNeck_IR_SE</span><span class="p">,</span><span class="n">drop_ratio</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span><span class="n">feature_dim</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span><span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">112</span><span class="p">,</span><span class="mi">112</span><span class="p">)):</span>
     <span class="n">blocks</span><span class="o">=</span><span class="n">OrderedDict</span><span class="p">()</span>
     <span class="n">blocks</span><span class="p">[</span><span class="s1">&#39;input_layer&#39;</span><span class="p">]</span><span class="o">=</span><span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span><span class="mi">64</span><span class="p">,</span><span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="n">PRelu</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span><span class="n">normalization</span><span class="o">=</span><span class="s1">&#39;batch&#39;</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;input_layer&#39;</span><span class="p">)</span>
     <span class="n">blocks</span><span class="p">[</span><span class="s1">&#39;body&#39;</span><span class="p">]</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span>
@@ -242,9 +238,37 @@
         <span class="n">BatchNorm</span><span class="p">(),</span>
         <span class="n">name</span><span class="o">=</span><span class="s1">&#39;output_layer&#39;</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="n">Sequential</span><span class="p">(</span><span class="n">blocks</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span></div>
+    <span class="n">facenet</span><span class="o">=</span><span class="n">Sequential</span><span class="p">(</span><span class="n">blocks</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span>
+    <span class="n">facenet</span><span class="o">.</span><span class="n">name</span><span class="o">=</span><span class="n">camel2snake</span><span class="p">(</span><span class="s1">&#39;SEResNet_IR&#39;</span><span class="p">)</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">FaceRecognitionModel</span><span class="p">(</span><span class="n">input_shape</span><span class="o">=</span><span class="n">input_shape</span><span class="p">,</span><span class="n">output</span><span class="o">=</span><span class="n">facenet</span><span class="p">)</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">preprocess_flow</span><span class="o">=</span><span class="p">[</span><span class="n">Resize</span><span class="p">((</span><span class="n">input_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="n">input_shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span><span class="n">keep_aspect</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span><span class="n">Normalize</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">255</span><span class="p">),</span><span class="n">Normalize</span><span class="p">([</span><span class="mf">0.485</span><span class="p">,</span> <span class="mf">0.456</span><span class="p">,</span> <span class="mf">0.406</span><span class="p">],[</span><span class="mf">0.229</span><span class="p">,</span> <span class="mf">0.224</span><span class="p">,</span> <span class="mf">0.225</span><span class="p">])]</span>
+    <span class="c1">#model.summary()</span>
+    <span class="k">return</span> <span class="n">model</span></div>
 
 
+<div class="viewcode-block" id="SEResNet_IR_50_512"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_arcfacenet.SEResNet_IR_50_512">[docs]</a><span class="k">def</span> <span class="nf">SEResNet_IR_50_512</span><span class="p">(</span><span class="n">include_top</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">pretrained</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">freeze_features</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">112</span><span class="p">,</span><span class="mi">112</span><span class="p">),</span>
+             <span class="n">classes</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+             <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">input_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span><span class="o">==</span><span class="mi">3</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">112</span><span class="p">,</span> <span class="mi">112</span><span class="p">)</span>
+    <span class="n">seresnet</span> <span class="o">=</span> <span class="n">SEResNet_IR</span><span class="p">(</span><span class="n">include_top</span><span class="o">=</span><span class="n">include_top</span><span class="p">,</span><span class="n">num_layers</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span><span class="n">Bottleneck</span><span class="o">=</span><span class="n">BottleNeck_IR_SE</span><span class="p">,</span><span class="n">drop_ratio</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span><span class="n">feature_dim</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span><span class="n">input_shape</span><span class="o">=</span><span class="n">input_shape</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pretrained</span><span class="p">:</span>
+        <span class="n">download_model_from_google_drive</span><span class="p">(</span><span class="s1">&#39;1aLYbFvtvsV2gQ16D_vwzrKdbCgij7IoZ&#39;</span><span class="p">,</span> <span class="n">dirname</span><span class="p">,</span> <span class="s1">&#39;arcface_se_50_512.pth&#39;</span><span class="p">)</span>
+        <span class="n">recovery_model</span> <span class="o">=</span> <span class="n">load</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">,</span> <span class="s1">&#39;arcface_se_50_512.pth&#39;</span><span class="p">))</span>
+        <span class="n">recovery_model</span> <span class="o">=</span> <span class="n">fix_layer</span><span class="p">(</span><span class="n">recovery_model</span><span class="p">)</span>
+        <span class="n">recovery_model</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;arcface_se_50_512&#39;</span>
+        <span class="n">recovery_model</span> <span class="o">=</span> <span class="n">_make_recovery_model_include_top</span><span class="p">(</span><span class="n">recovery_model</span><span class="p">,</span> <span class="n">include_top</span><span class="o">=</span><span class="n">include_top</span><span class="p">,</span> <span class="n">classes</span><span class="o">=</span><span class="n">classes</span><span class="p">,</span> <span class="n">freeze_features</span><span class="o">=</span><span class="n">freeze_features</span><span class="p">)</span>
+        <span class="n">seresnet</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">recovery_model</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">seresnet</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">_make_recovery_model_include_top</span><span class="p">(</span><span class="n">seresnet</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">include_top</span><span class="o">=</span><span class="n">include_top</span><span class="p">,</span> <span class="n">classes</span><span class="o">=</span><span class="n">classes</span><span class="p">,</span> <span class="n">freeze_features</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">seresnet</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">input_shape</span> <span class="o">=</span> <span class="n">input_shape</span>
+    <span class="n">seresnet</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">seresnet</span></div>
 
 
 
@@ -270,8 +294,8 @@
     </div>
 
     <div class="mdl-mini-footer__right-section">
-        <div>&copy; Copyright 2020, AllanYiin.</div>
-      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 3.0.3 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
+        <div>&copy; Copyright 2022, AllanYiin.</div>
+      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 5.0.2 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
     </div>
 </footer>
         </main>

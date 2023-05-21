@@ -12,13 +12,7 @@ trident.backend.common module
    :undoc-members:
    :show-inheritance:
 
-trident.backend.function\_tools module
---------------------------------------
 
-.. automodule:: trident.backend.function_tools
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 trident.backend.iteration\_tools module
 ---------------------------------------
@@ -44,13 +38,7 @@ trident.backend.opencv\_backend module
    :undoc-members:
    :show-inheritance:
 
-trident.backend.optimizer module
---------------------------------
 
-.. automodule:: trident.backend.optimizer
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 trident.backend.pillow\_backend module
 --------------------------------------

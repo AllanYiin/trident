@@ -14,16 +14,16 @@ import os
 import sys
 import trident
 import re
-#sys.path.insert(0, os.path.abspath('C:/Users/Allan/PycharmProjects/DeepTrident/trident'))
+#sys.path.insert(0, os.path.abspath('D:/PycharmProjects/trident'))
 
 # -- Project information -----------------------------------------------------
 
 project = 'trident'
-copyright = '2020, AllanYiin'
+copyright = '2022, AllanYiin'
 author = 'AllanYiin'
 
 # The full version, including alpha/beta/rc tags
-release = '5.5.0'
+release = '0.7.5'
 
 
 # -- General configuration ---------------------------------------------------
@@ -75,9 +75,9 @@ source_prefix = 'https://github.com/AllanYiin/trident'
 
 # sphinx.ext.extlinks options
 extlinks = {
-    'tridenttw': (source_prefix + '/docs/zh-tw/%s.md', ''),
-    'tridentcn': (source_prefix + '/docs/zh-cn/%s.md', ''),
-    'tridenten': (source_prefix + '/docs/en-us/%s.md', '')
+    'tridenttw': (source_prefix + '/README.md', ''),
+    'tridentcn': (source_prefix + '/README.md', ''),
+    'tridenten': (source_prefix + '/README.md', '')
 }
 
 # -- Options for HTML output -------------------------------------------------
@@ -86,6 +86,11 @@ extlinks = {
 # a list of builtin themes.
 
 html_theme = 'sphinx_materialdesign_theme'
+
+# Html logo in drawer.
+# Fit in the drawer at the width of image is 240 px.
+html_logo = '_static/trident_logo.png'
+
 html_theme_options = {
     # Specify a list of menu in Header.
     # Tuples forms:

@@ -16,7 +16,7 @@ dist/
 downloads/
 tools/*
 experiments/*
-examples/*
+examples/Results/*
 datav3/*
 internal_tool/*
 eggs/

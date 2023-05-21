@@ -25,7 +25,7 @@ from trident.data.text_transforms import ToHalfWidth, ChineseConvert, bpmf_phone
 
 from trident.data.utils import _delete_h
 
-from trident.backend.opencv_backend import image2array, array2image
+from trident.backend.opencv_backend import image2array, array2image,array2mask
 from trident.data.image_common import list_images
 from trident.data.data_provider import *
 from trident.data.dataset import *
@@ -682,7 +682,23 @@ def load_examples_data(dataset_name):
         tar_file_path = os.path.join(dirname, 'pokemon.tar')
         extract_archive(tar_file_path, dirname, archive_format='tar')
         extract_path = os.path.join(dirname, 'pokemon')
+
         dataset = load_folder_images(dataset_name, extract_path, folder_as_label=False)
+        make_dir_if_need(os.path.join(extract_path,'masks'))
+        for impath in dataset.traindata.data.items:
+            folder,filename,ext=split_path(impath)
+            arr = image2array(impath)
+            arr1=np.zeros_like(arr)
+            arr1[:,1:,:]=arr[:,:-1,:]-arr[:,1:,:]
+            arr2 = np.zeros_like(arr)
+            arr2[1:,:, :] = arr[:-1,:, :] - arr[1:,:, :]
+            arr1=(np.abs(arr1)+np.abs(arr2)).sum(-1)
+            mask=np.not_equal(np.equal(arr1,0).astype(np.float32)+np.equal(arr.mean(-1),arr.mean(-1)[2,2]).astype(np.float32),2).astype(np.float32)*255
+            mask[mask>220]=255
+            mask[mask<=220] = 0
+            array2mask(mask).save(os.path.join(folder, 'masks', filename + '.png'))
+
+
         print('get pokemon images :{0}'.format(len(dataset)))
         return dataset
 

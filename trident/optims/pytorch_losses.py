@@ -91,7 +91,7 @@ def _class_unique_value_process(uniques,counts):
 class _ClassificationLoss(Loss):
     """Calculate loss for  complex classification task."""
 
-    def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
+    def __init__(self, axis=1, sample_weight=None,  class_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
                  cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
                  ohem_thresh=0.1, input_names=None, output_names=None,
                  name=None, **kwargs):

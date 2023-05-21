@@ -7,7 +7,7 @@ from typing import Callable, Any
 
 import numpy as np
 import torch
-
+import trident.backend.dtype as Dtype
 from trident.backend.common import get_session, OrderedDict
 from trident.backend.tensorspec import *
 
@@ -128,7 +128,7 @@ class Loss(object):
     #   """
     #   NotImplementedError('Must be implemented in subclasses.')
 
-    def _get_reduction(self, loss):
+    def _get_reduction(self, loss:'Tensor'):
         reduction_axis = list(range(ndim(loss)))
         if ndim(loss) == 0 or self.reduction == 'none':
             return loss
@@ -139,7 +139,12 @@ class Loss(object):
             loss = reshape(loss, (int_shape(loss)[0], -1))
             return loss.mean(0).mean()
         elif self.reduction in ('mean', 'batch_mean'):
-            return loss.mean()
+            if loss.data.dtype == Dtype.float16:
+                loss=loss.view(-1)
+                loss=loss/len(loss)
+                return loss.sum()
+            else:
+                return loss.mean()
         elif self.reduction in ('sum', 'batch_sum'):
             return loss.sum()
         else:

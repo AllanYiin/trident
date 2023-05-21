@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import builtins
 import copy
+from copy import deepcopy
 import functools
 import gc
 import inspect
@@ -804,7 +805,6 @@ class Layer(tf.Module):
             for mod in module.modules():
                 mod.nodes = self.nodes
                 mod.is_root = False
-                mod._device = self._device
                 reset_name(mod, self._uid_prefixs)
                 mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
 
@@ -1137,7 +1137,7 @@ class Layer(tf.Module):
                             module._buffers[name] = None
                         else:
                             module._buffers[name] = tf.identity(cast(buff, dtype))
-                module._device = self._device
+                module.device = self.device
             except Exception as e:
                 print(e)
                 PrintException()
@@ -1158,9 +1158,9 @@ class Layer(tf.Module):
         """
 
         if tf.test.is_gpu_available:
-            if self.get_root()._device != '/gpu:0':
-                self.get_root()._device = '/gpu:0'
-                with tf.device(self._device):
+            if self.get_root().device != '/gpu:0':
+                self.get_root().device = '/gpu:0'
+                with tf.device(self.device):
                     return self._apply(lambda t: tf.identity(t))
 
         else:
@@ -1172,9 +1172,9 @@ class Layer(tf.Module):
         Returns:
             Module: self
         """
-        if self.get_root()._device != '/cpu:0':
+        if self.get_root().device != '/cpu:0':
             with tf.device('/cpu:0'):
-                self.get_root()._device = '/cpu:0'
+                self.get_root().device = '/cpu:0'
                 return self._apply(lambda t: tf.identity(t))
 
     def gpu(self: T, device: Optional[Union[int, str]] = None) -> T:
@@ -1193,9 +1193,9 @@ class Layer(tf.Module):
         """
 
         if tf.test.is_gpu_available:
-            if self.get_root()._device != '/gpu:0':
-                self.get_root()._device = '/gpu:0'
-                with tf.device(self._device):
+            if self.get_root().device != '/gpu:0':
+                self.get_root().device = '/gpu:0'
+                with tf.device(self.device):
                     return self._apply(lambda t: tf.identity(t))
 
         else:
@@ -1306,8 +1306,8 @@ class Layer(tf.Module):
 
     @device.setter
     def device(self, value):
-        if isinstance(value, tf.device):
-            value =value.__str__()
+        # if isinstance(value, tf.device):
+        value =value.__str__()
         self.factory_kwargs['device'] = value
         self.to(value)
 
@@ -1489,7 +1489,7 @@ class Layer(tf.Module):
                 elif isinstance(v, (str, bool, numbers.Number)) or k in ['_nodes']:
                     setattr(shadow, k, v)
                 else:
-                    setattr(shadow, k, copy.deepcopy(v))
+                    setattr(shadow, k, deepcopy(v))
         shadow.load_state_dict(self.state_dict())
         shadow.to(self.device)
         return shadow
@@ -1724,7 +1724,7 @@ class Layer(tf.Module):
         return self._call_impl(*input, **kwargs)
 
     @tf.Module.with_name_scope
-    def _call_impl(self, *input, **kwargs):
+    def _call_impl(self, *args, **kwargs):
         forward_call = self.forward
 
         is_all_numpy = False
@@ -2283,15 +2283,12 @@ class Layer(tf.Module):
         for name, para in self.named_parameters():
             if para is not None and para.trainable != value:
                 para._trainable = value
-
                 n += np.prod(to_numpy(int_shape(para)))
-                need_update = True
-        if not need_update:
-            print('no parameter trainable state is changed')
-        elif value:
-            print('{0} parameters have set trainable'.format(n))
-        else:
-            print('{0} parameters have set untrainable'.format(n))
+        if n > 0:
+            if value:
+                print('{0} parameters have set trainable'.format(n))
+            else:
+                print('{0} parameters have set untrainable'.format(n))
 
     def _get_name(self):
         return self.__class__.__name__
@@ -2471,12 +2468,12 @@ class Sequential(Layer):
         else:
             if not hasattr(module, '_signature') or module._signature is None:
                 module._signature = get_signature(module)
-            sig = copy.deepcopy(module._signature)
+            sig =get_signature(module)
             super(Sequential, self).add_module(name, module)
             if len(self) == 1 or self._signature is None:
                 self._signature = sig
             elif len(self) > 1:
-                self._signature.outputs = copy.deepcopy(sig.outputs)
+                self._signature.outputs = deepcopy(sig.outputs)
 
     def remove_at(self, idx):
         self.__delitem__(idx)
@@ -2517,7 +2514,7 @@ class Sequential(Layer):
         str_indices = [str(i) for i in range(len(self._modules))]
         self._modules = OrderedDict(list(zip(str_indices, self._modules.values())))
 
-    @_copy_to_script_wrapper
+
     def __len__(self) -> int:
         return len(self._modules)
 
@@ -2535,7 +2532,7 @@ class Sequential(Layer):
                              'of Sequential class, but {} is given.'.format(
                                  str(type(other))))
 
-    def pop(self, key: Union[int, slice]) -> nn.Module:
+    def pop(self, key: Union[int, slice]) -> tf.Module:
         v = self[key]
         del self[key]
         return v
@@ -2582,7 +2579,7 @@ class Sequential(Layer):
                 offset += len_original
             return self
 
-    @_copy_to_script_wrapper
+
     def __dir__(self):
         keys = super(Sequential, self).__dir__()
         keys = [key for key in keys if not key.isdigit()]
@@ -2591,8 +2588,8 @@ class Sequential(Layer):
 
 
 
-    @_copy_to_script_wrapper
-    def __iter__(self) -> Iterator[nn.Module]:
+
+    def __iter__(self) -> Iterator[tf.Module]:
         return iter(self._modules.values())
 
 
@@ -2626,16 +2623,16 @@ class Sequential(Layer):
         return x
 
 
-    def append(self, module: nn.Module) -> 'Sequential':
+    def append(self, module: tf.Module) -> 'Sequential':
         r"""Appends a given module to the end.
 
         Args:
-            module (nn.Module): module to append
+            module (tf.Module): module to append
         """
         self.add_module(str(len(self)), module)
         return self
 
-    def insert(self, index: int, module: nn.Module) -> 'Sequential':
+    def insert(self, index: int, module: tf.Module) -> 'Sequential':
         if not isinstance(module, Module):
             raise AssertionError(
                 'module should be of type: {}'.format(Module))
@@ -2693,7 +2690,7 @@ class ModuleList(Layer):
             idx += len(self)
         return str(idx)
 
-    # @_copy_to_script_wrapper
+
     def __getitem__(self, idx: int) -> Layer:
         if isinstance(idx, slice):
             return self.__class__(list(self._modules.values())[idx])
@@ -2714,18 +2711,18 @@ class ModuleList(Layer):
         str_indices = [str(i) for i in range(len(self._modules))]
         self._modules = OrderedDict(list(zip(str_indices, self._modules.values())))
 
-    # @_copy_to_script_wrapper
+
     def __len__(self) -> int:
         return len(self._modules)
 
-    # @_copy_to_script_wrapper
+
     def __iter__(self) -> typing.Iterator[Layer]:
         return iter(self._modules.values())
 
     def __iadd__(self: T, modules: Iterable[Layer]) -> T:
         return self.extend(modules)
 
-    # @_copy_to_script_wrapper
+
     def __dir__(self):
         keys = super(ModuleList, self).__dir__()
         keys = [key for key in keys if not key.isdigit()]
@@ -2736,7 +2733,7 @@ class ModuleList(Layer):
 
         Arguments:
             index (int): index to insert.
-            module (nn.Module): module to insert
+            module (tf.Module): module to insert
         """
         for i in range(len(self._modules), index, -1):
             self._modules[str(i)] = self._modules[str(i - 1)]
@@ -2746,7 +2743,7 @@ class ModuleList(Layer):
         r"""Appends a given module to the end of the list.
 
         Arguments:
-            module (nn.Module): module to append
+            module (tf.Module): module to append
         """
         self.add_module(str(len(self)), module)
         return self
@@ -2772,18 +2769,18 @@ class ModuleList(Layer):
 class ModuleDict(Layer):
     r"""Holds submodules in a dictionary.
 
-    :class:`~torch.nn.ModuleDict` can be indexed like a regular Python dictionary,
+    :class:`~torch.tf.ModuleDict` can be indexed like a regular Python dictionary,
     but modules it contains are properly registered, and will be visible by all
-    :class:`~torch.nn.Module` methods.
+    :class:`~torch.tf.Module` methods.
 
-    :class:`~torch.nn.ModuleDict` is an **ordered** dictionary that respects
+    :class:`~torch.tf.ModuleDict` is an **ordered** dictionary that respects
 
     * the order of insertion, and
 
-    * in :meth:`~torch.nn.ModuleDict.update`, the order of the merged ``OrderedDict``
-      or another :class:`~torch.nn.ModuleDict` (the argument to :meth:`~torch.nn.ModuleDict.update`).
+    * in :meth:`~torch.tf.ModuleDict.update`, the order of the merged ``OrderedDict``
+      or another :class:`~torch.tf.ModuleDict` (the argument to :meth:`~torch.tf.ModuleDict.update`).
 
-    Note that :meth:`~torch.nn.ModuleDict.update` with other unordered mapping
+    Note that :meth:`~torch.tf.ModuleDict.update` with other unordered mapping
     types (e.g., Python's plain ``dict``) does not preserve the order of the
     merged mapping.
 
@@ -2793,14 +2790,14 @@ class ModuleDict(Layer):
 
     Example::
 
-        class MyModule(nn.Module):
+        class MyModule(tf.Module):
             def __init__(self):
                 super(MyModule, self).__init__()
-                self.choices = nn.ModuleDict({
+                self.choices = tf.ModuleDict({
                         'conv': nn.Conv2d(10, 10, 3),
                         'pool': nn.MaxPool2d(3)
                 })
-                self.activations = nn.ModuleDict([
+                self.activations = tf.ModuleDict([
                         ['lrelu', nn.LeakyReLU()],
                         ['prelu', nn.PReLU()]
                 ])
@@ -2819,7 +2816,7 @@ class ModuleDict(Layer):
             if len(modules) > 0:
                 self.update(modules)
 
-    # @_copy_to_script_wrapper
+
     def __getitem__(self, key: str) -> Layer:
         return self._modules[key]
 
@@ -2831,15 +2828,15 @@ class ModuleDict(Layer):
     def __delitem__(self, key: str) -> None:
         del self._modules[key]
 
-    # @_copy_to_script_wrapper
+
     def __len__(self) -> int:
         return len(self._modules)
 
-    # @_copy_to_script_wrapper
+
     def __iter__(self):
         return iter(self._modules)
 
-    # @_copy_to_script_wrapper
+
     def __contains__(self, key: str) -> bool:
         return key in self._modules
 
@@ -2858,35 +2855,35 @@ class ModuleDict(Layer):
         del self[key]
         return v
 
-    # @_copy_to_script_wrapper
+
     def keys(self) -> Iterable[str]:
         r"""Return an iterable of the ModuleDict keys.
         """
         return self._modules.keys()
 
-    # @_copy_to_script_wrapper
+
     def items(self) -> Iterable[Tuple[str, Layer]]:
         r"""Return an iterable of the ModuleDict key/value pairs.
         """
         return self._modules.items()
 
-    # @_copy_to_script_wrapper
+
     def values(self) -> Iterable[Layer]:
         r"""Return an iterable of the ModuleDict values.
         """
         return self._modules.values()
 
     def update(self, modules: Mapping[str, Layer]) -> None:
-        r"""Update the :class:`~torch.nn.ModuleDict` with the key-value pairs from a
+        r"""Update the :class:`~torch.tf.ModuleDict` with the key-value pairs from a
         mapping or an iterable, overwriting existing keys.
 
         .. note::
-            If :attr:`modules` is an ``OrderedDict``, a :class:`~torch.nn.ModuleDict`, or
+            If :attr:`modules` is an ``OrderedDict``, a :class:`~torch.tf.ModuleDict`, or
             an iterable of key-value pairs, the order of new elements in it is preserved.
 
         Arguments:
-            modules (iterable): a mapping (dictionary) from string to :class:`~torch.nn.Module`,
-                or an iterable of key-value pairs of type (string, :class:`~torch.nn.Module`)
+            modules (iterable): a mapping (dictionary) from string to :class:`~torch.tf.Module`,
+                or an iterable of key-value pairs of type (string, :class:`~torch.tf.Module`)
         """
         if not isinstance(modules, abc.Iterable):
             raise TypeError("ModuleDict.update should be called with an "
@@ -3488,8 +3485,8 @@ def fix_layer(layer: Layer):
     """
     if not hasattr(layer, 'is_root'):
         layer.is_root = True
-    if not hasattr(layer, '_device'):
-        layer._device = get_device()
+    if not hasattr(layer, 'device'):
+        layer.device = get_device()
 
     def get_root(self):
         if not hasattr(self, '_nodes') or self._nodes is None or len(self._nodes) < 2:

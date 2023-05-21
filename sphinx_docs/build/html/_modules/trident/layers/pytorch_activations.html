@@ -1,28 +1,27 @@
 <!DOCTYPE html>
 
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     
-    <title>trident.layers.pytorch_activations &#8212; trident 5.5.0 documentation</title>
+    <title>trident.layers.pytorch_activations &#8212; trident 0.7.5 documentation</title>
 
-    <link rel="stylesheet" href="../../../_static/material-icons.css" type="text/css" />
-    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/material-icons.css" />
     <link rel="stylesheet" href="../../../_static/notosanscjkjp.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/roboto.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/material-design-lite-1.3.0/material.deep_orange-indigo.min.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/sphinx_materialdesign_theme.css" type="text/css" />
-    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
     <script src="../../../_static/jquery.js"></script>
     <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="../../../_static/doctools.js"></script>
-    <script src="../../../_static/language_data.js"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
     <script src="../../../_static/sphinx_materialdesign_theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -34,7 +33,7 @@
         <!-- Title -->
         <span class="mdl-layout-title">
             <a class="brand" href="../../../index.html">
-                trident
+                <img class="logo" src="../../../_static/trident_logo.png" alt="trident"/>
             </a>
         </span>
         
@@ -92,9 +91,7 @@
           <!-- Title -->
       <span class="mdl-layout-title">
           <a class="title" href="../../../index.html">
-              <span class="title-text">
-                  trident
-              </span>
+              <img class="logo" src="../../../_static/trident_logo.png" alt="trident"/>
           </a>
       </span>
     
@@ -115,9 +112,7 @@
           <!-- Title -->
       <span class="mdl-layout-title">
           <a class="title" href="../../../index.html">
-              <span class="title-text">
-                  trident
-              </span>
+              <img class="logo" src="../../../_static/trident_logo.png" alt="trident"/>
           </a>
       </span>
     
@@ -137,74 +132,152 @@
         <div class="page-content">
         
   <h1>Source code for trident.layers.pytorch_activations</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">division</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">print_function</span>
-
+<span></span><span class="sd">&quot;&quot;&quot;Activation Layers&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">division</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
+<span class="kn">import</span> <span class="nn">builtins</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
 
 <span class="kn">import</span> <span class="nn">string</span>
-<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">partial</span>
-<span class="kn">from</span> <span class="nn">pydoc</span> <span class="k">import</span> <span class="n">locate</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
+<span class="kn">from</span> <span class="nn">pydoc</span> <span class="kn">import</span> <span class="n">locate</span>
 
 <span class="kn">import</span> <span class="nn">six</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
 <span class="kn">import</span> <span class="nn">torch.nn.modules.activation</span> <span class="k">as</span> <span class="nn">af</span>
-<span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="k">import</span> <span class="n">Parameter</span>
 
-<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="k">import</span> <span class="n">get_function</span><span class="p">,</span> <span class="n">get_class</span><span class="p">,</span> <span class="n">camel2snake</span><span class="p">,</span> <span class="n">enforce_singleton</span>
-<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="k">import</span> <span class="n">Layer</span>
-<span class="kn">from</span> <span class="nn">trident.backend.pytorch_ops</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="kn">import</span> <span class="n">get_function</span><span class="p">,</span> <span class="n">get_class</span><span class="p">,</span> <span class="n">camel2snake</span><span class="p">,</span><span class="n">snake2camel</span><span class="p">,</span> <span class="n">enforce_singleton</span><span class="p">,</span><span class="n">TensorShape</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="kn">import</span> <span class="n">Layer</span><span class="p">,</span><span class="n">Parameter</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_ops</span> <span class="kn">import</span> <span class="o">*</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Identity&#39;</span><span class="p">,</span> <span class="s1">&#39;Sigmoid&#39;</span><span class="p">,</span> <span class="s1">&#39;Tanh&#39;</span><span class="p">,</span> <span class="s1">&#39;Relu&#39;</span><span class="p">,</span> <span class="s1">&#39;Relu6&#39;</span><span class="p">,</span> <span class="s1">&#39;LeakyRelu&#39;</span><span class="p">,</span> <span class="s1">&#39;LeakyRelu6&#39;</span><span class="p">,</span> <span class="s1">&#39;SmoothRelu&#39;</span><span class="p">,</span> <span class="s1">&#39;PRelu&#39;</span><span class="p">,</span> <span class="s1">&#39;Swish&#39;</span><span class="p">,</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Identity&#39;</span><span class="p">,</span> <span class="s1">&#39;Sigmoid&#39;</span><span class="p">,</span> <span class="s1">&#39;Tanh&#39;</span><span class="p">,</span><span class="s1">&#39;TanhExp&#39;</span><span class="p">,</span><span class="s1">&#39;ExpTanh&#39;</span><span class="p">,</span> <span class="s1">&#39;Relu&#39;</span><span class="p">,</span> <span class="s1">&#39;Relu6&#39;</span><span class="p">,</span><span class="s1">&#39;SquaredRelu&#39;</span><span class="p">,</span> <span class="s1">&#39;LeakyRelu&#39;</span><span class="p">,</span> <span class="s1">&#39;LeakyRelu6&#39;</span><span class="p">,</span> <span class="s1">&#39;SmoothRelu&#39;</span><span class="p">,</span><span class="s1">&#39;CRelu&#39;</span><span class="p">,</span><span class="s1">&#39;Silu&#39;</span><span class="p">,</span> <span class="s1">&#39;PRelu&#39;</span><span class="p">,</span> <span class="s1">&#39;Swish&#39;</span><span class="p">,</span>
            <span class="s1">&#39;Elu&#39;</span><span class="p">,</span> <span class="s1">&#39;HardSigmoid&#39;</span><span class="p">,</span> <span class="s1">&#39;HardSwish&#39;</span><span class="p">,</span> <span class="s1">&#39;Selu&#39;</span><span class="p">,</span> <span class="s1">&#39;LecunTanh&#39;</span><span class="p">,</span> <span class="s1">&#39;SoftSign&#39;</span><span class="p">,</span> <span class="s1">&#39;SoftPlus&#39;</span><span class="p">,</span> <span class="s1">&#39;HardTanh&#39;</span><span class="p">,</span> <span class="s1">&#39;Logit&#39;</span><span class="p">,</span>
-           <span class="s1">&#39;LogLog&#39;</span><span class="p">,</span> <span class="s1">&#39;Mish&#39;</span><span class="p">,</span> <span class="s1">&#39;Softmax&#39;</span><span class="p">,</span> <span class="s1">&#39;BertGelu&#39;</span><span class="p">,</span> <span class="s1">&#39;GptGelu&#39;</span><span class="p">,</span><span class="s1">&#39;LogSoftmax&#39;</span><span class="p">,</span>  <span class="s1">&#39;get_activation&#39;</span><span class="p">]</span>
-
+           <span class="s1">&#39;LogLog&#39;</span><span class="p">,</span> <span class="s1">&#39;Mish&#39;</span><span class="p">,</span><span class="s1">&#39;HardMish&#39;</span><span class="p">,</span> <span class="s1">&#39;Softmax&#39;</span><span class="p">,</span> <span class="s1">&#39;Gelu&#39;</span><span class="p">,</span> <span class="s1">&#39;GptGelu&#39;</span><span class="p">,</span><span class="s1">&#39;SIREN&#39;</span><span class="p">,</span> <span class="s1">&#39;LogSoftmax&#39;</span><span class="p">,</span> <span class="s1">&#39;get_activation&#39;</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="Identity"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Identity">[docs]</a><span class="k">class</span> <span class="nc">Identity</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Identity activation Layer</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Identity</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Identity activation Layer</span>
+<span class="sd">    A placeholder identity operator that is argument-insensitive.</span>
 
-<div class="viewcode-block" id="Identity.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Identity.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; Identity()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+<span class="sd">        tensor([-3.0, -1.0, 0.0, 2.0])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Identity</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Identity.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Identity.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">x</span></div></div>
 
 
 <div class="viewcode-block" id="Relu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Relu">[docs]</a><span class="k">class</span> <span class="nc">Relu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Relu activation Layer</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Relu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+    <span class="sd">&quot;&quot;&quot;Rectified Linear Unit activation function.</span>
 
-<div class="viewcode-block" id="Relu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Relu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">relu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
+<span class="sd">    With default values, it returns element-wise max(x, 0).</span>
+<span class="sd">    Otherwise, it follows:</span>
+
+<span class="sd">        ```</span>
+<span class="sd">        f(x) = max_value if x &gt;= max_value</span>
+<span class="sd">        f(x) = x if threshold &lt;= x &lt; max_value</span>
+<span class="sd">        f(x) = negative_slope * (x - threshold) otherwise</span>
+
+<span class="sd">        ```</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; Relu()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Relu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span>
+
+<div class="viewcode-block" id="Relu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Relu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">        x: Input tensor.</span>
+
+<span class="sd">        Returns: output tensor</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;inplace&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">x</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">relu_</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
+
 
 <div class="viewcode-block" id="Relu6"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Relu6">[docs]</a><span class="k">class</span> <span class="nc">Relu6</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Relu6 activation Layer</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Relu6</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="sd">&quot;&quot;&quot;Rectified Linear Unit  6 activation function.</span>
 
-<div class="viewcode-block" id="Relu6.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Relu6.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">relu6</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
+<span class="sd">    With default values, it returns element-wise min(max(x, 0),6).</span>
+<span class="sd">    Otherwise, it follows:</span>
+
+<span class="sd">            ```</span>
+<span class="sd">            f(x) = 6 if x &gt;= 6</span>
+<span class="sd">            f(x) = x if threshold &lt;= x &lt; 6</span>
+<span class="sd">            f(x) = negative_slope * (x - threshold) otherwise</span>
+
+<span class="sd">            ```</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; Relu6()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Relu6</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span>
+
+<div class="viewcode-block" id="Relu6.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Relu6.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;inplace&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">x</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clip_</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">relu_</span><span class="p">(</span><span class="n">x</span><span class="p">),</span><span class="nb">max</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">x</span><span class="p">),</span><span class="nb">max</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="LeakyRelu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LeakyRelu">[docs]</a><span class="k">class</span> <span class="nc">LeakyRelu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;leaky_relu activation Layer</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">LeakyRelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span>
+    <span class="sd">&quot;&quot;&quot;Leaky version of a Rectified Linear Unit.</span>
 
-<div class="viewcode-block" id="LeakyRelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LeakyRelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">leaky_relu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span></div>
+<span class="sd">    It allows a small gradient when the unit is not active:</span>
+
+<span class="sd">          ```</span>
+<span class="sd">            f(x) = alpha * x if x &lt; 0</span>
+<span class="sd">            f(x) = x if x &gt;= 0</span>
+
+<span class="sd">          ```</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; LeakyRelu()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">LeakyRelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span>
+
+<div class="viewcode-block" id="LeakyRelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LeakyRelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;inplace&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">x</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">leaky_relu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span><span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">leaky_relu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+        
+
 
 <div class="viewcode-block" id="LeakyRelu.extra_repr"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LeakyRelu.extra_repr">[docs]</a>    <span class="k">def</span> <span class="nf">extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">s</span> <span class="o">=</span> <span class="s1">&#39;alpha=</span><span class="si">{alpha}</span><span class="s1">&#39;</span>
@@ -212,240 +285,599 @@
 
 
 <div class="viewcode-block" id="LeakyRelu6"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LeakyRelu6">[docs]</a><span class="k">class</span> <span class="nc">LeakyRelu6</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;leaky_relu6 activation Layer</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">LeakyRelu6</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="sd">&quot;&quot;&quot;Leaky version of a Rectified Linear Unit.6</span>
+<span class="sd">    It allows a small gradient when the unit is not active:</span>
+<span class="sd">          ```</span>
+<span class="sd">            f(x) = alpha * x if x &lt; 0</span>
+<span class="sd">            f(x) = x if  6&gt;=x &gt;= 0</span>
+<span class="sd">            f(x) = 6 if  x &gt; 6</span>
 
-<div class="viewcode-block" id="LeakyRelu6.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LeakyRelu6.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">leaky_relu6</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div>
+<span class="sd">          ```</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; LeakyRelu6()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">LeakyRelu6</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span>
+
+<div class="viewcode-block" id="LeakyRelu6.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LeakyRelu6.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;inplace&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">x</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clip_</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">leaky_relu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span><span class="nb">min</span><span class="o">=-</span><span class="mi">6</span><span class="p">,</span><span class="nb">max</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">leaky_relu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span><span class="nb">min</span><span class="o">=-</span><span class="mi">6</span><span class="p">,</span><span class="nb">max</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="LeakyRelu6.extra_repr"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LeakyRelu6.extra_repr">[docs]</a>    <span class="k">def</span> <span class="nf">extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">s</span> <span class="o">=</span> <span class="s1">&#39;alpha=</span><span class="si">{alpha}</span><span class="s1">&#39;</span>
         <span class="k">return</span> <span class="n">s</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span></div></div>
 
-<div class="viewcode-block" id="SmoothRelu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SmoothRelu">[docs]</a><span class="k">class</span> <span class="nc">SmoothRelu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;smooth_relu activation Layer</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">SmoothRelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
-<div class="viewcode-block" id="SmoothRelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SmoothRelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="SquaredRelu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SquaredRelu">[docs]</a><span class="k">class</span> <span class="nc">SquaredRelu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Rectified Linear Unit activation function.</span>
+
+<span class="sd">        Primer: Searching for Efficient Transformers for Language Modeling</span>
+
+<span class="sd">        ```</span>
+<span class="sd">        f(x) = max_value**2 if x &gt;= max_value</span>
+<span class="sd">        f(x) = x**2 if threshold &lt;= x &lt; max_value</span>
+<span class="sd">        f(x) = 0 otherwise</span>
+
+<span class="sd">        ```</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; SquaredRelu()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SquaredRelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="n">inplace</span>
+
+<div class="viewcode-block" id="SquaredRelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SquaredRelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">        x: Input tensor.</span>
+
+<span class="sd">        Returns: output tensor</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;inplace&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="o">=</span><span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">x</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">relu_</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">relu</span><span class="p">(</span><span class="n">x</span><span class="p">))</span></div></div>
+
+
+
+<div class="viewcode-block" id="SmoothRelu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SmoothRelu">[docs]</a><span class="k">class</span> <span class="nc">SmoothRelu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Smooth_relu activation Layer</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; SmoothRelu()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SmoothRelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="SmoothRelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SmoothRelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">smooth_relu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
+
+<div class="viewcode-block" id="CRelu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.CRelu">[docs]</a><span class="k">class</span> <span class="nc">CRelu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Computes Concatenated ReLU.</span>
+
+<span class="sd">    Concatenates a ReLU which selects only the positive part of the activation</span>
+<span class="sd">    with a ReLU which selects only the *negative* part of the activation.</span>
+<span class="sd">    Note that as a result this non-linearity doubles the depth of the activations.</span>
+<span class="sd">    Source: [Understanding and Improving Convolutional Neural Networks via</span>
+<span class="sd">    Concatenated Rectified Linear Units. W. Shang, et</span>
+<span class="sd">    al.](https://arxiv.org/abs/1603.05201)</span>
+
+<span class="sd">    References:</span>
+<span class="sd">      Understanding and Improving Convolutional Neural Networks via Concatenated</span>
+<span class="sd">      Rectified Linear Units:</span>
+<span class="sd">        [Shang et al., 2016](http://proceedings.mlr.press/v48/shang16)</span>
+<span class="sd">        ([pdf](http://proceedings.mlr.press/v48/shang16.pdf))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">CRelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="o">=</span><span class="n">axis</span>
+
+<div class="viewcode-block" id="CRelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.CRelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">crelu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="Silu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Silu">[docs]</a><span class="k">class</span> <span class="nc">Silu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Applies the silu function, element-wise.</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        \text{silu}(x) = x * \sigma(x), \text{where } \sigma(x) \text{ is the logistic sigmoid.}</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        See `Gaussian Error Linear Units (GELUs) &lt;https://arxiv.org/abs/1606.08415&gt;`_</span>
+<span class="sd">        where the SiLU (Sigmoid Linear Unit) was originally coined, and see</span>
+<span class="sd">        `Sigmoid-Weighted Linear Units for Neural Network Function Approximation</span>
+<span class="sd">        in Reinforcement Learning &lt;https://arxiv.org/abs/1702.03118&gt;`_ and `Swish:</span>
+<span class="sd">        a Self-Gated Activation Function &lt;https://arxiv.org/abs/1710.05941v1&gt;`_</span>
+<span class="sd">        where the SiLU was experimented with later.</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, *)` where `*` means, any number of additional</span>
+<span class="sd">          dimensions</span>
+<span class="sd">        - Output: :math:`(N, *)`, same shape as the input</span>
+
+<span class="sd">    Examples::</span>
+
+<span class="sd">        &gt;&gt;&gt; m = Silu()</span>
+<span class="sd">        &gt;&gt;&gt; input = torch.randn(2)</span>
+<span class="sd">        &gt;&gt;&gt; output = m(input)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Silu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Silu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Silu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">silu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
+
 <div class="viewcode-block" id="PRelu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.PRelu">[docs]</a><span class="k">class</span> <span class="nc">PRelu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;PRelu activation Layer</span>
-<span class="sd">    &#39;&#39;&#39;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_parameters</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="mf">0.25</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">PRelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">num_parameters</span><span class="o">=</span><span class="n">num_parameters</span>
+    <span class="sd">&quot;&quot;&quot;Parametric Rectified Linear Unit.</span>
+
+<span class="sd">    It follows:</span>
+<span class="sd">        ```</span>
+<span class="sd">        f(x) = alpha * x for x &lt; 0</span>
+<span class="sd">        f(x) = x for x &gt;= 0</span>
+
+<span class="sd">        ```</span>
+<span class="sd">    where `alpha` is a learned parameters , it&#39;s a 1-D array, the length equal 1 or input_filters.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        num_parameters:(1 or None)  if None num_parameters will equal to input_filters .</span>
+<span class="sd">        init (float): initial value of the parameters</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_parameters</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">PRelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_parameters</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">num_parameters</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_parameters</span> <span class="o">=</span> <span class="n">num_parameters</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">init</span> <span class="o">=</span> <span class="n">init</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_parameters</span><span class="p">)</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="PRelu.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.PRelu.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
+<div class="viewcode-block" id="PRelu.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.PRelu.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_parameters</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">num_parameters</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">ones</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">num_parameters</span><span class="p">))</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span></div>
-<div class="viewcode-block" id="PRelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.PRelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">prelu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span></div></div>
 
+<div class="viewcode-block" id="PRelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.PRelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">prelu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span></div></div>
 
 
 
 <div class="viewcode-block" id="Sigmoid"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Sigmoid">[docs]</a><span class="k">class</span> <span class="nc">Sigmoid</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Sigmoid activation layer.</span>
-<span class="sd">       # Arguments</span>
-<span class="sd">           x: Input tensor.</span>
 
-<span class="sd">       # Returns</span>
-<span class="sd">           Tensor, output of Sigmoid transformation.</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; Sigmoid()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
 
-<span class="sd">       &quot;&quot;&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Sigmoid</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Sigmoid</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
 
-<div class="viewcode-block" id="Sigmoid.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Sigmoid.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="Sigmoid.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Sigmoid.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">        x: Input tensor.</span>
+
+<span class="sd">        Returns: output tensor</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        
         <span class="k">return</span> <span class="n">sigmoid</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
-
-
 <div class="viewcode-block" id="Tanh"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Tanh">[docs]</a><span class="k">class</span> <span class="nc">Tanh</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Tanh</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="sd">&quot;&quot;&quot; Tanh activation layer.</span>
 
-<div class="viewcode-block" id="Tanh.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Tanh.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; Tanh()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Tanh</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Tanh.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Tanh.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">tanh</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="Swish"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Swish">[docs]</a><span class="k">class</span> <span class="nc">Swish</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Swish</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<div class="viewcode-block" id="TanhExp"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.TanhExp">[docs]</a><span class="k">class</span> <span class="nc">TanhExp</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; TanhExp activation layer.</span>
+<span class="sd">     ```</span>
+<span class="sd">        f(x) =  x*tanh(exp(x))</span>
 
-<div class="viewcode-block" id="Swish.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Swish.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="sd">      ```</span>
+
+<span class="sd">    References:</span>
+<span class="sd">        TanhExp: A Smooth Activation Function with High Convergence Speed for Lightweight Neural Networks</span>
+<span class="sd">        https://arxiv.org/abs/2003.09855</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; TanhExp()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;tanhexp&#39;</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">TanhExp</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="TanhExp.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.TanhExp.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">x</span><span class="o">*</span><span class="n">torch</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x</span><span class="p">))</span></div></div>
+
+
+<div class="viewcode-block" id="ExpTanh"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.ExpTanh">[docs]</a><span class="k">class</span> <span class="nc">ExpTanh</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; ExpTanh activation layer.</span>
+
+<span class="sd">     ```</span>
+<span class="sd">        f(x) =  tanh(exp(x))</span>
+
+<span class="sd">      ```</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; ExpTanh()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;exptanh&#39;</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">ExpTanh</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="ExpTanh.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.ExpTanh.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x</span><span class="p">))</span></div></div>
+
+
+<div class="viewcode-block" id="Swish"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Swish">[docs]</a><span class="k">class</span> <span class="nc">Swish</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; Self-Gated Activation Function.</span>
+<span class="sd">    it follows:</span>
+<span class="sd">        ```</span>
+<span class="sd">        f(x) =  x * sigmoid(x)</span>
+
+<span class="sd">        ```</span>
+<span class="sd">    References:</span>
+<span class="sd">        Swish: a Self-Gated Activation Function</span>
+<span class="sd">        https://arxiv.org/abs/1710.05941v1</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; Swish()(to_tensor([[-3.0, -1.0, 0.0, 2.0]])).cpu()</span>
+<span class="sd">        tensor([[-0.1423, -0.2689,  0.0000,  1.7616]])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Swish</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Swish.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Swish.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">swish</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
-
 <div class="viewcode-block" id="HardSigmoid"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardSigmoid">[docs]</a><span class="k">class</span> <span class="nc">HardSigmoid</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">HardSigmoid</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="sd">&quot;&quot;&quot; Hard sigmoid activation layer.</span>
+<span class="sd">    it follows:</span>
+<span class="sd">      .. math::</span>
+<span class="sd">        \text{Hardsigmoid}(x) = \begin{cases}</span>
+<span class="sd">            0 &amp; \text{if~} x \le -3, \\</span>
+<span class="sd">            1 &amp; \text{if~} x \ge +3, \\</span>
+<span class="sd">            x / 6 + 1 / 2 &amp; \text{otherwise}</span>
+<span class="sd">        \end{cases}</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; HardSigmoid()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">HardSigmoid</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="o">=</span> <span class="n">inplace</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
 
-<div class="viewcode-block" id="HardSigmoid.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardSigmoid.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">hard_sigmoid</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="p">)</span></div></div>
+<div class="viewcode-block" id="HardSigmoid.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardSigmoid.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="k">return</span> <span class="n">hard_sigmoid</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="HardSwish"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardSwish">[docs]</a><span class="k">class</span> <span class="nc">HardSwish</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">HardSwish</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="sd">&quot;&quot;&quot;Hard swish Activation Function.</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="o">=</span> <span class="n">inplace</span>
+<span class="sd">    Memory saving version of swish</span>
+<span class="sd">    it follows:</span>
 
-<div class="viewcode-block" id="HardSwish.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardSwish.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">hard_swish</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">inplace</span><span class="p">)</span></div></div>
+<span class="sd">      ```</span>
+<span class="sd">        f(x) =  x * hard_sigmoid(x)</span>
+
+<span class="sd">      ```</span>
+
+<span class="sd">    References:</span>
+<span class="sd">        Searching for MobileNetV3</span>
+<span class="sd">        https://arxiv.org/abs/1905.02244</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; HardSwish()(to_tensor([[-3.0, -1.0, 0.0, 2.0]])).cpu()</span>
+<span class="sd">        tensor([[-0.0000, -0.3333,  0.0000,  1.6667]])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">HardSwish</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="HardSwish.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardSwish.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="k">return</span> <span class="n">hard_swish</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="HardTanh"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardTanh">[docs]</a><span class="k">class</span> <span class="nc">HardTanh</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">HardTanh</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="sd">&quot;&quot;&quot;Hard tanh Activation Function.</span>
 
-<div class="viewcode-block" id="HardTanh.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardTanh.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; HardTanh()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">HardTanh</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="HardTanh.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardTanh.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">hard_tanh</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
+
 <div class="viewcode-block" id="Selu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Selu">[docs]</a><span class="k">class</span> <span class="nc">Selu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Selu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="sd">&quot;&quot;&quot;Selu activation function</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">inplace</span> <span class="o">=</span> <span class="n">inplace</span>
+<span class="sd">    Scaled exponential linear unit operation. Computes the element-wise exponential linear</span>
+<span class="sd">    of ``x``: ``scale * x`` for ``x &gt;= 0`` and ``x``: ``scale * alpha * (exp(x)-1)`` otherwise.</span>
+<span class="sd">    scale=1.0507009873554804934193349852946, alpha=1.6732632423543772848170429916717</span>
 
-<div class="viewcode-block" id="Selu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Selu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="sd">    Args:</span>
+<span class="sd">        x (tensor): input tensor</span>
+<span class="sd">        name(string, None): name of the layer.</span>
+
+<span class="sd">    Returns:The output tensor has the same shape as ``x``</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; selu(to_tensor([[-1, -0.5, 0, 1, 2]]))</span>
+<span class="sd">        tensor([[-1.1113, -0.6918,  0.0000,  1.0507,  2.1014]])</span>
+
+<span class="sd">    References:</span>
+<span class="sd">        paper: https://arxiv.org/abs/1706.02515</span>
+<span class="sd">        Self-Normalizing Neural Networks</span>
+<span class="sd">        Günter Klambauer, Thomas Unterthiner, Andreas Mayr, Sepp Hochreiter</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>  <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Selu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Selu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Selu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">selu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
-<div class="viewcode-block" id="Elu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Elu">[docs]</a><span class="k">class</span> <span class="nc">Elu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Elu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
-<div class="viewcode-block" id="Elu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Elu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="Elu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Elu">[docs]</a><span class="k">class</span> <span class="nc">Elu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Exponential Linear Unit.</span>
+<span class="sd">         It follows:</span>
+<span class="sd">         ```</span>
+<span class="sd">           f(x) =  alpha * (exp(x) - 1.) for x &lt; 0</span>
+<span class="sd">           f(x) = x for x &gt;= 0</span>
+<span class="sd">         ```</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Elu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Elu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Elu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">elu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="LecunTanh"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LecunTanh">[docs]</a><span class="k">class</span> <span class="nc">LecunTanh</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">LecunTanh</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">LecunTanh</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
 
-<div class="viewcode-block" id="LecunTanh.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LecunTanh.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="LecunTanh.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LecunTanh.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">hard_swish</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="SoftSign"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SoftSign">[docs]</a><span class="k">class</span> <span class="nc">SoftSign</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">SoftSign</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SoftSign</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
 
-<div class="viewcode-block" id="SoftSign.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SoftSign.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="SoftSign.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SoftSign.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">soft_sign</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
-<div class="viewcode-block" id="SoftPlus"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SoftPlus">[docs]</a><span class="k">class</span> <span class="nc">SoftPlus</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">SoftPlus</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
-<div class="viewcode-block" id="SoftPlus.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SoftPlus.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="SoftPlus"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SoftPlus">[docs]</a><span class="k">class</span> <span class="nc">SoftPlus</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SoftPlus</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="SoftPlus.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SoftPlus.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">soft_plus</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="Logit"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Logit">[docs]</a><span class="k">class</span> <span class="nc">Logit</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Logit</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Logit</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
 
-<div class="viewcode-block" id="Logit.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Logit.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="Logit.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Logit.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">logit</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
-<div class="viewcode-block" id="LogLog"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LogLog">[docs]</a><span class="k">class</span> <span class="nc">LogLog</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">LogLog</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
 
-<div class="viewcode-block" id="LogLog.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LogLog.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="LogLog"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LogLog">[docs]</a><span class="k">class</span> <span class="nc">LogLog</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;LogLog Activation Function</span>
+<span class="sd">          it follows:</span>
+<span class="sd">          ```</span>
+<span class="sd">            f(x) =  1 - exp(-exp(x))</span>
+
+<span class="sd">          ```</span>
+<span class="sd">        References:</span>
+<span class="sd">            &quot;Complementary Log-Log and Probit: Activation Functions Implemented in Artificial Neural Networks&quot;</span>
+<span class="sd">            https://ieeexplore.ieee.org/document/4626755/</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; LogLog()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+<span class="sd">            tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">LogLog</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="LogLog.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LogLog.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">log_log</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
-
 <div class="viewcode-block" id="Mish"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Mish">[docs]</a><span class="k">class</span> <span class="nc">Mish</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;</span>
+    <span class="sd">&quot;&quot;&quot;Self Regularized Non-Monotonic Neural Activation Function</span>
+<span class="sd">      it follows:</span>
+<span class="sd">      ```</span>
+<span class="sd">        f(x) =  x * tanh(softplus(x))</span>
 
-<span class="sd">    &#39;&#39;&#39;</span>
+<span class="sd">      ```</span>
+<span class="sd">    References:</span>
+<span class="sd">        Mish: A Self Regularized Non-Monotonic Neural Activation Function</span>
+<span class="sd">        https://arxiv.org/abs/1908.08681</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; Mish()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+<span class="sd">        tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]</span>
 
-<div class="viewcode-block" id="Mish.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Mish.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+<div class="viewcode-block" id="Mish.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Mish.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">mish</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
+<div class="viewcode-block" id="HardMish"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardMish">[docs]</a><span class="k">class</span> <span class="nc">HardMish</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Self Regularized Non-Monotonic Neural Activation Function.</span>
+
+<span class="sd">    it follows:</span>
+<span class="sd">    ::</span>
+
+<span class="sd">        f(x) =  x * hard_tanh(softplus(x))</span>
+
+
+<span class="sd">    References:</span>
+<span class="sd">        Mish: A Self Regularized Non-Monotonic Neural Activation Function</span>
+<span class="sd">        https://arxiv.org/abs/1908.08681</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; HardMish()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+<span class="sd">        &lt;tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)&gt;</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">HardMish</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+<div class="viewcode-block" id="HardMish.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.HardMish.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="k">return</span> <span class="n">hard_mish</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 <div class="viewcode-block" id="Softmax"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Softmax">[docs]</a><span class="k">class</span> <span class="nc">Softmax</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Softmax activation layer.</span>
-<span class="sd">       # Arguments</span>
+<span class="sd">    Args</span>
 <span class="sd">           x: Input tensor.</span>
 <span class="sd">           axis: Integer, axis along which the softmax normalization is applied.</span>
 
-<span class="sd">       # Returns</span>
+<span class="sd">    Returns</span>
 <span class="sd">           Tensor, output of softmax transformation.</span>
 
-<span class="sd">       # Raises</span>
+<span class="sd">    Raises</span>
 <span class="sd">           ValueError: In case `dim(x) == 1`.</span>
-<span class="sd">       &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Softmax</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="Softmax.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Softmax.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">softmax</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Softmax</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="o">=</span><span class="n">axis</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
 
+<div class="viewcode-block" id="Softmax.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Softmax.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="k">return</span> <span class="n">softmax</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="LogSoftmax"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LogSoftmax">[docs]</a><span class="k">class</span> <span class="nc">LogSoftmax</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">LogSoftmax</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">LogSoftmax</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
 
-<div class="viewcode-block" id="LogSoftmax.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LogSoftmax.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">reduce_logsumexp</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
+<div class="viewcode-block" id="LogSoftmax.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.LogSoftmax.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="k">return</span> <span class="n">log_softmax</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
+<div class="viewcode-block" id="Gelu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Gelu">[docs]</a><span class="k">class</span> <span class="nc">Gelu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Gaussian Error Linear Unit.</span>
 
+<span class="sd">    it follows:</span>
+<span class="sd">        ```</span>
+<span class="sd">        f(x) =x∗Φ(x)</span>
+<span class="sd">        where \Phi(x)Φ(x) is the Cumulative Distribution Function for Gaussian Distribution.</span>
 
-<div class="viewcode-block" id="BertGelu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.BertGelu">[docs]</a><span class="k">class</span> <span class="nc">BertGelu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Bert uses GELU as the activation function for the position-wise network.</span>
+<span class="sd">        ```</span>
+
+<span class="sd">    References:</span>
+<span class="sd">        Gaussian Error Linear Units (GELUs)</span>
+<span class="sd">        https://arxiv.org/abs/1606.08415</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; Gelu()(to_tensor([-3.0, -1.0, 0.0, 2.0]))</span>
+<span class="sd">        &lt;tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)&gt;</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">BertGelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Gelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
 
-<div class="viewcode-block" id="BertGelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.BertGelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">bert_gelu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
-
-
-
+<div class="viewcode-block" id="Gelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.Gelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="k">return</span> <span class="n">gelu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
 <div class="viewcode-block" id="GptGelu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.GptGelu">[docs]</a><span class="k">class</span> <span class="nc">GptGelu</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
@@ -453,42 +885,86 @@
 <span class="sd">    slightly different results).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">GptGelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">GptGelu</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
 
-<div class="viewcode-block" id="GptGelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.GptGelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="GptGelu.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.GptGelu.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
         <span class="k">return</span> <span class="n">gpt_gelu</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
 
 
+<div class="viewcode-block" id="SIREN"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SIREN">[docs]</a><span class="k">class</span> <span class="nc">SIREN</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;SIREN leverages periodic activation functions for implicit neural representations and demonstrate</span>
+<span class="sd">    that these networks are ideally suited for representing complex natural signals and their derivatives.</span>
+
+<span class="sd">    Their project page can be found here &quot;https://vsitzmann.github.io/siren/&quot;</span>
+
+<span class="sd">    For more details please refer to the paper Implicit Neural Representations with PeriodicActivation Functions by</span>
+<span class="sd">    Sitzmann et. al. (https://arxiv.org/abs/2006.09661)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">w0</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span><span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SIREN</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">keep_output</span><span class="o">=</span><span class="n">keep_output</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">w0</span> <span class="o">=</span> <span class="n">w0</span>
+
+<div class="viewcode-block" id="SIREN.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.SIREN.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">x</span><span class="o">=</span><span class="n">sin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">w0</span><span class="o">*</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span></div></div>
 
 
-<div class="viewcode-block" id="get_activation"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.get_activation">[docs]</a><span class="k">def</span> <span class="nf">get_activation</span><span class="p">(</span><span class="n">fn_name</span><span class="p">):</span>
+<div class="viewcode-block" id="get_activation"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_activations.get_activation">[docs]</a><span class="k">def</span> <span class="nf">get_activation</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span><span class="n">only_layer</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        only_layer (bool):</span>
+<span class="sd">        fn_name ():</span>
+
+<span class="sd">    Returns:</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; a=get_activation(&#39;relu&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; print(get_activation(&#39;swish&#39;))</span>
+
+
+
+<span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">fn_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">fn_modules</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;trident.layers.pytorch_activations&#39;</span><span class="p">,</span> <span class="s1">&#39;trident.backend.pytorch_ops&#39;</span><span class="p">,</span><span class="s1">&#39;torch.nn.functional&#39;</span><span class="p">]</span>
+    <span class="n">fn_modules</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;trident.layers.pytorch_activations&#39;</span><span class="p">,</span> <span class="s1">&#39;trident.backend.pytorch_ops&#39;</span><span class="p">,</span> <span class="s1">&#39;torch.nn.functional&#39;</span><span class="p">]</span>
+    <span class="n">trident_fn_modules</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;trident.layers.pytorch_activations&#39;</span><span class="p">,</span> <span class="s1">&#39;trident.backend.pytorch_ops&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">only_layer</span><span class="p">:</span>
+        <span class="n">fn_modules</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;trident.layers.pytorch_activations&#39;</span><span class="p">]</span>
+        <span class="n">trident_fn_modules</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;trident.layers.pytorch_activations&#39;</span><span class="p">]</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">fn_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="n">fn_name</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">fn_name</span><span class="o">==</span><span class="s1">&#39;p_relu&#39;</span> <span class="ow">or</span> <span class="n">fn_name</span><span class="o">==</span><span class="s1">&#39;prelu&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">only_layer</span> <span class="ow">and</span> <span class="p">(</span><span class="n">camel2snake</span><span class="p">(</span><span class="n">fn_name</span><span class="p">)</span><span class="o">==</span> <span class="n">fn_name</span> <span class="ow">or</span> <span class="n">fn_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">==</span> <span class="n">fn_name</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">fn_name</span> <span class="o">==</span> <span class="s1">&#39;p_relu&#39;</span> <span class="ow">or</span> <span class="n">fn_name</span> <span class="o">==</span> <span class="s1">&#39;prelu&#39;</span><span class="p">:</span>
                     <span class="k">return</span> <span class="n">PRelu</span><span class="p">()</span>
-                <span class="n">activation_fn</span> <span class="o">=</span> <span class="n">get_function</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="p">[</span> <span class="s1">&#39;trident.backend.pytorch_ops&#39;</span><span class="p">,</span><span class="s1">&#39;trident.layers.pytorch_activations&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="n">fn_name</span> <span class="ow">in</span> <span class="n">__all__</span> <span class="k">else</span> <span class="n">fn_modules</span><span class="p">)</span>
+                <span class="n">activation_fn</span> <span class="o">=</span> <span class="n">get_function</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="n">trident_fn_modules</span><span class="p">)</span>
                 <span class="k">return</span> <span class="n">activation_fn</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">activation_fn</span> <span class="o">=</span> <span class="n">get_function</span><span class="p">(</span><span class="n">camel2snake</span><span class="p">(</span><span class="n">fn_name</span><span class="p">),</span> <span class="n">fn_modules</span><span class="p">)</span>
+                    <span class="n">activation_fn</span> <span class="o">=</span> <span class="n">get_class</span><span class="p">(</span><span class="n">snake2camel</span><span class="p">(</span><span class="n">fn_name</span><span class="p">),</span> <span class="n">fn_modules</span><span class="p">)</span>
                     <span class="k">return</span> <span class="n">activation_fn</span><span class="p">()</span>
                 <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-                    <span class="n">activation_fn</span> <span class="o">=</span> <span class="n">get_class</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="p">[</span>
-                       <span class="s1">&#39;trident.backend.pytorch_ops&#39;</span><span class="p">,</span> <span class="s1">&#39;trident.layers.pytorch_activations&#39;</span><span class="p">]</span> <span class="k">if</span> <span class="n">fn_name</span> <span class="ow">in</span> <span class="n">__all__</span> <span class="k">else</span> <span class="n">fn_modules</span><span class="p">)</span>
-                    <span class="k">return</span> <span class="n">activation_fn</span>
-        <span class="k">elif</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="s1">&#39;__module__&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;trident.layers.pytorch_activations&#39;</span><span class="p">:</span>
+                    <span class="n">activation_fn</span> <span class="o">=</span> <span class="n">get_class</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="n">fn_modules</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">activation_fn</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">,</span><span class="n">Layer</span><span class="p">))</span> <span class="ow">or</span>  <span class="nb">getattr</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="s1">&#39;__module__&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;trident.layers.pytorch_activations&#39;</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">fn_name</span><span class="p">):</span>
-                <span class="k">return</span> <span class="n">fn_name</span>
-            <span class="k">elif</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">fn_name</span><span class="p">)</span> <span class="ow">and</span> <span class="n">inspect</span><span class="o">.</span><span class="n">_is_type</span><span class="p">(</span><span class="n">fn_name</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">partial</span><span class="p">(</span><span class="n">fn_name</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">fn_name</span><span class="p">)</span> <span class="ow">and</span>  <span class="n">fn_name</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="o">==</span><span class="s2">&quot;type&quot;</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">fn_name</span><span class="p">()</span>
             <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="n">Layer</span><span class="p">):</span>
                 <span class="k">return</span> <span class="n">fn_name</span>
+        <span class="k">elif</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">fn_name</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="s1">&#39;__module__&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s1">&#39;trident.backend.pytorch_ops&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">only_layer</span><span class="p">:</span>
+                <span class="n">activation_layer</span> <span class="o">=</span> <span class="n">get_class</span><span class="p">(</span><span class="n">snake2camel</span><span class="p">(</span><span class="n">fn_name</span><span class="o">.</span><span class="vm">__name__</span><span class="p">),</span> <span class="n">trident_fn_modules</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">activation_layer</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">fn_name</span>
+
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">callable</span><span class="p">(</span><span class="n">fn_name</span><span class="p">):</span>
                 <span class="n">result</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getfullargspec</span><span class="p">(</span><span class="n">fn_name</span><span class="p">)</span>
@@ -496,9 +972,9 @@
                     <span class="k">return</span> <span class="n">fn_name</span> <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">fn_name</span><span class="p">)</span> <span class="k">else</span> <span class="n">fn_name</span><span class="p">()</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Unknown activation function/ class&#39;</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
         <span class="k">return</span> <span class="kc">None</span></div>
-
 </pre></div>
 
         </div>
@@ -520,8 +996,8 @@
     </div>
 
     <div class="mdl-mini-footer__right-section">
-        <div>&copy; Copyright 2020, AllanYiin.</div>
-      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 3.0.3 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
+        <div>&copy; Copyright 2022, AllanYiin.</div>
+      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 5.0.2 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
     </div>
 </footer>
         </main>

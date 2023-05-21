@@ -1,28 +1,27 @@
 <!DOCTYPE html>
 
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     
-    <title>trident.layers.pytorch_normalizations &#8212; trident 5.5.0 documentation</title>
+    <title>trident.layers.pytorch_normalizations &#8212; trident 0.7.5 documentation</title>
 
-    <link rel="stylesheet" href="../../../_static/material-icons.css" type="text/css" />
-    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/material-icons.css" />
     <link rel="stylesheet" href="../../../_static/notosanscjkjp.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/roboto.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/material-design-lite-1.3.0/material.deep_orange-indigo.min.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/sphinx_materialdesign_theme.css" type="text/css" />
-    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
     <script src="../../../_static/jquery.js"></script>
     <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="../../../_static/doctools.js"></script>
-    <script src="../../../_static/language_data.js"></script>
     <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
-    <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
     <script src="../../../_static/sphinx_materialdesign_theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -34,7 +33,7 @@
         <!-- Title -->
         <span class="mdl-layout-title">
             <a class="brand" href="../../../index.html">
-                trident
+                <img class="logo" src="../../../_static/trident_logo.png" alt="trident"/>
             </a>
         </span>
         
@@ -92,9 +91,7 @@
           <!-- Title -->
       <span class="mdl-layout-title">
           <a class="title" href="../../../index.html">
-              <span class="title-text">
-                  trident
-              </span>
+              <img class="logo" src="../../../_static/trident_logo.png" alt="trident"/>
           </a>
       </span>
     
@@ -115,9 +112,7 @@
           <!-- Title -->
       <span class="mdl-layout-title">
           <a class="title" href="../../../index.html">
-              <span class="title-text">
-                  trident
-              </span>
+              <img class="logo" src="../../../_static/trident_logo.png" alt="trident"/>
           </a>
       </span>
     
@@ -137,26 +132,26 @@
         <div class="page-content">
         
   <h1>Source code for trident.layers.pytorch_normalizations</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">division</span>
-<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">print_function</span>
-
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">absolute_import</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">division</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
+<span class="kn">import</span> <span class="nn">numbers</span>
 <span class="kn">import</span> <span class="nn">math</span>
 <span class="kn">import</span> <span class="nn">inspect</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
-<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="k">import</span> <span class="n">init</span>
-<span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="k">import</span> <span class="n">Parameter</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">init</span>
+<span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="kn">import</span> <span class="n">Parameter</span>
+<span class="kn">from</span> <span class="nn">trident</span> <span class="kn">import</span> <span class="n">context</span>
+<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="kn">import</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">get_function</span><span class="p">,</span> <span class="n">enforce_singleton</span><span class="p">,</span><span class="n">get_class</span><span class="p">,</span><span class="n">TensorShape</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="kn">import</span> <span class="n">Layer</span><span class="p">,</span><span class="n">get_device</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_ops</span> <span class="kn">import</span> <span class="o">*</span>
 
-<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="k">import</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">get_function</span><span class="p">,</span> <span class="n">get_session</span><span class="p">,</span> <span class="n">enforce_singleton</span><span class="p">,</span><span class="n">get_class</span>
-<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="k">import</span> <span class="n">Layer</span><span class="p">,</span><span class="n">get_device</span>
-<span class="kn">from</span> <span class="nn">trident.backend.pytorch_ops</span> <span class="k">import</span> <span class="o">*</span>
-
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;InstanceNorm&#39;</span><span class="p">,</span><span class="s1">&#39;BatchNorm&#39;</span><span class="p">,</span><span class="s1">&#39;BatchNorm2d&#39;</span><span class="p">,</span><span class="s1">&#39;BatchNorm3d&#39;</span><span class="p">,</span><span class="s1">&#39;GroupNorm&#39;</span><span class="p">,</span><span class="s1">&#39;GroupNorm2d&#39;</span><span class="p">,</span><span class="s1">&#39;GroupNorm3d&#39;</span><span class="p">,</span><span class="s1">&#39;LayerNorm2d&#39;</span><span class="p">,</span><span class="s1">&#39;SpectralNorm&#39;</span><span class="p">,</span><span class="s1">&#39;EvoNormB0&#39;</span><span class="p">,</span><span class="s1">&#39;EvoNormS0&#39;</span><span class="p">,</span><span class="s1">&#39;get_normalization&#39;</span><span class="p">]</span>
-<span class="n">_session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">()</span>
-<span class="n">_epsilon</span><span class="o">=</span><span class="n">_session</span><span class="o">.</span><span class="n">epsilon</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;InstanceNorm&#39;</span><span class="p">,</span><span class="s1">&#39;InstanceNorm2d&#39;</span><span class="p">,</span><span class="s1">&#39;InstanceNorm3d&#39;</span><span class="p">,</span><span class="s1">&#39;AdaptiveInstanceNorm&#39;</span><span class="p">,</span><span class="s1">&#39;BatchNorm&#39;</span><span class="p">,</span><span class="s1">&#39;BatchNorm2d&#39;</span><span class="p">,</span><span class="s1">&#39;BatchNorm3d&#39;</span><span class="p">,</span><span class="s1">&#39;GroupNorm&#39;</span><span class="p">,</span><span class="s1">&#39;GroupNorm2d&#39;</span><span class="p">,</span><span class="s1">&#39;GroupNorm3d&#39;</span><span class="p">,</span><span class="s1">&#39;LayerNorm&#39;</span><span class="p">,</span><span class="s1">&#39;LayerNorm2d&#39;</span><span class="p">,</span><span class="s1">&#39;LayerNorm3d&#39;</span><span class="p">,</span><span class="s1">&#39;L2Norm&#39;</span><span class="p">,</span><span class="s1">&#39;PixelNorm&#39;</span><span class="p">,</span><span class="s1">&#39;SpectralNorm&#39;</span><span class="p">,</span><span class="s1">&#39;EvoNormB0&#39;</span><span class="p">,</span><span class="s1">&#39;EvoNormS0&#39;</span><span class="p">,</span><span class="s1">&#39;get_normalization&#39;</span><span class="p">]</span>
+<span class="n">ctx</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">_context</span><span class="p">()</span>
+<span class="n">_epsilon</span><span class="o">=</span><span class="n">ctx</span><span class="o">.</span><span class="n">epsilon</span>
 
 <span class="k">def</span> <span class="nf">instance_std</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">):</span>
     <span class="n">rank</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="o">-</span><span class="mi">2</span>
@@ -175,82 +170,95 @@
 
 
 <div class="viewcode-block" id="BatchNorm"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.BatchNorm">[docs]</a><span class="k">class</span> <span class="nc">BatchNorm</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>  <span class="n">momentum</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">affine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">track_running_stats</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Applies Batch Normalization over a 4D input (a mini-batch of 2D inputs</span>
+
+<span class="sd">    with additional channel dimension) as described in the paper</span>
+<span class="sd">    `Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift`_ .</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta</span>
+
+<span class="sd">    The mean and standard-deviation are calculated per-dimension over</span>
+<span class="sd">    the mini-batches and :math:`\gamma` and :math:`\beta` are learnable parameter vectors</span>
+<span class="sd">    of size `C` (where `C` is the input size). By default, the elements of :math:`\gamma` are set</span>
+<span class="sd">    to 1 and the elements of :math:`\beta` are set to 0.</span>
+
+<span class="sd">    Also by default, during training this layer keeps running estimates of its</span>
+<span class="sd">    computed mean and variance, which are then used for normalization during</span>
+<span class="sd">    evaluation. The running estimates are kept with a default :attr:`momentum`</span>
+<span class="sd">    of 0.1.</span>
+
+<span class="sd">    If :attr:`track_running_stats` is set to ``False``, this layer then does not</span>
+<span class="sd">    keep running estimates, and batch statistics are instead used during</span>
+<span class="sd">    evaluation time as well.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This :attr:`momentum` argument is different from one used in optimizer</span>
+<span class="sd">        classes and the conventional notion of momentum. Mathematically, the</span>
+<span class="sd">        update rule for running statistics here is</span>
+<span class="sd">        :math:`\hat{x}_\text{new} = (1 - \text{momentum}) \times \hat{x} + \text{momentum} \times x_t`,</span>
+<span class="sd">        where :math:`\hat{x}` is the estimated statistic and :math:`x_t` is the</span>
+<span class="sd">        new observed value.</span>
+
+<span class="sd">    Because the Batch Normalization is done over the `C` dimension, computing statistics</span>
+<span class="sd">    on `(N, H, W)` slices, it&#39;s common terminology to call this Spatial Batch Normalization.</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, H, W)`</span>
+<span class="sd">        - Output: :math:`(N, C, H, W)` (same shape as input)</span>
+
+<span class="sd">    References:</span>
+<span class="sd">    .. _`Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift`:</span>
+<span class="sd">        https://arxiv.org/abs/1502.03167</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">_version</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>  <span class="n">momentum</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">affine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">track_running_stats</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span><span class="n">in_sequence</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        http://pytorch.org/docs/stable/nn.html#batchnorm1d</span>
-
 <span class="sd">        Args:</span>
-<span class="sd">            dim: 1d, 2d, or 3d BatchNorm</span>
-<span class="sd">         eps: nn.BatchNorm parameter</span>
-<span class="sd">            momentum: nn.BatchNorm parameter</span>
-<span class="sd">            affine: nn.BatchNorm parameter</span>
-<span class="sd">            track_running_stats: nn.BatchNorm parameter</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<span class="sd">        eps: a value added to the denominator for numerical stability.</span>
+<span class="sd">            Default: 1e-5</span>
+<span class="sd">        momentum: the value used for the running_mean and running_var</span>
+<span class="sd">            computation. Can be set to ``None`` for cumulative moving average</span>
+<span class="sd">            (i.e. simple average). Default: 0.1</span>
+<span class="sd">        affine: a boolean value that when set to ``True``, this module has</span>
+<span class="sd">            learnable affine parameters. Default: ``True``</span>
+<span class="sd">        track_running_stats: a boolean value that when set to ``True``, this</span>
+<span class="sd">            module tracks the running mean and variance, and when set to ``False``,</span>
+<span class="sd">            this module does not track such statistics and always uses batch</span>
+<span class="sd">            statistics in both training and eval modes. Default: ``True``</span>
 
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; bn=BatchNorm2d(affine=False)</span>
+<span class="sd">            &gt;&gt;&gt; input = torch.randn(2, 64, 128, 128)</span>
+<span class="sd">            &gt;&gt;&gt; print(int_shape(bn(input)))</span>
+<span class="sd">            (2, 64, 128, 128)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="o">=</span><span class="n">in_sequence</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">filter_index</span><span class="o">=-</span><span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">=</span> <span class="n">momentum</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">affine</span> <span class="o">=</span> <span class="n">affine</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span> <span class="o">=</span> <span class="n">track_running_stats</span>
 
+
 <div class="viewcode-block" id="BatchNorm.reset_running_stats"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.BatchNorm.reset_running_stats">[docs]</a>    <span class="k">def</span> <span class="nf">reset_running_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">running_mean</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">running_var</span><span class="o">.</span><span class="n">fill_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">num_batches_tracked</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">affine</span> <span class="p">:</span>
-            <span class="n">init</span><span class="o">.</span><span class="n">ones_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
-            <span class="n">init</span><span class="o">.</span><span class="n">zeros_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_batches_tracked</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span></div>
+
+
 <div class="viewcode-block" id="BatchNorm.reset_parameters"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.BatchNorm.reset_parameters">[docs]</a>    <span class="k">def</span> <span class="nf">reset_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">reset_running_stats</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="p">:</span>
             <span class="n">init</span><span class="o">.</span><span class="n">ones_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
             <span class="n">init</span><span class="o">.</span><span class="n">zeros_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="BatchNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.BatchNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">input_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
-                <span class="n">init</span><span class="o">.</span><span class="n">ones_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
-                <span class="n">init</span><span class="o">.</span><span class="n">zeros_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;bias&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_mean&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_var&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;num_batches_tracked&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;running_mean&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;running_var&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;num_batches_tracked&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">reset_parameters</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span></div>
-<div class="viewcode-block" id="BatchNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.BatchNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">exponential_average_factor</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">exponential_average_factor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">:</span>
-            <span class="c1"># TODO: if statement only here to tell the jit to skip emitting this when it is None</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_batches_tracked</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">num_batches_tracked</span> <span class="o">+=</span> <span class="mi">1</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># use cumulative moving average</span>
-                    <span class="n">exponential_average_factor</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_batches_tracked</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>  <span class="c1"># use exponential moving average</span>
-                    <span class="n">exponential_average_factor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span>
-        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">batch_norm</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">running_mean</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">running_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">,</span> <span class="n">exponential_average_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span></div>
-<div class="viewcode-block" id="BatchNorm.extra_repr"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.BatchNorm.extra_repr">[docs]</a>    <span class="k">def</span> <span class="nf">extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s1">&#39;</span><span class="si">{input_filters}</span><span class="s1">, eps=</span><span class="si">{eps}</span><span class="s1">, momentum=</span><span class="si">{momentum}</span><span class="s1">, affine=</span><span class="si">{affine}</span><span class="s1">, &#39;</span> \
-               <span class="s1">&#39;track_running_stats=</span><span class="si">{track_running_stats}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_load_from_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">local_metadata</span><span class="p">,</span> <span class="n">strict</span><span class="p">,</span>
                               <span class="n">missing_keys</span><span class="p">,</span> <span class="n">unexpected_keys</span><span class="p">,</span> <span class="n">error_msgs</span><span class="p">):</span>
@@ -265,7 +273,97 @@
 
         <span class="nb">super</span><span class="p">(</span><span class="n">BatchNorm</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_load_from_state_dict</span><span class="p">(</span>
             <span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">local_metadata</span><span class="p">,</span> <span class="n">strict</span><span class="p">,</span>
-            <span class="n">missing_keys</span><span class="p">,</span> <span class="n">unexpected_keys</span><span class="p">,</span> <span class="n">error_msgs</span><span class="p">)</span></div>
+            <span class="n">missing_keys</span><span class="p">,</span> <span class="n">unexpected_keys</span><span class="p">,</span> <span class="n">error_msgs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BatchNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.BatchNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">)))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;bias&#39;</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">)))</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;bias&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_mean&#39;</span><span class="p">,</span> <span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_var&#39;</span><span class="p">,</span> <span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;num_batches_tracked&#39;</span><span class="p">,</span><span class="n">to_tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span><span class="n">persistent</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_mean&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_var&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;num_batches_tracked&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span><span class="n">persistent</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="BatchNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.BatchNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># exponential_average_factor is set to self.momentum</span>
+        <span class="c1"># (when it is available) only so that it gets updated</span>
+        <span class="c1"># in ONNX graph when this node is exported to ONNX.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">exponential_average_factor</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">exponential_average_factor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">:</span>
+            <span class="c1"># TODO: if statement only here to tell the jit to skip emitting this when it is None</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_batches_tracked</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">num_batches_tracked</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_batches_tracked</span> <span class="o">+</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># use cumulative moving average</span>
+                    <span class="n">exponential_average_factor</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_batches_tracked</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>  <span class="c1"># use exponential moving average</span>
+                    <span class="n">exponential_average_factor</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span>
+
+        <span class="sd">&quot;&quot;&quot; Decide whether the mini-batch stats should be used for normalization rather than the buffers.</span>
+<span class="sd">                Mini-batch stats are used in training mode, and in eval mode when buffers are None.</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+            <span class="n">bn_training</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">bn_training</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">running_mean</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">running_var</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="sd">&quot;&quot;&quot;Buffers are only updated if they are to be tracked and we are in training mode. Thus they only need to be</span>
+<span class="sd">                passed when the update should occur (i.e. in training mode when they are tracked), or when buffer stats are</span>
+<span class="sd">                used for normalization (i.e. in eval mode when buffers are not None).</span>
+<span class="sd">                &quot;&quot;&quot;</span>
+        <span class="n">x</span><span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">batch_norm</span><span class="p">(</span>
+            <span class="n">x</span><span class="p">,</span>
+            <span class="c1"># If buffers are not to be tracked, ensure that they won&#39;t be updated</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">running_mean</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">running_var</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">,</span> <span class="n">bn_training</span><span class="p">,</span> <span class="n">exponential_average_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span></div>
+
+<div class="viewcode-block" id="BatchNorm.extra_repr"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.BatchNorm.extra_repr">[docs]</a>    <span class="k">def</span> <span class="nf">extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s1">&#39;</span><span class="si">{input_filters}</span><span class="s1">, eps=</span><span class="si">{eps}</span><span class="s1">, momentum=</span><span class="si">{momentum}</span><span class="s1">, affine=</span><span class="si">{affine}</span><span class="s1">, &#39;</span> \
+               <span class="s1">&#39;track_running_stats=</span><span class="si">{track_running_stats}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_load_from_state_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">local_metadata</span><span class="p">,</span> <span class="n">strict</span><span class="p">,</span>
+                              <span class="n">missing_keys</span><span class="p">,</span> <span class="n">unexpected_keys</span><span class="p">,</span> <span class="n">error_msgs</span><span class="p">):</span>
+
+        <span class="n">version</span> <span class="o">=</span> <span class="n">local_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;version&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="n">version</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">version</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">:</span>
+            <span class="c1"># at version 2: added num_batches_tracked buffer</span>
+            <span class="c1">#               this should have a default value of 0</span>
+            <span class="n">num_batches_tracked_key</span> <span class="o">=</span> <span class="n">prefix</span> <span class="o">+</span> <span class="s1">&#39;num_batches_tracked&#39;</span>
+            <span class="k">if</span> <span class="n">num_batches_tracked_key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="p">:</span>
+                <span class="n">state_dict</span><span class="p">[</span><span class="n">num_batches_tracked_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">(</span><span class="n">BatchNorm</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">_load_from_state_dict</span><span class="p">(</span>
+            <span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">local_metadata</span><span class="p">,</span> <span class="n">strict</span><span class="p">,</span>
+            <span class="n">missing_keys</span><span class="p">,</span> <span class="n">unexpected_keys</span><span class="p">,</span> <span class="n">error_msgs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span></div>
 <span class="n">BatchNorm1d</span><span class="o">=</span><span class="n">BatchNorm</span>
 <span class="n">BatchNorm2d</span><span class="o">=</span><span class="n">BatchNorm</span>
 <span class="n">BatchNorm3d</span><span class="o">=</span><span class="n">BatchNorm</span>
@@ -273,16 +371,55 @@
 
 
 <div class="viewcode-block" id="GroupNorm"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.GroupNorm">[docs]</a><span class="k">class</span> <span class="nc">GroupNorm</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_groups</span><span class="p">,</span><span class="n">affine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="sd">&quot;&quot;&quot;Applies Group Normalization over a mini-batch of inputs as described in</span>
+<span class="sd">    the paper `Group Normalization`_ .</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta</span>
+
+<span class="sd">    The input channels are separated into :attr:`num_groups` groups, each containing</span>
+<span class="sd">    ``num_channels / num_groups`` channels. The mean and standard-deviation are calculated</span>
+<span class="sd">    separately over the each group. :math:`\gamma` and :math:`\beta` are learnable</span>
+<span class="sd">    per-channel affine transform parameter vectors of size :attr:`num_channels` if</span>
+<span class="sd">    :attr:`affine` is ``True``.</span>
+
+<span class="sd">    This layer uses statistics computed from input data in both training and</span>
+<span class="sd">    evaluation modes.</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, *)` where :math:`C=\text{num\_channels}`</span>
+<span class="sd">        - Output: :math:`(N, C, *)` (same shape as input)</span>
+
+<span class="sd">    References:</span>
+<span class="sd">    .. _`Group Normalization`: https://arxiv.org/abs/1803.08494</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_groups</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span><span class="n">affine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span><span class="n">in_sequence</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            num_groups (int): number of groups to separate the channels into</span>
+<span class="sd">            eps: a value added to the denominator for numerical stability. Default: 1e-5</span>
+<span class="sd">            affine: a boolean value that when set to ``True``, this module</span>
+<span class="sd">                has learnable per-channel affine parameters initialized to ones (for weights)</span>
+<span class="sd">                and zeros (for biases). Default: ``True``.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; gn=GroupNorm(affine=False)</span>
+<span class="sd">            &gt;&gt;&gt; input = torch.randn(2, 64, 128, 128)</span>
+<span class="sd">            &gt;&gt;&gt; print(int_shape(gn(input)))</span>
+<span class="sd">            (2, 64, 128, 128)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span> <span class="o">=</span> <span class="n">in_sequence</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">filter_index</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="o">=</span><span class="n">affine</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">num_groups</span> <span class="o">=</span> <span class="n">num_groups</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">num_filters</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">affine</span> <span class="o">=</span> <span class="n">affine</span>
 
-
-<div class="viewcode-block" id="GroupNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.GroupNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
+<div class="viewcode-block" id="GroupNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.GroupNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span> <span class="p">:</span>
             <span class="k">assert</span>  <span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_groups</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;number of groups </span><span class="si">{}</span><span class="s1"> must divide number of channels </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_groups</span><span class="p">,</span>  <span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="p">:</span>
@@ -295,30 +432,97 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;bias&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
                 <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span></div>
-<div class="viewcode-block" id="GroupNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.GroupNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">group_norm</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_groups</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span></div></div>
+<div class="viewcode-block" id="GroupNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.GroupNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">x</span><span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">group_norm</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_groups</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span></div></div>
+
 <span class="n">GroupNorm2d</span><span class="o">=</span><span class="n">GroupNorm</span>
 <span class="n">GroupNorm3d</span><span class="o">=</span><span class="n">GroupNorm</span>
 
 
 <div class="viewcode-block" id="InstanceNorm"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.InstanceNorm">[docs]</a><span class="k">class</span> <span class="nc">InstanceNorm</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">affine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">track_running_stats</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        http://pytorch.org/docs/stable/nn.html#batchnorm1d</span>
+    <span class="sd">&quot;&quot;&quot;Applies Instance Normalization over a 4D input (a mini-batch of 2D inputs</span>
+<span class="sd">    with additional channel dimension) as described in the paper</span>
+<span class="sd">    `Instance Normalization: The Missing Ingredient for Fast Stylization`_ .</span>
 
+<span class="sd">    .. math::</span>
+
+<span class="sd">        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta</span>
+
+<span class="sd">    The mean and standard-deviation are calculated per-dimension separately</span>
+<span class="sd">    for each object in a mini-batch. :math:`\gamma` and :math:`\beta` are learnable parameter vectors</span>
+<span class="sd">    of size `C` (where `C` is the input size) if :attr:`affine` is ``True``.</span>
+
+<span class="sd">    By default, this layer uses instance statistics computed from input data in</span>
+<span class="sd">    both training and evaluation modes.</span>
+
+<span class="sd">    If :attr:`track_running_stats` is set to ``True``, during training this</span>
+<span class="sd">    layer keeps running estimates of its computed mean and variance, which are</span>
+<span class="sd">    then used for normalization during evaluation. The running estimates are</span>
+<span class="sd">    kept with a default :attr:`momentum` of 0.1.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        This :attr:`momentum` argument is different from one used in optimizer</span>
+<span class="sd">        classes and the conventional notion of momentum. Mathematically, the</span>
+<span class="sd">        update rule for running statistics here is</span>
+<span class="sd">        :math:`\hat{x}_\text{new} = (1 - \text{momentum}) \times \hat{x} + \text{momemtum} \times x_t`,</span>
+<span class="sd">        where :math:`\hat{x}` is the estimated statistic and :math:`x_t` is the</span>
+<span class="sd">        new observed value.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        :class:`InstanceNorm2d` and :class:`LayerNorm` are very similar, but</span>
+<span class="sd">        have some subtle differences. :class:`InstanceNorm2d` is applied</span>
+<span class="sd">        on each channel of channeled data like RGB images, but</span>
+<span class="sd">        :class:`LayerNorm` is usually applied on entire sample and often in NLP</span>
+<span class="sd">        tasks. Additionally, :class:`LayerNorm` applies elementwise affine</span>
+<span class="sd">        transform, while :class:`InstanceNorm2d` usually don&#39;t apply affine</span>
+<span class="sd">        transform.</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, H, W)`</span>
+<span class="sd">        - Output: :math:`(N, C, H, W)` (same shape as input)</span>
+
+<span class="sd">    References:</span>
+<span class="sd">    .. _`Instance Normalization: The Missing Ingredient for Fast Stylization`:</span>
+<span class="sd">        https://arxiv.org/abs/1607.08022</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">affine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">track_running_stats</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span><span class="n">in_sequence</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Args:</span>
-<span class="sd">            dim: 1d, 2d, or 3d BatchNorm</span>
-<span class="sd">         eps: nn.BatchNorm parameter</span>
-<span class="sd">            momentum: nn.BatchNorm parameter</span>
-<span class="sd">            affine: nn.BatchNorm parameter</span>
-<span class="sd">            track_running_stats: nn.BatchNorm parameter</span>
+<span class="sd">            num_features: :math:`C` from an expected input of size</span>
+<span class="sd">                :math:`(N, C, H, W)`</span>
+<span class="sd">            eps: a value added to the denominator for numerical stability. Default: 1e-5</span>
+<span class="sd">            momentum: the value used for the running_mean and running_var computation. Default: 0.1</span>
+<span class="sd">            affine: a boolean value that when set to ``True``, this module has</span>
+<span class="sd">                learnable affine parameters, initialized the same way as done for batch normalization.</span>
+<span class="sd">                Default: ``False``.</span>
+<span class="sd">            track_running_stats: a boolean value that when set to ``True``, this</span>
+<span class="sd">                module tracks the running mean and variance, and when set to ``False``,</span>
+<span class="sd">                this module does not track such statistics and always uses batch</span>
+<span class="sd">                statistics in both training and eval modes. Default: ``False``</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; innorm=InstanceNorm(affine=False)</span>
+<span class="sd">            &gt;&gt;&gt; input = torch.randn(2, 64, 128, 128)</span>
+<span class="sd">            &gt;&gt;&gt; print(int_shape(innorm(input)))</span>
+<span class="sd">            (2, 64, 128, 128)</span>
+
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">_epsilon</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span> <span class="o">=</span> <span class="n">in_sequence</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">filter_index</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">=</span> <span class="n">momentum</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">affine</span> <span class="o">=</span> <span class="n">affine</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span> <span class="o">=</span> <span class="n">track_running_stats</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="o">=</span><span class="n">axis</span>
 
 <div class="viewcode-block" id="InstanceNorm.reset_running_stats"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.InstanceNorm.reset_running_stats">[docs]</a>    <span class="k">def</span> <span class="nf">reset_running_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">:</span>
@@ -328,11 +532,11 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">affine</span> <span class="p">:</span>
             <span class="n">init</span><span class="o">.</span><span class="n">ones_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
             <span class="n">init</span><span class="o">.</span><span class="n">zeros_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span></div>
-<div class="viewcode-block" id="InstanceNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.InstanceNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+<div class="viewcode-block" id="InstanceNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.InstanceNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span><span class="p">:</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
                 <span class="n">init</span><span class="o">.</span><span class="n">ones_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
                 <span class="n">init</span><span class="o">.</span><span class="n">zeros_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -340,9 +544,9 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;bias&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_mean&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_var&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;num_batches_tracked&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_mean&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">()))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_var&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">()))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;num_batches_tracked&#39;</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">()))</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;running_mean&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;running_var&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -350,67 +554,228 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">reset_running_stats</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span></div>
-<div class="viewcode-block" id="InstanceNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.InstanceNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">instance_norm</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">running_mean</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">running_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">training</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span></div></div>
+<div class="viewcode-block" id="InstanceNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.InstanceNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">x</span><span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">instance_norm</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">running_mean</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">running_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">training</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_running_stats</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span></div></div>
 
 <span class="n">InstanceNorm2d</span><span class="o">=</span><span class="n">InstanceNorm</span>
 <span class="n">InstanceNorm3d</span><span class="o">=</span><span class="n">InstanceNorm</span>
 
-
-<div class="viewcode-block" id="LayerNorm2d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.LayerNorm2d">[docs]</a><span class="k">class</span> <span class="nc">LayerNorm2d</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Layer Normalization (https://arxiv.org/pdf/1607.06450.pdf).</span>
-
-<span class="sd">    http://pytorch.org/docs/stable/nn.html#batchnorm1d</span>
-
-<span class="sd">    Args:</span>
-
-<span class="sd">        eps: nn.BatchNorm parameter</span>
-<span class="sd">        momentum: nn.BatchNorm parameter</span>
-<span class="sd">        affine: nn.BatchNorm parameter</span>
-<span class="sd">        axis: 1d, 2d, or 3d BatchNorm</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">momentum</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">affine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>  <span class="n">eps</span><span class="o">=</span><span class="n">_epsilon</span><span class="p">):</span>
+<div class="viewcode-block" id="AdaptiveInstanceNorm"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.AdaptiveInstanceNorm">[docs]</a><span class="k">class</span> <span class="nc">AdaptiveInstanceNorm</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span><span class="o">=</span><span class="n">momentum</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="o">=</span><span class="n">affine</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="o">=</span><span class="n">eps</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="o">=</span><span class="n">axis</span>
-<div class="viewcode-block" id="LayerNorm2d.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.LayerNorm2d.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span> <span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">affine</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">))</span>
-                <span class="n">init</span><span class="o">.</span><span class="n">ones_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
-                <span class="n">init</span><span class="o">.</span><span class="n">zeros_</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AdaptiveInstanceNorm.mu"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.AdaptiveInstanceNorm.mu">[docs]</a>    <span class="k">def</span> <span class="nf">mu</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Takes a (n,c,h,w) tensor as input and returns the average across</span>
+<span class="sd">        it&#39;s spatial dimensions as (h,w) tensor [See eq. 5 of paper]&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">x</span><span class="p">,(</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span><span class="o">/</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="AdaptiveInstanceNorm.sigma"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.AdaptiveInstanceNorm.sigma">[docs]</a>    <span class="k">def</span> <span class="nf">sigma</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Takes a (n,c,h,w) tensor as input and returns the standard deviation</span>
+<span class="sd">        across it&#39;s spatial dimensions as (h,w) tensor [See eq. 6 of paper] Note</span>
+<span class="sd">        the permutations are required for broadcasting&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">torch</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">mu</span><span class="p">(</span><span class="n">x</span><span class="p">))</span><span class="o">.</span><span class="n">permute</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span><span class="o">**</span><span class="mi">2</span><span class="p">,(</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span><span class="o">+</span><span class="mf">0.000000023</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]))</span></div>
+
+<div class="viewcode-block" id="AdaptiveInstanceNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.AdaptiveInstanceNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_built</span><span class="o">=</span><span class="kc">True</span></div>
-<div class="viewcode-block" id="LayerNorm2d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.LayerNorm2d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
+<div class="viewcode-block" id="AdaptiveInstanceNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.AdaptiveInstanceNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Takes a content embeding x and a style embeding y and changes</span>
+<span class="sd">        transforms the mean and standard deviation of the content embedding to</span>
+<span class="sd">        that of the style. [See eq. 8 of paper] Note the permutations are</span>
+<span class="sd">        required for broadcasting&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="p">(</span><span class="n">y</span><span class="p">)</span><span class="o">*</span><span class="p">((</span><span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">mu</span><span class="p">(</span><span class="n">x</span><span class="p">))</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="p">(</span><span class="n">x</span><span class="p">))</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">mu</span><span class="p">(</span><span class="n">y</span><span class="p">))</span><span class="o">.</span><span class="n">permute</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span></div></div>
+
+
+<div class="viewcode-block" id="LayerNorm"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.LayerNorm">[docs]</a><span class="k">class</span> <span class="nc">LayerNorm</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Applies Layer Normalization over a mini-batch of inputs as described in</span>
+<span class="sd">    the paper `Layer Normalization`_ .</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta</span>
+
+<span class="sd">    The mean and standard-deviation are calculated separately over the last</span>
+<span class="sd">    certain number dimensions which have to be of the shape specified by</span>
+<span class="sd">    :attr:`normalized_shape`.</span>
+<span class="sd">    :math:`\gamma` and :math:`\beta` are learnable affine transform parameters of</span>
+<span class="sd">    :attr:`normalized_shape` if :attr:`elementwise_affine` is ``True``.</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        Unlike Batch Normalization and Instance Normalization, which applies</span>
+<span class="sd">        scalar scale and bias for each entire channel/plane with the</span>
+<span class="sd">        :attr:`affine` option, Layer Normalization applies per-element scale and</span>
+<span class="sd">        bias with :attr:`elementwise_affine`.</span>
+
+<span class="sd">    This layer uses statistics computed from input data in both training and</span>
+<span class="sd">    evaluation modes.</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, *)`</span>
+<span class="sd">        - Output: :math:`(N, *)` (same shape as input)</span>
+
+
+
+<span class="sd">    References:</span>
+<span class="sd">    .. _`Layer Normalization`: https://arxiv.org/abs/1607.06450</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">elementwise_affine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">in_sequence</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Args:</span>
+<span class="sd">        normalized_shape (int or list or torch.Size): input shape from an expected input</span>
+<span class="sd">            of size</span>
+
+<span class="sd">            .. math::</span>
+<span class="sd">                [* \times \text{normalized\_shape}[0] \times \text{normalized\_shape}[1]</span>
+<span class="sd">                    \times \ldots \times \text{normalized\_shape}[-1]]</span>
+
+<span class="sd">            If a single integer is used, it is treated as a singleton list, and this module will</span>
+<span class="sd">            normalize over the last dimension which is expected to be of that specific size.</span>
+<span class="sd">        eps: a value added to the denominator for numerical stability. Default: 1e-5</span>
+<span class="sd">        elementwise_affine: a boolean value that when set to ``True``, this module</span>
+<span class="sd">            has learnable per-element affine parameters initialized to ones (for weights)</span>
+<span class="sd">            and zeros (for biases). Default: ``True``.</span>
+
+<span class="sd">    Examples:</span>
+
+<span class="sd">        &gt;&gt;&gt; input = torch.randn(20, 5, 10, 10)</span>
+<span class="sd">        &gt;&gt;&gt; # With Learnable Parameters</span>
+<span class="sd">        &gt;&gt;&gt; m = LayerNorm(input.size()[1:])</span>
+<span class="sd">        &gt;&gt;&gt; # Without Learnable Parameters</span>
+<span class="sd">        &gt;&gt;&gt; m = LayerNorm(input.size()[1:], elementwise_affine=False)</span>
+<span class="sd">        &gt;&gt;&gt; # Normalize over last two dimensions</span>
+<span class="sd">        &gt;&gt;&gt; m = LayerNorm([10, 10])</span>
+<span class="sd">        &gt;&gt;&gt; # Normalize over last dimension of size 10</span>
+<span class="sd">        &gt;&gt;&gt; m = LayerNorm(10)</span>
+<span class="sd">        &gt;&gt;&gt; # Activating the module</span>
+<span class="sd">        &gt;&gt;&gt; output = m(input)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="o">=</span><span class="n">in_sequence</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filter_index</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">elementwise_affine</span> <span class="o">=</span> <span class="n">elementwise_affine</span>
+
+
+
+<div class="viewcode-block" id="LayerNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.LayerNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span> <span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">normalized_shape</span><span class="o">=</span><span class="p">(</span><span class="n">input_shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;weight&#39;</span><span class="p">,</span><span class="n">Parameter</span><span class="p">(</span><span class="n">ones</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">normalized_shape</span><span class="p">)))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;bias&#39;</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">zeros</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">normalized_shape</span><span class="p">)))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_built</span><span class="o">=</span><span class="kc">True</span></div>
+<div class="viewcode-block" id="LayerNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.LayerNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">x</span><span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">layer_norm</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalized_shape</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span></div></div>
+        <span class="c1"># mean = x.mean(dim=self.axis, keepdim=True).detach()</span>
+        <span class="c1"># std = x.std(dim=self.axis, keepdim=True).detach()</span>
+        <span class="c1"># return self.weight * (x - mean) / (std + self._eps) +self.bias</span>
+
+<span class="n">LayerNorm2d</span><span class="o">=</span><span class="n">LayerNorm</span>
+<span class="n">LayerNorm3d</span><span class="o">=</span><span class="n">LayerNorm</span>
+
+
+<div class="viewcode-block" id="L2Norm"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.L2Norm">[docs]</a><span class="k">class</span> <span class="nc">L2Norm</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">in_sequence</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span> <span class="o">=</span> <span class="n">in_sequence</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">filter_index</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="o">=</span><span class="n">epsilon</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="o">=</span><span class="n">axis</span>
+
+<div class="viewcode-block" id="L2Norm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.L2Norm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span> <span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span></div>
+<div class="viewcode-block" id="L2Norm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.L2Norm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">x</span><span class="o">=</span> <span class="n">l2_normalize</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="p">,</span><span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span></div></div>
+
+
+
+<div class="viewcode-block" id="PixelNorm"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.PixelNorm">[docs]</a><span class="k">class</span> <span class="nc">PixelNorm</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">in_sequence</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">PixelNorm</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_sequence</span><span class="o">=</span><span class="n">in_sequence</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span> <span class="o">=</span> <span class="n">in_sequence</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">filter_index</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+<div class="viewcode-block" id="PixelNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.PixelNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-        <span class="n">mean</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
-        <span class="n">std</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">axis</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">*</span> <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">mean</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">std</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eps</span><span class="p">)</span> <span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">bias</span></div></div>
-
-
-
-
-
-
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">x</span><span class="o">=</span> <span class="n">x</span> <span class="o">/</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">x</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span></div></div>
 
 
 <div class="viewcode-block" id="SpectralNorm"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.SpectralNorm">[docs]</a><span class="k">class</span> <span class="nc">SpectralNorm</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="n">power_iterations</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">SpectralNorm</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies spectral normalization to a parameter in the given module.</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        \mathbf{W}_{SN} = \dfrac{\mathbf{W}}{\sigma(\mathbf{W})},</span>
+<span class="sd">        \sigma(\mathbf{W}) = \max_{\mathbf{h}: \mathbf{h} \ne 0} \dfrac{\|\mathbf{W} \mathbf{h}\|_2}{\|\mathbf{h}\|_2}</span>
+
+<span class="sd">    Spectral normalization stabilizes the training of discriminators (critics)</span>
+<span class="sd">    in Generative Adversarial Networks (GANs) by rescaling the weight tensor</span>
+<span class="sd">    with spectral norm :math:`\sigma` of the weight matrix calculated using</span>
+<span class="sd">    power iteration method. If the dimension of the weight tensor is greater</span>
+<span class="sd">    than 2, it is reshaped to 2D in power iteration method to get spectral</span>
+<span class="sd">    norm. This is implemented via a hook that calculates spectral norm and</span>
+<span class="sd">    rescales weight before every :meth:`~Module.forward` call.</span>
+
+<span class="sd">    See `Spectral Normalization for Generative Adversarial Networks`_ .</span>
+
+<span class="sd">    .. _`Spectral Normalization for Generative Adversarial Networks`: https://arxiv.org/abs/1802.05957</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        module (nn.Module): containing module</span>
+<span class="sd">        name (str, optional): name of weight parameter</span>
+<span class="sd">        n_power_iterations (int, optional): number of power iterations to</span>
+<span class="sd">            calculate spectral norm</span>
+<span class="sd">        eps (float, optional): epsilon for numerical stability in</span>
+<span class="sd">            calculating norms</span>
+<span class="sd">        dim (int, optional): dimension corresponding to number of outputs,</span>
+<span class="sd">            the default is ``0``, except for modules that are instances of</span>
+<span class="sd">            ConvTranspose{1,2,3}d, when it is ``1``</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The original module with the spectral norm hook</span>
+
+<span class="sd">    Examples::</span>
+
+<span class="sd">        &gt;&gt;&gt; m = spectral_norm(nn.Linear(20, 40))</span>
+<span class="sd">        &gt;&gt;&gt; m</span>
+<span class="sd">        Linear(in_features=20, out_features=40, bias=True)</span>
+<span class="sd">        &gt;&gt;&gt; m.weight_u.size()</span>
+<span class="sd">        torch.Size([40])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;spec_norm&#39;</span><span class="p">,</span> <span class="n">power_iterations</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">in_sequence</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SpectralNorm</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">in_sequence</span><span class="o">=</span><span class="n">in_sequence</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">module</span> <span class="o">=</span> <span class="n">module</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">power_iterations</span> <span class="o">=</span> <span class="n">power_iterations</span>
 
 
     <span class="k">def</span> <span class="nf">_update_u_v</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">u</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_u&quot;</span><span class="p">)</span>
-        <span class="n">v</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_v&quot;</span><span class="p">)</span>
-        <span class="n">w</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_bar&quot;</span><span class="p">)</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span>  <span class="s2">&quot;weight_u&quot;</span><span class="p">)</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;weight_v&quot;</span><span class="p">)</span>
+        <span class="n">w</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span>  <span class="s2">&quot;weight_bar&quot;</span><span class="p">)</span>
 
         <span class="n">height</span> <span class="o">=</span> <span class="n">w</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">power_iterations</span><span class="p">):</span>
@@ -419,55 +784,67 @@
 
         <span class="c1"># sigma = torch.dot(u.data, torch.mv(w.view(height,-1).data, v.data))</span>
         <span class="n">sigma</span> <span class="o">=</span> <span class="n">u</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">height</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mv</span><span class="p">(</span><span class="n">v</span><span class="p">))</span>
-        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">w</span> <span class="o">/</span> <span class="n">sigma</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">w</span><span class="p">))</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">,</span> <span class="n">w</span> <span class="o">/</span> <span class="n">sigma</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">w</span><span class="p">))</span>
 
     <span class="k">def</span> <span class="nf">_made_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">u</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_u&quot;</span><span class="p">)</span>
-            <span class="n">v</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_v&quot;</span><span class="p">)</span>
-            <span class="n">w</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_bar&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">True</span>
+            <span class="n">u</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span> <span class="o">+</span> <span class="s2">&quot;_u&quot;</span><span class="p">)</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span><span class="s1">&#39;weight&#39;</span><span class="o">+</span> <span class="s2">&quot;_v&quot;</span><span class="p">)</span>
+            <span class="n">w</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span> <span class="o">+</span> <span class="s2">&quot;_bar&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">u</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">w</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">True</span>
         <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span>
 
-
     <span class="k">def</span> <span class="nf">_make_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">w</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+        <span class="n">w</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">,</span> <span class="s1">&#39;weight&#39;</span><span class="p">)</span>
 
         <span class="n">height</span> <span class="o">=</span> <span class="n">w</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">width</span> <span class="o">=</span> <span class="n">w</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">height</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 
-        <span class="n">u</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">height</span><span class="p">)</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="n">v</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">width</span><span class="p">)</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">height</span><span class="p">)</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">new</span><span class="p">(</span><span class="n">width</span><span class="p">)</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
         <span class="n">u</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">l2_normalize</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
         <span class="n">v</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">l2_normalize</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-        <span class="n">w_bar</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">w_bar</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
 
-        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">_parameters</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">_parameters</span><span class="p">[</span><span class="s1">&#39;weight&#39;</span><span class="p">]</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_u&quot;</span><span class="p">,</span> <span class="n">u</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_v&quot;</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">&quot;_bar&quot;</span><span class="p">,</span> <span class="n">w_bar</span><span class="p">)</span>
-<div class="viewcode-block" id="SpectralNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.SpectralNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;weight&#39;</span> <span class="o">+</span> <span class="s2">&quot;_u&quot;</span><span class="p">,</span> <span class="n">u</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;weight&#39;</span> <span class="o">+</span> <span class="s2">&quot;_v&quot;</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">register_parameter</span><span class="p">(</span><span class="s1">&#39;weight&#39;</span> <span class="o">+</span> <span class="s2">&quot;_bar&quot;</span><span class="p">,</span> <span class="n">w_bar</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SpectralNorm.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.SpectralNorm.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_made_params</span><span class="p">():</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_make_params</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span></div>
-<div class="viewcode-block" id="SpectralNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.SpectralNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
-        <span class="n">x</span><span class="o">=</span><span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<div class="viewcode-block" id="SpectralNorm.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.SpectralNorm.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_update_u_v</span><span class="p">()</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="n">x</span><span class="p">)</span></div></div>
+        <span class="n">x</span><span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">module</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;in_sequence&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span></div></div>
 
 
 <div class="viewcode-block" id="EvoNormB0"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormB0">[docs]</a><span class="k">class</span> <span class="nc">EvoNormB0</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">rank</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">nonlinear</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span><span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-5</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">rank</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">nonlinear</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span><span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-5</span><span class="p">,</span><span class="n">in_sequence</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">EvoNormB0</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span> <span class="o">=</span> <span class="n">in_sequence</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">in_sequence</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">filter_index</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="o">=</span><span class="n">rank</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">nonlinear</span> <span class="o">=</span> <span class="n">nonlinear</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">=</span> <span class="n">momentum</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
 
-<div class="viewcode-block" id="EvoNormB0.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormB0.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
+<div class="viewcode-block" id="EvoNormB0.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormB0.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span> <span class="p">:</span>
             <span class="n">newshape</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="o">+</span><span class="mi">2</span><span class="p">)</span>
             <span class="n">newshape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span>
@@ -479,7 +856,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_var&#39;</span><span class="p">,</span> <span class="n">ones</span><span class="p">(</span><span class="n">newshape</span><span class="p">))</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_built</span><span class="o">=</span><span class="kc">True</span></div>
 
-<div class="viewcode-block" id="EvoNormB0.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormB0.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<div class="viewcode-block" id="EvoNormB0.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormB0.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
             <span class="n">permute_pattern</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="o">+</span><span class="mi">2</span><span class="p">)</span>
             <span class="n">permute_pattern</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">=</span><span class="mi">1</span>
@@ -498,14 +875,14 @@
 
 
 <div class="viewcode-block" id="EvoNormS0"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormS0">[docs]</a><span class="k">class</span> <span class="nc">EvoNormS0</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">rank</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">groups</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span><span class="n">nonlinear</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">rank</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">groups</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span><span class="n">nonlinear</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">(</span><span class="n">EvoNormS0</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">nonlinear</span> <span class="o">=</span> <span class="n">nonlinear</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">groups</span> <span class="o">=</span> <span class="n">groups</span>
 
-<div class="viewcode-block" id="EvoNormS0.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormS0.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
+<div class="viewcode-block" id="EvoNormS0.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormS0.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">:</span><span class="n">TensorShape</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span> <span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="o">=</span><span class="n">input_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="o">=</span><span class="n">input_shape</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">filter_index</span><span class="p">]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">weight</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">)</span><span class="o">+</span><span class="p">(</span><span class="mi">1</span><span class="p">,)</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">))</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="o">=</span> <span class="n">Parameter</span><span class="p">(</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">)</span><span class="o">+</span><span class="p">(</span><span class="mi">1</span><span class="p">,)</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">))</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nonlinear</span><span class="p">:</span>
@@ -513,7 +890,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;running_var&#39;</span><span class="p">,</span> <span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_filters</span><span class="p">)</span><span class="o">+</span><span class="p">(</span><span class="mi">1</span><span class="p">,)</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">))</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_built</span><span class="o">=</span><span class="kc">True</span></div>
 
-<div class="viewcode-block" id="EvoNormS0.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormS0.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<div class="viewcode-block" id="EvoNormS0.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_normalizations.EvoNormS0.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">nonlinear</span><span class="p">:</span>
             <span class="n">num</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">v</span> <span class="o">*</span> <span class="n">x</span><span class="p">)</span>
             <span class="n">std</span> <span class="o">=</span> <span class="n">group_std</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">groups</span><span class="p">)</span>
@@ -527,12 +904,17 @@
         <span class="k">return</span> <span class="kc">None</span>
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span><span class="n">Layer</span><span class="p">)</span> <span class="ow">and</span> <span class="s1">&#39;Norm&#39;</span> <span class="ow">in</span> <span class="n">fn_name</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">fn_name</span>
+    <span class="k">elif</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">fn_name</span><span class="p">)</span> <span class="ow">and</span> <span class="n">fn_name</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="o">==</span><span class="nb">type</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">fn_name</span><span class="p">()</span>
     <span class="k">elif</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">fn_name</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">fn_name</span>
+
     <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">fn_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;instance_norm&#39;</span><span class="p">,</span><span class="s1">&#39;instance&#39;</span><span class="p">,</span><span class="s1">&#39;in&#39;</span><span class="p">,</span><span class="s1">&#39;i&#39;</span><span class="p">]:</span>
             <span class="k">return</span> <span class="n">InstanceNorm</span><span class="p">()</span>
         <span class="k">elif</span>  <span class="n">fn_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;batch_norm&#39;</span><span class="p">,</span><span class="s1">&#39;batch&#39;</span><span class="p">,</span><span class="s1">&#39;bn&#39;</span><span class="p">,</span><span class="s1">&#39;b&#39;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">BatchNorm</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">fn_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;layer_norm&#39;</span><span class="p">,</span> <span class="s1">&#39;layer&#39;</span><span class="p">,</span> <span class="s1">&#39;ln&#39;</span><span class="p">,</span> <span class="s1">&#39;l&#39;</span><span class="p">]:</span>
             <span class="k">return</span> <span class="n">BatchNorm</span><span class="p">()</span>
         <span class="k">elif</span>  <span class="n">fn_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;group_norm&#39;</span><span class="p">,</span><span class="s1">&#39;group&#39;</span><span class="p">,</span><span class="s1">&#39;gn&#39;</span><span class="p">,</span><span class="s1">&#39;g&#39;</span><span class="p">]:</span>
             <span class="k">return</span> <span class="n">GroupNorm</span><span class="p">(</span><span class="n">num_groups</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
@@ -542,9 +924,9 @@
             <span class="k">return</span> <span class="n">EvoNormS0</span><span class="p">()</span>
         <span class="k">elif</span> <span class="n">fn_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;spectral_norm&#39;</span><span class="p">,</span><span class="s1">&#39;spectral&#39;</span><span class="p">,</span><span class="s1">&#39;spec&#39;</span><span class="p">,</span><span class="s1">&#39;sp&#39;</span> <span class="p">,</span><span class="s1">&#39;s&#39;</span><span class="p">]:</span>
             <span class="k">return</span> <span class="n">SpectralNorm</span>
+        <span class="k">elif</span> <span class="n">fn_name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;l2_norm&#39;</span><span class="p">,</span><span class="s1">&#39;l2&#39;</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">L2Norm</span><span class="p">()</span>
 
-    <span class="k">elif</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">fn_name</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">fn_name</span>
     <span class="n">fn_modules</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;trident.layers.pytorch_normalizations&#39;</span><span class="p">]</span>
     <span class="n">normalization_fn_</span> <span class="o">=</span> <span class="n">get_class</span><span class="p">(</span><span class="n">fn_name</span><span class="p">,</span> <span class="n">fn_modules</span><span class="p">)</span>
     <span class="n">normalization_fn</span> <span class="o">=</span> <span class="n">normalization_fn_</span>
@@ -570,8 +952,8 @@
     </div>
 
     <div class="mdl-mini-footer__right-section">
-        <div>&copy; Copyright 2020, AllanYiin.</div>
-      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 3.0.3 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
+        <div>&copy; Copyright 2022, AllanYiin.</div>
+      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 5.0.2 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
     </div>
 </footer>
         </main>

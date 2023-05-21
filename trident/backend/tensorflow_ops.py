@@ -4474,11 +4474,13 @@ def binary_cross_entropy(output, target, from_logits=False):
           A tensor.
       """
     if from_logits:
-        output = clip(output, 1e-7, 1 - 1e-7)
+        pass
     else:
-        output = clip(sigmoid(output), 1e-7, 1 - 1e-7)
-    bce = target * tf.math.log(output)
-    bce += (1 - target) * tf.math.log(1 - output)
+        output = sigmoid(output)
+    if isinstance(target,(_float,_int )):
+        target=(ones_like(output)*float(target)).to(output.dtype).to(output.device)
+    bce = target *  tf.math.log(tf.clip_by_value(output,1e-7,1))
+    bce =bce+ (1 - target) * tf.math.log(tf.clip_by_value(1 - output,1e-7,1))
     return -bce
 
 

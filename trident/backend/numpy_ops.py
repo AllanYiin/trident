@@ -4,7 +4,7 @@ from __future__ import print_function
 
 import math
 import random
-from collections.abs import Iterable
+from collections.abc import Iterable
 from typing import List, Optional, Sequence
 
 import numpy as np

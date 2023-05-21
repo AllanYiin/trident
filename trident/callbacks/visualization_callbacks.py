@@ -176,7 +176,7 @@ class TileImageCallback(VisualizationCallbackBase):
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
-        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (training_context['current_epoch'] % self.frequency )== 0):
+        if self.frequency > 0 and (self.unit == 'epoch' and (training_context['current_epoch'] % self.frequency )== 0):
             self.plot_tile_image(training_context)
 
 
@@ -713,8 +713,7 @@ class PrintGpuUtilizationCallback(VisualizationCallbackBase):
                 self.lines = []
 
     def on_overall_epoch_end(self, training_context):
-        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (
-                training_context['current_epoch'] ) % self.frequency == 0):
+        if self.frequency > 0 and (self.unit == 'epoch' and (training_context['current_epoch']+1) % self.frequency == 0):
             self.print_gpu_utilization()
             if len(self.lines) > 0:
                 for line in self.lines:

@@ -415,9 +415,9 @@ class Scale(Layer):
     """
     def __init__(self, scale:(float,Tensor)=1.0, shift:(float,Tensor)=0.0, power:(float,Tensor)=1.0,mode='uniform',keep_output: bool=False,name:Optional[str] = None):
         super(Scale, self).__init__(keep_output=keep_output,name=name)
-        self._scale=to_tensor(scale)
-        self._shift=to_tensor(shift)
-        self._power=to_tensor(power)
+        self._scale=scale
+        self._shift=shift
+        self._power=power
 
         if mode == 'uniform' and (numel(self._scale)!=1 or numel(self._shift)!=1or numel(self._power)!=1):
             raise ValueError('Scale/ Shift/ Power should float, 0d Tensor or One element Tensor whem mode=uniform')
@@ -433,36 +433,32 @@ class Scale(Layer):
                     del d[name]
         if self._built == False:
             if self.mode == 'uniform':
-                self.scale = Parameter(ones((1)).to(self.get_root().device) * self._scale, trainable=True)
-                self.shift = Parameter(ones((1)).to(self.get_root().device) * self._shift, trainable=True)
-                self.power = Parameter(ones((1)).to(self.get_root().device) * self._power, trainable=True)
+                self.weight_scale = Parameter(ones((1)).to(self.get_root().device) * self._scale, trainable=True)
+                self.weight_shift = Parameter(ones((1)).to(self.get_root().device) * self._shift, trainable=True)
+                self.weight_power = Parameter(ones((1)).to(self.get_root().device) * self._power, trainable=True)
             elif self.mode == 'constant':
-                self.scale = ones((1)).to(self.get_root().device) * self._scale
-                self.shift = ones((1)).to(self.get_root().device)  * self._shift
-                self.power = ones((1)).to(self.get_root().device) *  self._power
+                self.weight_scale = ones((1)).to(self.get_root().device) * self._scale
+                self.weight_shift = ones((1)).to(self.get_root().device)  * self._shift
+                self.weight_power = ones((1)).to(self.get_root().device) *  self._power
             elif self.mode == 'channel':
                 new_shape=[1,]*(input_shape.rank)
                 new_shape[self.filter_index]=self.input_filters
                 new_shape=tuple(new_shape[1:])
-                self.scale = Parameter(ones(new_shape).to(self.get_root().device)*self._scale,trainable=True)
-                self.shift = Parameter(ones(new_shape).to(self.get_root().device)*self._shift,trainable=True)
-                self.power = Parameter(ones(new_shape).to(self.get_root().device)*self._power,trainable=True)
+                self.weight_scale = Parameter(ones(new_shape).to(self.get_root().device)*self._scale,trainable=True)
+                self.weight_shift = Parameter(ones(new_shape).to(self.get_root().device)*self._shift,trainable=True)
+                self.weight_power = Parameter(ones(new_shape).to(self.get_root().device)*self._power,trainable=True)
             elif self.mode == 'elementwise':
                 new_shape = input_shape.dims[1:]
-                self.scale = Parameter(ones(new_shape).to(self.get_root().device) * self._scale, trainable=True)
-                self.shift = Parameter(ones(new_shape).to(self.get_root().device) * self._shift, trainable=True)
-                self.power = Parameter(ones(new_shape).to(self.get_root().device) * self._power, trainable=True)
-            remove_from('_scale',self.__dict__, self._buffers)
-            remove_from('_shift',self.__dict__, self._buffers)
-            remove_from('_power',self.__dict__, self._buffers)
+                self.weight_scale = Parameter(ones(new_shape).to(self.get_root().device) * self._scale, trainable=True)
+                self.weight_shift = Parameter(ones(new_shape).to(self.get_root().device) * self._shift, trainable=True)
+                self.weight_power = Parameter(ones(new_shape).to(self.get_root().device) * self._power, trainable=True)
+
             self._built = True
 
 
     def forward(self, x, **kwargs) -> tf.Tensor:
-        self.scale=self.scale.to(x.device)
-        self.shift=self.shift.to(x.device)
-        self.power=self.power.to(x.device)
-        x = pow(x * self.scale + self.shift, self.power)
+        x = x * self.scale + self.shift
+        x=sign(x)* pow(abs(x), self.weight_power)
         return x
 
 
