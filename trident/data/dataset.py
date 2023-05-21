@@ -25,8 +25,8 @@ from trident.backend import iteration_tools
 from trident.backend.common import *
 from trident.backend.opencv_backend import file2array
 from trident.backend.tensorspec import TensorSpec, ObjectType
-from trident.data.image_common import image_backend_adaption, reverse_image_backend_adaption, \
-    array2image, TensorShape,OrderedDict
+from trident.data.image_common import image_backend_adaption, reverse_image_backend_adaption, TensorShape,OrderedDict
+from trident.backend.pillow_backend import array2image
 from trident.data.label_common import label_backend_adaptive
 from trident.data.mask_common import mask_backend_adaptive, color2label
 from trident.data.samplers import *
