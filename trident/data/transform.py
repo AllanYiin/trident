@@ -1,7 +1,7 @@
 import numbers
 import random
 from abc import ABC, abstractmethod
-from collections import Iterable
+from collections.abc import Iterable
 from typing import Sequence, Tuple, Dict, Union, Optional, Callable, Any
 import collections
 
