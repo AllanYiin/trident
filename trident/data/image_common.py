@@ -23,10 +23,9 @@ import six
 from scipy import ndimage
 from skimage import color
 from skimage import exposure
-from skimage import morphology
 from skimage import transform, exposure
 from skimage.filters import *
-from skimage.morphology import square
+from skimage.morphology import square,grey_erosion,grey_dilation
 from trident.backend.common import *
 from trident.backend.decorators import deprecated
 from trident.backend.tensorspec import TensorSpec, assert_input_compatibility, ObjectType
@@ -469,9 +468,9 @@ def erosion_then_dilation(filter_size=3, repeat=1):
         structure_shape[0]=filter_size
         structure_shape[1] = filter_size
         for i in range(repeat):
-            image = ndimage.morphology.grey_erosion(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
+            image = grey_erosion(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
             image=clip(image, 0, 255)
-            image = ndimage.morphology.grey_dilation(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
+            image = grey_dilation(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
             image = clip(image, 0, 255)
         return image
 
@@ -484,8 +483,8 @@ def dilation_then_erosion(filter_size=3, repeat=1):
         structure_shape[0]=filter_size
         structure_shape[1] = filter_size
         for i in range(repeat):
-            image = ndimage.morphology.grey_dilation(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
-            image = ndimage.morphology.grey_erosion(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
+            image = grey_dilation(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
+            image = grey_erosion(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
         return image
 
     return img_op
