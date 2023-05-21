@@ -12,7 +12,7 @@ import gc
 import math
 import numbers
 import random
-from collections import Sized, Iterable
+from collections.abc import Sized,Iterable
 from distutils.version import LooseVersion
 from functools import wraps
 from typing import Tuple, List, Optional, Union, Sequence, Any
@@ -3186,7 +3186,7 @@ def log_softmax(x, axis=1,temperature=1):
         (Tensor): output tensor and get same shape with x.
 
     """
-    return F.log_softmax(x/temperature, axis=axis)
+    return F.log_softmax(x/temperature, dim=axis)
 
 
 def gelu(x):
@@ -4491,8 +4491,10 @@ def binary_cross_entropy(output, target, from_logits=False):
         output = output
     else:
         output = sigmoid(output)
-    bce = target * torch.log(output)
-    bce += (1 - target) * torch.log(1 - output)
+    if isinstance(target,(_float,_int )):
+        target=(ones_like(output)*float(target)).to(output.dtype).to(output.device)
+    bce = target * torch.log(clip(output,min=1e-7))
+    bce =bce+ (1 - target) * torch.log(clip(1 - output,min=1e-7))
     return -bce
 
 
