@@ -2401,17 +2401,51 @@ class Upsampling1d(Layer):
 
 
 class Upsampling2d(Layer):
-    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None, keep_output=False,
+    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=None, antialias: bool = False, name=None, keep_output=False,
                  **kwargs):
+        '''
+
+        Args:
+            size (int or Tuple[int] or Tuple[int, int] or Tuple[int, int, int]):
+            output spatial size.
+            scale_factor (float or Tuple[float]): multiplier for spatial size. If `scale_factor` is a tuple,
+            its length has to match the number of spatial dimensions; `input.dim() - 2`.
+            mode: algorithm used for upsampling:
+            ``'nearest'`` | ``'linear'`` | ``'bilinear'`` | ``'bicubic'`` |
+            ``'trilinear'`` | ``'area'`` | ``'nearest-exact'``. Default: ``'nearest'``
+            align_corners:
+            antialias:
+            name:
+            keep_output:
+            **kwargs:
+        '''
         super(Upsampling2d, self).__init__(keep_output=keep_output, name=name)
+        if mode in ("nearest", "area", "nearest-exact"):
+            if align_corners is not None:
+                raise ValueError(
+                    "align_corners option can only be set with the "
+                    "interpolating modes: linear | bilinear | bicubic | trilinear"
+                )
+        else:
+            if align_corners is None:
+                align_corners = False
+
         self.rank = 2
         self.size = size
         if isinstance(scale_factor, tuple):
-            self.scale_factor = tuple(float(factor) for factor in scale_factor)
+            if self.mode == 'pixel_shuffle':
+                self.scale_factor=int(scale_factor[0])
+            else:
+                self.scale_factor = tuple(float(factor) for factor in scale_factor)
         else:
-            self.scale_factor = float(scale_factor) if scale_factor else None
+            if self.mode == 'pixel_shuffle':
+                self.scale_factor=int(scale_factor)
+            else:
+                self.scale_factor = [scale_factor for _ in range(self.rank)]
         self.mode = mode
         self.align_corners = align_corners
+        self.antialias=antialias
+
 
     def forward(self, x, **kwargs):
 
@@ -2420,7 +2454,7 @@ class Upsampling2d(Layer):
         elif self.mode == 'nearest':
             return F.interpolate(x, self.size, self.scale_factor, self.mode, None)
         else:
-            return F.interpolate(x, self.size, self.scale_factor, mode=self.mode, align_corners=self.align_corners)
+            return F.interpolate(x, self.size, self.scale_factor, mode=self.mode, align_corners=self.align_corners,antialias=self.antialias)
 
     def extra_repr(self):
         if self.scale_factor is not None:
