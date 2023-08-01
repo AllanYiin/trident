@@ -811,7 +811,7 @@ class _ConvNd(Layer):
                     torch.Tensor(int(self.input_filters), self.num_filters // self.groups, *self.kernel_size).to(self.get_root().device))
             else:
                 self.weight = Parameter(
-                    torch.Tensor(int(self.num_filters), self.input_filters // self.groups, *self.kernel_size).to(self.get_root().device))  #
+                    torch.Tensor(int(self.num_filters), self.input_filters // self.groups, *self.kernel_size).to(self.device))  #
 
                 if self.separable:
                     self.pointwise = Parameter(
@@ -1393,24 +1393,15 @@ class SeparableConv1d(_ConvNd):
                                               depthwise=True, separable=True, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
-        self.conv1 = None
-        self.pointwise = None
 
-    def build(self, input_shape: TensorShape):
-        if self._built == False or self.conv1 is None:
-            if self.num_filters is None:
-                self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None else self.num_filters
-            self.conv1 = DepthwiseConv1d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                         strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
-                                         activation=self.activation, dilation=self.dilation, use_bias=self.use_bias)
-            self.pointwise = Conv1d(kernel_size=1, num_filters=self.num_filters, strides=1, use_bias=self.use_bias,
-                                    dilation=1, groups=1)
-            self.to(self.device)
-            self._built = True
+
+    def conv1d_forward(self, x, **kwargs):
+        x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
+        return F.conv1d(x, self.weight, self.bias, self.strides, _single(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
-        x = self.conv1(x)
-        x = self.pointwise(x)
+        x = self.conv1d_forward(x)
+        x = F.conv1d(x, self.pointwise, self.bias, 1, _pair(0), 1, 1)
         if self.activation is not None:
             x = self.activation(x)
         return x
@@ -1441,25 +1432,37 @@ class SeparableConv2d(_ConvNd):
                                               depthwise=True, separable=True, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
-        self.pointwise = None
+        #self.pointwise =Conv2d(kernel_size=(1, 1), num_filters=self.num_filters, strides=1, use_bias=self.use_bias, dilation=1, groups=1)
         self._built = False
 
-    def build(self, input_shape: TensorShape):
-        if self._built == False or self.conv1 is None:
-            if self.num_filters is None:
-                self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None else self.num_filters
-            self.conv1 = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                         strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
-                                         activation=self.activation, dilation=self.dilation, use_bias=self.use_bias)
-            self.pointwise = Conv2d(kernel_size=(1, 1), num_filters=self.num_filters, strides=1, use_bias=self.use_bias,
-                                    dilation=1, groups=1)
-            self.to(self.device)
-            self._built = True
+    # def build(self, input_shape: TensorShape):
+    #     if self._built == False or self.conv1 is None:
+    #         if self.num_filters is None:
+    #             self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None else self.num_filters
+    #         self.conv1 = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
+    #                                      strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
+    #                                      activation=self.activation, dilation=self.dilation, use_bias=self.use_bias)
+    #         self.pointwise = Conv2d(kernel_size=(1, 1), num_filters=self.num_filters, strides=1, use_bias=self.use_bias,
+    #                                 dilation=1, groups=1)
+    #         self.to(self.device)
+    #         self._built = True
 
+    def conv2d_forward(self, x, **kwargs):
+        self.rank = 2
+        if len(self.padding) == self.rank:
+            self.padding = (self.padding[1], self.padding[1], self.padding[0], self.padding[0])
+        if self.padding_mode == 'circular':
+            expanded_padding = (
+            (self.padding[0] + 1) // 2, self.padding[1] // 2, (self.padding[2] + 1) // 2, self.padding[3] // 2)
+            x = F.pad(x, expanded_padding, mode='circular')
+        else:
+            x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
+
+        return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
     def forward(self, x, **kwargs):
 
-        x = self.conv1(x)
-        x = self.pointwise(x)
+        x = self.conv2d_forward(x)
+        x = F.conv2d(x, self.pointwise, self.bias, 1, _pair(0), 1, 1)
 
         return x
 
@@ -1489,25 +1492,26 @@ class SeparableConv3d(_ConvNd):
                                               depthwise=True, separable=True, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
-        self.pointwise = None
 
-    def build(self, input_shape: TensorShape):
-        if self._built == False or self.conv1 is None:
-            self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None else self.num_filters
-            self.conv1 = DepthwiseConv3d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                         strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
-                                         dilation=self.dilation, groups=self.input_filters, bias=self.use_bias)
-            self.pointwise = Conv3d(kernel_size=(1, 1, 1), depth_multiplier=1, strides=1, use_bias=self.use_bias,
-                                    dilation=1,
-                                    groups=1)
 
-            self.to(self.device)
-            self._built = True
 
+    def conv3d_forward(self, x, **kwargs):
+        if self.padding_mode == 'circular':
+            expanded_padding = (
+                (self.padding[2] + 1) // 2, self.padding[2] // 2, (self.padding[1] + 1) // 2, self.padding[1] // 2,
+                (self.padding[0] + 1) // 2, self.padding[0] // 2)
+            x = F.pad(x, expanded_padding, mode='circular')
+        else:
+            x = F.pad(x, (
+            self.padding[2], self.padding[2], self.padding[1], self.padding[1], self.padding[0], self.padding[0]),
+                      mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
+
+        return F.conv3d(x, self.weight, self.bias, self.strides, _triple(0), self.dilation, self.groups)
+    
     def forward(self, x, **kwargs):
 
-        x = self.conv1(x)
-        x = self.pointwise(x)
+        x = self.conv3d_forward(x)
+        x = F.conv3d(x, self.pointwise, self.bias, 1, _triple(0), 1, 1)
         if self.activation is not None:
             x = self.activation(x)
         return x
@@ -2403,7 +2407,7 @@ class Upsampling1d(Layer):
 class Upsampling2d(Layer):
     def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=None, antialias: bool = False, name=None, keep_output=False,
                  **kwargs):
-        '''
+        """
 
         Args:
             size (int or Tuple[int] or Tuple[int, int] or Tuple[int, int, int]):
@@ -2412,26 +2416,25 @@ class Upsampling2d(Layer):
             its length has to match the number of spatial dimensions; `input.dim() - 2`.
             mode: algorithm used for upsampling:
             ``'nearest'`` | ``'linear'`` | ``'bilinear'`` | ``'bicubic'`` |
-            ``'trilinear'`` | ``'area'`` | ``'nearest-exact'``. Default: ``'nearest'``
+            ``'trilinear'`` | ``'area'`` | ``'nearest-exact'`` | ``'pixel-shuffle'``. Default: ``'nearest'``
             align_corners:
             antialias:
             name:
             keep_output:
             **kwargs:
-        '''
+        """
         super(Upsampling2d, self).__init__(keep_output=keep_output, name=name)
+        self.mode = mode
         if mode in ("nearest", "area", "nearest-exact"):
             if align_corners is not None:
-                raise ValueError(
-                    "align_corners option can only be set with the "
-                    "interpolating modes: linear | bilinear | bicubic | trilinear"
-                )
+                align_corners =None
         else:
             if align_corners is None:
                 align_corners = False
 
         self.rank = 2
         self.size = size
+
         if isinstance(scale_factor, tuple):
             if self.mode == 'pixel_shuffle':
                 self.scale_factor=int(scale_factor[0])
@@ -2442,7 +2445,7 @@ class Upsampling2d(Layer):
                 self.scale_factor=int(scale_factor)
             else:
                 self.scale_factor = [scale_factor for _ in range(self.rank)]
-        self.mode = mode
+
         self.align_corners = align_corners
         self.antialias=antialias
 
@@ -2450,7 +2453,7 @@ class Upsampling2d(Layer):
     def forward(self, x, **kwargs):
 
         if self.mode == 'pixel_shuffle':
-            return F.pixel_shuffle(x, int(self.scale_factor))
+            return F.pixel_shuffle(concate([x]*int(self.scale_factor)**2,axis=1), int(self.scale_factor))
         elif self.mode == 'nearest':
             return F.interpolate(x, self.size, self.scale_factor, self.mode, None)
         else:
