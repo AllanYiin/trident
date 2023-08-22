@@ -125,7 +125,7 @@ __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_te
            'shuffle',
            'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like',
            'multinomial', 'random_bernoulli', 'binary_cross_entropy',
-           'rgb2xyz', 'rgb2hsv', 'rgb2lab', 'rgb2gray', 'xyz2lab', 'xyz2rgb', 'lab2xyz', 'lab2rgb', 'xywh2xyxy',
+           'rgb2xyz', 'rgb2hsv','hsv2rgb', 'rgb2lab', 'rgb2gray', 'xyz2lab', 'xyz2rgb', 'lab2xyz', 'lab2rgb', 'xywh2xyxy',
            'xyxy2xywh', 'bbox_iou',
            'bbox_giou', 'bbox_ciou', 'bbox_diou', 'nms']
 
@@ -352,11 +352,9 @@ def to_tensor(x: Any, dtype: Optional[_dtype] = None, device: Device = None, req
     elif isinstance(x, np.ndarray):
         dtype = str2dtype(str(x.dtype).replace('numpy', 'Dtype'))
 
-    elif isinstance(x, Tensor) and 'float' not in str(x.dtype):
+    elif isinstance(x, Tensor) :
         dtype = x.dtype
-    elif isinstance(x, Tensor) and 'float' in str(x.dtype):
-        dtype = _float_dtype
-    elif dtype is None and not is_tensor(x) and isinstance(x, collections.Iterable) and all(
+    elif dtype is None and not is_tensor(x) and isinstance(x, Iterable) and all(
             [isinstance(item, numbers.Integral) for item in x]):
         dtype = Dtype.int64
     elif dtype is None:
@@ -4578,61 +4576,80 @@ def rgb2hsv(rgb: Tensor):
     Examples:
          >>> import cv2
         >>> img=cv2.cvtColor(cv2.imread('../../images/cat.jpg'),cv2.COLOR_BGR2RGB)
-        >>> hsv_tensor=to_numpy(rgb2hsv(to_tensor(img.copy()).float()))
+        >>> hsv_tensor=to_numpy(rgb2hsv(to_tensor(img.copy()).float())).astype(np.int32)
         >>> groundtruth_hsv=cv2.cvtColor(img,cv2.COLOR_RGB2HSV)
-        >>> abs(np.round(hsv_tensor.astype(np.float32))-groundtruth_hsv.astype(np.float32)).mean()<2
+        >>> print(hsv_tensor,groundtruth_hsv)
+        >>> abs(hsv_tensor-groundtruth_hsv).mean()<2
         True
         >>> print( groundtruth_hsv.shape,groundtruth_hsv)
-        >>> print( hsv_tensor.shape,hsv_tensor.astype(np.uint8))
-        >>> print(abs(np.round(hsv_tensor.astype(np.float32))-groundtruth_hsv.astype(np.float32)).mean())
+        >>> print( hsv_tensor.shape,hsv_tensor.astype(np.int32))
+        >>> print(hsv_tensor-groundtruth_hsv)
 
     """
     rgb = rgb.to(_float_dtype) / 255.0
     if ndim(rgb) not in [3, 4]:
         raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
-    # rgb=rgb[np.newaxis, ...]
-    rgb = zeros_like(rgb.copy())
-    axis = -1
-    if ndim(rgb) == 4:
-        axis = 1
+    is_3d_tensor=False
+    if ndim(rgb)==3:
+        is_3d_tensor=True
+        rgb=rgb.permute(2,0,1).unsqueeze(0)
+    hue = torch.Tensor(rgb.shape[0], rgb.shape[2], rgb.shape[3]).to(rgb.device)
+    eps=1e-7
+    hue[rgb[:, 2] == rgb.max(1)[0]] = 4.0 + ((rgb[:, 0] - rgb[:, 1]) / (rgb.max(1)[0] - rgb.min(1)[0] + eps))[rgb[:, 2] == rgb.max(1)[0]]
+    hue[rgb[:, 1] == rgb.max(1)[0]] = 2.0 + ((rgb[:, 2] - rgb[:, 0]) / (rgb.max(1)[0] - rgb.min(1)[0] + eps))[rgb[:, 1] == rgb.max(1)[0]]
+    hue[rgb[:, 0] == rgb.max(1)[0]] = (0.0 + ((rgb[:, 1] - rgb[:, 2]) / (rgb.max(1)[0] - rgb.min(1)[0] + eps))[rgb[:, 0] == rgb.max(1)[0]]) % 6
 
-    # -- V channel
-    out_v = reduce_max(rgb.copy(), axis=axis, keepdims=True)
+    hue[rgb.min(1)[0] == rgb.max(1)[0]] = 0.0
+    hue = hue / 6
 
-    # -- S channel
-    delta = reduce_max(rgb.copy(), axis=axis, keepdims=True) - reduce_min(rgb.copy(), axis=axis, keepdims=True)
-    delta_zeros = zeros_like(delta, dtype=delta.dtype)
-    out_s = where(delta == 0, delta_zeros, delta / out_v)
+    saturation = (rgb.max(1)[0] - rgb.min(1)[0]) / (rgb.max(1)[0] + eps)
+    saturation[rgb.max(1)[0] == 0] = 0
 
-    # -- H channel
-    # red is max
-    maxc_tmp = equal(out_v, rgb, dtype=_float_dtype)
-    _, max_indices = rgb.copy().max(dim=axis)
-    out_h = None
-    if ndim(rgb) == 3:
-        rc, gc, bc = split(maxc_tmp.copy(), 3, axis=axis)
+    value = rgb.max(1)[0]
+    hsv=stack([hue, saturation, value],axis=1)
+    if is_3d_tensor:
+        hsv=hsv[0].permute(1,2,0)
+    return round(hsv*255,0).to(rgb.dtype)
 
-        out_h = torch.cat([
-            bc - gc,
-            2.0 * delta + rc - bc,
-            4.0 * delta + gc - rc, ], dim=axis)
-        out_h = torch.gather(out_h, dim=axis, index=max_indices[:, :, None])
+def hsv2rgb(hsv: Tensor):
+    """Compute luminance of an RGB image.
 
+    Args:
+        hsv (tensor):  hsv image  =>shape: (H,W,C)
+    Returns:
+        rgb(tensor):rgb image => shape: (H,W,C)
 
-    elif ndim(rgb) == 4:
-        rc, gc, bc = split(maxc_tmp.copy(), 3, axis=-3)
-        out_h = torch.cat([
-            bc - gc,
-            2.0 * delta + rc - bc,
-            4.0 * delta + gc - rc,
-        ], dim=-3)
-        out_h = torch.gather(out_h, dim=-3, index=max_indices[..., None, :, :])
-
-    # out_h = out_h / delta
-    out_h = (out_h / 6.0) % 1.0
-
-    # -- output
-    return torch.cat([out_h * 255.0, out_s * 255.0, out_v * 255.0], dim=axis)
+    Examples:
+         >>> import cv2
+        >>> img=cv2.cvtColor(cv2.imread('../../images/cat.jpg'),cv2.COLOR_BGR2RGB)
+        >>> np.abs(to_numpy(hsv2rgb(rgb2hsv(to_tensor(img))))-img).mean()<0.01
+        True
+    """
+    hsv = hsv.to(_float_dtype) / 255.0
+    if ndim(hsv) not in [3, 4]:
+        raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
+    is_3d_tensor=False
+    if ndim(hsv)==3:
+        is_3d_tensor=True
+        hsv=hsv.permute(2,0,1).unsqueeze(0)
+    hsv_h, hsv_s, hsv_l = hsv[:, 0:1], hsv[:, 1:2], hsv[:, 2:3]
+    _c = hsv_l * hsv_s
+    _x = _c * (- torch.abs(hsv_h * 6. % 2. - 1) + 1.)
+    _m = hsv_l - _c
+    _o = torch.zeros_like(_c)
+    idx = (hsv_h * 6.).type(torch.uint8)
+    idx = (idx % 6).expand(-1, 3, -1, -1)
+    rgb = torch.empty_like(hsv)
+    rgb[idx == 0] = torch.cat([_c, _x, _o], dim=1)[idx == 0]
+    rgb[idx == 1] = torch.cat([_x, _c, _o], dim=1)[idx == 1]
+    rgb[idx == 2] = torch.cat([_o, _c, _x], dim=1)[idx == 2]
+    rgb[idx == 3] = torch.cat([_o, _x, _c], dim=1)[idx == 3]
+    rgb[idx == 4] = torch.cat([_x, _o, _c], dim=1)[idx == 4]
+    rgb[idx == 5] = torch.cat([_c, _o, _x], dim=1)[idx == 5]
+    rgb += _m
+    if is_3d_tensor:
+        rgb=rgb[0].permute(1,2,0)
+    return round(rgb*255,0).to(hsv.dtype)
 
 
 def xyz2rgb(xyz: Tensor):
