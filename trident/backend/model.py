@@ -22,11 +22,12 @@ from trident import context
 from trident.context import split_path, make_dir_if_need, sanitize_path
 
 from trident.backend import dtype
+from trident.backend.decorators import *
 from trident.backend.common import to_list, format_time, get_terminal_size, get_backend, \
     PrintException, OrderedDict, adaptive_format, cyan_color, get_class, camel2snake, is_instance,unpack_singleton
 from trident.backend.opencv_backend import array2image
 from trident.backend.tensorspec import *
-from trident.data.image_common import *
+
 from trident.data.vision_transforms import Unnormalize
 from trident.loggers.history import HistoryBase
 
@@ -142,10 +143,9 @@ class ModelBase(object):
     @model.setter
     def model(self, value):
         if isinstance(value, Layer):
-            if value.built and hasattr(value, 'signature') and value.input_shape is not None:
-                self._model=value
-            else:
-                self._initial_graph(input_shape=inp_shape, output=value)
+            if not value.built:
+                value.build(self.model.input_shape)
+            self._model = value
         elif isinstance(value, np.ndarray) or 'tensor' in value.__name__.lower():
             self._initial_graph(input_shape=int_shape(value), output=to_tensor(value))
         else:
@@ -610,10 +610,12 @@ class ModelBase(object):
     def rebinding_input_output(self, input_shape):
         pass
 
+    @measure_perf
     def do_on_epoch_start(self):
         for callback in self.training_context['callbacks']:
             callback.on_epoch_start(self.training_context)
 
+    @measure_perf
     def do_on_epoch_end(self):
         for callback in self.training_context['callbacks']:
             callback.on_epoch_end(self.training_context)
@@ -648,19 +650,23 @@ class ModelBase(object):
 
             # self.training_context['print_epoch_progress_frequency'] = 1
 
+    @measure_perf
     def do_on_batch_start(self):
         for callback in self.training_context['callbacks']:
             callback.on_batch_start(self.training_context)
 
+    @measure_perf
     def do_on_batch_end(self):
         for callback in self.training_context['callbacks']:
             callback.on_batch_end(self.training_context)
 
+    @measure_perf
     def do_on_data_received(self, train_data, test_data):
         for callback in self.training_context['callbacks']:
             callback.on_data_received(self.training_context)
         return train_data, test_data
 
+    @measure_perf
     def do_calculate_forward(self, is_training=True):
         data = self.training_context['train_data'] if is_training or self.training_context['test_data'] is None or len(
             self.training_context['test_data']) == 0 else \
@@ -701,15 +707,18 @@ class ModelBase(object):
             self.training_context['losses'].collect('output', self.training_context['steps'],
                                                     to_scalar(this_loss.copy()))
 
+    @measure_perf
     def do_on_loss_calculation_start(self):
         for callback in self.callbacks:
             callback.on_loss_calculation_start(self.training_context)
 
+    @measure_perf
     def do_on_loss_calculation_end(self):
 
         for callback in self.callbacks:
             callback.on_loss_calculation_end(self.training_context)
 
+    @measure_perf
     def do_calculate_losses(self):
         self.do_on_loss_calculation_start()
 
@@ -771,6 +780,7 @@ class ModelBase(object):
 
         self.do_on_loss_calculation_end()
 
+    @measure_perf
     def do_calculate_regularizations(self):
         # regularizer
         for k, v in self._regs.items():
@@ -795,26 +805,32 @@ class ModelBase(object):
 
             self.training_context['tmp_losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
+    @measure_perf
     def do_calculate_constraints(self):
         for k, v in self._constraints.items():
             if self.training_context['stop_update'] == 0:
                 v(self._model)
 
+    @measure_perf
     def on_optimization_step_start(self):
         for callback in self.training_context['callbacks']:
             callback.on_optimization_step_start(self.training_context)
 
+    @measure_perf
     def do_gradient_update(self, log_gradients=False):
         pass
 
+    @measure_perf
     def do_on_optimization_step_end(self):
         for callback in self.training_context['callbacks']:
             callback.on_optimization_step_end(self.training_context)
 
+    @measure_perf
     def do_on_metrics_evaluation_start(self):
         for callback in self.training_context['callbacks']:
             callback.on_metrics_evaluation_start(self.training_context)
 
+    @measure_perf
     def do_calculate_metrics(self):
         # ON_EVALUATION_START
         self.do_on_metrics_evaluation_start()
@@ -837,35 +853,44 @@ class ModelBase(object):
         # ON_EVALUATION_END
         self.do_on_metrics_evaluation_end()
 
+    @measure_perf
     def do_on_metrics_evaluation_end(self):
         for callback in self.training_context['callbacks']:
             callback.on_metrics_evaluation_end(self.training_context)
 
+    @measure_perf
     def do_on_progress_start(self):
         for callback in self.training_context['callbacks']:
             callback.on_progress_start(self.training_context)
 
+    @measure_perf
     def do_on_progress_end(self):
         for callback in self.training_context['callbacks']:
             callback.on_progress_end(self.training_context)
 
+    @measure_perf
     def do_on_excution_exception(self):
         for callback in self.training_context['callbacks']:
             callback.on_excution_exception(self.training_context)
         self.save_model()
 
+    @measure_perf
     def log_gradient(self, grads=None):
         raise NotImplementedError
 
+    @measure_perf
     def log_weight(self, weghts=None):
         raise NotImplementedError
 
+    @measure_perf
     def save_model(self, save_path=None):
         return NotImplemented
 
+    @measure_perf
     def save_onnx(self, save_path=None, dynamic_axes=None, **kwargs):
         return NotImplemented
 
+    @measure_perf
     def save_history(self, save_path=None, **kwargs):
 
         default_file_name = '{0}_history_{1}.json_'.format(self._model.name, self.training_context['execution_id'])
@@ -883,15 +908,18 @@ class ModelBase(object):
             f.write(jstring)
             shutil.copy(save_path, save_path.replace('.json_', '.json'))
 
+    @measure_perf
     def save_weights(self, save_path=None, **kwargs):
         if save_path is not None:
             pass
         else:
             save_path = self.training_context['save_path']
 
+    @measure_perf
     def load_model(self, file_path, **kwargs):
         return NotImplemented
 
+    @measure_perf
     def print_batch_progress(self, print_batch_progress_frequency):
         self.do_on_progress_start()
 
@@ -933,6 +961,7 @@ class ModelBase(object):
 
         self.do_on_progress_end()
 
+    @measure_perf
     def print_epoch_progress(self, *args, **kwargs):
         self.do_on_progress_start()
 
@@ -1091,7 +1120,7 @@ class ModelBase(object):
             else:
                 self.training_context['print_batch_progress_frequency'] += 1
 
-            if is_out_sample_evaluation == True:
+            if is_out_sample_evaluation:
                 self.model.eval()
                 verbose = []
                 for k in self.training_context['out_sample_metrics'].get_keys():

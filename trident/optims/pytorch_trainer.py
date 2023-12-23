@@ -32,6 +32,7 @@ import torch.nn as nn
 
 from trident import __version__
 from trident import context
+from trident.backend.decorators import *
 from trident.context import split_path, make_dir_if_need, sanitize_path
 from trident.backend.common import *
 from trident.backend.tensorspec import *
@@ -739,11 +740,13 @@ class Model(model.ModelBase,Layer):
         self.optimizer.param_groups[0]['lr'] = lr
         self.training_context['current_lr'] = lr
 
+
     def do_on_epoch_start(self):
         super().do_on_epoch_start()
         if self.training_context['steps'] == 0:
             self.training_context['time_epoch_start'] = time.time()
             self.training_context['time_epoch_progress'] = 0
+
 
     def do_on_epoch_end(self):
         super().do_on_epoch_end()
@@ -760,6 +763,7 @@ class Model(model.ModelBase,Layer):
                 self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
                 self.training_context['current_lr'] = self.base_lr
 
+
     def do_on_batch_start(self):
         super().do_on_batch_start()
         if self.training_context['steps'] == 0:
@@ -772,6 +776,7 @@ class Model(model.ModelBase,Layer):
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
                 gc.collect()
+
 
     def do_on_batch_end(self):
         super().do_on_batch_end()
@@ -793,6 +798,7 @@ class Model(model.ModelBase,Layer):
             temp['total_losses'] = to_numpy(self.training_context['current_loss'])
             print('{ ' + ', '.join(
                 ['{0}: {1}'.format(k, adaptive_format(v, value_type='loss')) for k, v in temp.items()]) + ' }')
+
 
     def do_on_data_received(self, train_data, test_data):
 
@@ -928,8 +934,10 @@ class Model(model.ModelBase,Layer):
 
         return train_data, test_data
 
+
     def get_current_loss(self):
         return self.training_context['current_loss']
+
 
     def do_gradient_update(self, log_gradients=False):
         try:
@@ -1007,6 +1015,7 @@ class Model(model.ModelBase,Layer):
             ctx.print(e)
             PrintException()
 
+
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
         if self.accumulation_steps == 1:
@@ -1025,6 +1034,7 @@ class Model(model.ModelBase,Layer):
             if self.training_context['current_batch'] > 0:
                 self.training_context['tmp_losses'].reset()
 
+
     def do_on_excution_exception(self):
         super().do_on_excution_exception()
         self.save_model()
@@ -1036,6 +1046,7 @@ class Model(model.ModelBase,Layer):
                 grad_dict[k] = to_numpy(v.grad)
             self.gradients_history.append(grad_dict)
 
+
     def log_weight(self, weghts=None):
         weight_dict = OrderedDict()
         if isinstance(self._model, nn.Module):
@@ -1044,6 +1055,7 @@ class Model(model.ModelBase,Layer):
 
             self.weights_history.append(weight_dict)
 
+    @measure_perf
     def save_model(self, save_path=None, **kwargs):
         is_abnormal = False
         for callback in self.training_context['callbacks']:

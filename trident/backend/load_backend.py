@@ -6,7 +6,7 @@ import os
 import random
 from sys import stderr,stdout
 from trident.backend.common import *
-
+from trident.backend.decorators import *
 
 __all__ = []
 

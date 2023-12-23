@@ -13,7 +13,7 @@ import string
 import uuid
 import warnings
 from typing import List, Iterable
-
+from trident.backend.decorators import *
 import numpy as np
 from trident import context
 
@@ -395,6 +395,7 @@ class ImageDataProvider(object):
         else:
             return 0
 
+    @measure_perf
     def next(self):
         if self.scenario == 'test' and self.testdata is not None:
             return self.testdata.next()
