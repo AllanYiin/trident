@@ -2408,7 +2408,6 @@ class RandomGridMask(VisionTransform):
             return self.get_grid(image)
 
     def _apply_boxes(self, boxes, spec: TensorSpec):
-        h, w, rr, keep = self._shape_info
         if keep:
             return boxes
         elif boxes is None:
@@ -2435,7 +2434,6 @@ class RandomGridMask(VisionTransform):
                 return None
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        h, w, rr, keep = self._shape_info
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
