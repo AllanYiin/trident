@@ -530,7 +530,7 @@ class ShortestEdgeResize(VisionTransform):
             return mask
         mask_dtype = mask.dtype
         mask = mask.astype(np.float32)
-        mask = cv2.resize(mask, (tw, th), cv2.INTER_NEAREST)
+        mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else cv2.INTER_AREA)
         mask = mask.astype(mask_dtype)
         if ndim(mask) == 2:
             return mask.copy()[offsety:offsety + eh, offsetx:offsetx + ew]
@@ -591,7 +591,7 @@ class Rescale(VisionTransform):
         h, w, _ = mask.shape
         mask_dtype = mask.dtype
         mask = mask.astype(np.float32)
-        mask = cv2.resize(mask, self.output_size, cv2.INTER_NEAREST)
+        mask = cv2.resize(mask, self.output_size, interpolation=cv2.INTER_NEAREST if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else cv2.INTER_AREA)
         mask = mask.astype(mask_dtype)
         return mask
 
@@ -679,7 +679,7 @@ class RandomRescaleCrop(VisionTransform):
 
             cropped_mask = mask[offset_y: offset_y + th, offset_x: offset_x + tw]
             cropped_mask = cv2.resize(cropped_mask, None, fx=1 / target_scale, fy=1 / target_scale,
-                                      interpolation=cv2.INTER_NEAREST)
+                                      interpolation=cv2.INTER_NEAREST if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else cv2.INTER_AREA)
 
             if cropped_mask.shape[0] == eh and cropped_mask.shape[1] == ew:
                 return cropped_mask
