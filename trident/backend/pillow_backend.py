@@ -44,7 +44,7 @@ def read_image(im_path:str):
 
     """
     try:
-        if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
+        if os.path.exists(im_path) and im_path.split('.')[-1].lower() in ('jpg','jepg','jfif','webp','png','bmp','tiff','ico'):
             img=pil_image.open(im_path)
             img=np.array(img).astype(np.float32)
             if img.max()<=1:
@@ -76,7 +76,7 @@ def read_mask(im_path:str):
 
     """
     try:
-        if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
+        if os.path.exists(im_path) and im_path.split('.')[-1].lower() in ('jpg','jepg','jfif','webp','png','bmp','tiff','ico'):
             img=pil_image.open(im_path).convert('L')
             return img
         else:
@@ -121,7 +121,7 @@ def image2array(img):
         ndarray  (HWC / RGB)
     """
     if isinstance(img, str):
-        if os.path.exists(img) and img.split('.')[-1] in ('jpg', 'jpeg', 'png', 'bmp', 'tiff'):
+        if os.path.exists(img) and img.split('.')[-1].lower() in ('jpg', 'jpeg', 'png', 'bmp', 'tiff'):
             img = pil_image.open(img)
 
 
@@ -198,7 +198,7 @@ def mask2array(img):
 
     """
     if isinstance(img,str):
-        if os.path.exists(img) and img.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
+        if os.path.exists(img) and img.split('.')[-1].lower() in ('jpg','jepg','jfif','webp','png','bmp','tiff','ico'):
             img=pil_image.open(img).convert('L')
         else:
             return None
