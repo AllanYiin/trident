@@ -797,10 +797,13 @@ class RandomCenterCrop(VisionTransform):
         if mask.shape[-1] == 1:
             mask = np.squeeze(mask, -1)
 
-        resized_mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else cv2.INTER_AREAST)
+        resized_mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else cv2.INTER_LANCZOS4)
         crop_mask = resized_mask[y: builtins.min(y+eh,th), x:builtins.min(x+ew, tw)]
+        if ndim(crop_mask) == 3:
+            crop_mask = crop_mask[:, :, 0]
         if crop_mask.shape[0] < eh or crop_mask.shape[1] < ew:
             background = np.zeros((eh, ew)).astype(mask.dtype)
+
             background[builtins.max(eh - crop_mask.shape[0], 0) // 2:builtins.max(eh - crop_mask.shape[0], 0) // 2 +crop_mask.shape[0],builtins.max(ew - crop_mask.shape[1], 0) // 2:builtins.max(ew - crop_mask.shape[1], 0) // 2 +crop_mask.shape[1]] = crop_mask
             return background
         else:
@@ -2156,17 +2159,42 @@ class RandomErasing(VisionTransform):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
-        rr = random.random()
-        if rr > self.keep_prob:
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
+        rr, p1,left,top,w1,h1,c1,transparancy= self._shape_info
+
+        if rr> self.keep_prob:
+            if p1<= self.transparancy_ratio:
+                mask = np.ones_like(image)
+                mask[top:top + h1, left:left + w1, :] = 0
+                image = image * (mask) + image * (1 - mask) * (transparancy)
+                return image
+            else:
+                image[top:top + h1, left:left + w1, :] = c1
+            return image
+        else:
+            return image
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        rr, p1, left, top, w1, h1, c1, transparancy = self._shape_info
+        if rr> self.keep_prob:
+            if p1>= self.transparancy_ratio:
+                mask[top:top + h1, left:left + w1] = 0
+            return mask
+        else:
+            return mask
+
+    def _get_shape(self, image):
+        self.rr = np.random.rand()
+        if self.rr > self.keep_prob:
             s_l, s_h = self.size_range
             r_1 = 0.3
             r_2 = 1 / 0.3
             h, w, c = image.shape
-            p_1 = np.random.rand()
-
-            if p_1 > 0.5:
-                return image
-
+            c1=255
             while True:
                 s = np.random.uniform(s_l, s_h) * h * w / 4.0
                 r = np.random.uniform(r_1, r_2)
@@ -2177,29 +2205,19 @@ class RandomErasing(VisionTransform):
 
                 if left + w1 <= w and top + h1 <= h:
                     break
-            self.rr = np.random.uniform(0, 1)
-            if self.rr <= self.transparancy_ratio:
+            p1 = np.random.uniform(0, 1)
+            if p1 <= self.transparancy_ratio:
                 transparancy = np.random.uniform(*self.transparency_range)
                 mask = np.ones_like(image)
                 mask[top:top + h1, left:left + w1, :] = 0
                 image = image * (mask) + image * (1 - mask) * (transparancy)
             else:
-
-                if self.rr % 2 == 1:
-                    c1 = np.random.uniform(0, 255, (h1, w1, c))
-                else:
-                    c1 = np.random.uniform(0, 255)
-
+                transparancy=0
+                c1 = np.random.uniform(0, 255)
                 image[top:top + h1, left:left + w1, :] = c1
-            return clip(image, 0, 255).astype(np.float32)
+            return self.rr, p1, left, top, w1, h1, c1, transparancy
         else:
-            return image
-
-    def _apply_coords(self, coords, spec: TensorSpec):
-        return coords
-
-    def _apply_mask(self, mask, spec: TensorSpec):
-        return mask
+            return self.rr, None, None, None, None, None, None, None
 
 
 class GridMask(VisionTransform):
@@ -2238,22 +2256,21 @@ class GridMask(VisionTransform):
     def set_prob(self, epoch, max_epoch):
         self.prob = self.keep_prob * min(1, epoch / max_epoch)
 
-    def get_grid(self, image):
+    def get_grid(self, image,d,st_h,st_w,r):
         h, w = image.shape[:2]
         hh = math.ceil((math.sqrt(h * h + w * w)))
 
         if self.d2 is None:
             self.d2 = maximum(h, w)
 
-        d = np.random.randint(self.d1, self.d2)
+
         # d = self.d
 
         # maybe use ceil? but I guess no big difference
         self.l = math.ceil(d * self.ratio)
 
         mask = np.ones((hh, hh), np.float32)
-        st_h = np.random.randint(d)
-        st_w = np.random.randint(d)
+
         for i in range(-1, hh // d + 1):
             s = d * i + st_h
             t = s + self.l
@@ -2266,7 +2283,7 @@ class GridMask(VisionTransform):
             s = max(min(s, hh), 0)
             t = max(min(t, hh), 0)
             mask[:, s:t] *= 0
-        r = np.random.randint(self.rotate)
+
         mask = Image.fromarray(np.uint8(mask))
         mask = mask.rotate(r)
         mask = np.asarray(mask)
@@ -2284,12 +2301,15 @@ class GridMask(VisionTransform):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
-        rr = random.random()
+        self._shape_info = self._get_shape(image)
+        rr, grid_paras=self._shape_info
+
         n, c, h, w = image.size()
         if rr > self.keep_prob:
             y = []
             for i in range(n):
-                y.append(self.get_grid(image[i]))
+                d,st_h,st_w,r = grid_paras[i]
+                y.append(self.get_grid(image[i],d,st_h,st_w,r))
             y = concate(y).view(n, c, h, w)
             return y
         else:
@@ -2299,7 +2319,32 @@ class GridMask(VisionTransform):
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        return mask
+        rr, grid_paras = self._shape_info
+
+        n, c, h, w = mask.size()
+        if rr > self.keep_prob and spec.object_type in [ObjectType.alpha_mask]:
+            y = []
+            for i in range(n):
+                d, st_h, st_w, r = grid_paras[i]
+                y.append(self.get_grid(image[i], d, st_h, st_w, r))
+            y = concate(y).view(n, c, h, w)
+            return y
+        else:
+            return mask
+    def _get_shape(self, image):
+        rr = random.random()
+        n, c, h, w = image.size()
+        grid_paras = []
+        if rr > self.keep_prob:
+            for i in range(n):
+                d = np.random.randint(self.d1, self.d2)
+                st_h = np.random.randint(d)
+                st_w = np.random.randint(d)
+                r = np.random.randint(self.rotate)
+
+                grid_paras.append((d,st_h,st_w,r))
+
+        return rr ,grid_paras
 
 
 class RandomGridMask(VisionTransform):
