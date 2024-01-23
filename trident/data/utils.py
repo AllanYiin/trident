@@ -1,19 +1,28 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import functools
 import base64
 import datetime
 import hashlib
 import json
+import time
 import os
+import io
+import random
 import platform
 import shutil
 import sys
 import tarfile
 import urllib.request
+from urllib.parse import urlencode
 import zipfile
-
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 import six
 from scipy.io import loadmat
 from tqdm import tqdm
@@ -29,6 +38,50 @@ __all__: object = ['is_connected', 'ensure_dir','ensure_parent_dir','TqdmProgres
            'download_file_from_google_drive','download_file_from_onedrive','get_image_from_google_drive','get_file_from_google_drive',
            'download_model_from_google_drive','download_model_from_onedrive','extract_archive','pickle_it','unpickle','save_dict_as_h5',
           'read_dict_from_h5','get_file_create_time','read_mat']
+
+
+def prepare_chrome_options():
+    chrome_options = Options()
+    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('blink-settings=imagesEnabled=false')
+    chrome_options.add_argument('--disable-logging')
+    chrome_options.add_argument(f"--window-size=1920,1440")
+    chrome_options.add_argument('--hide-scrollbars')
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_argument("--proxy-server='direct://'")
+    chrome_options.add_argument("--proxy-bypass-list=*")
+    chrome_options.add_argument('--ignore-certificate-errors')
+    chrome_options.add_argument("--password-store=basic")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--enable-automation")
+    chrome_options.add_argument("--disable-browser-side-navigation")
+    chrome_options.add_argument("--disable-web-security")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-setuid-sandbox")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    return chrome_options
+
+user_agents = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.2151.97',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.2151.97',
+    'Mozilla/5.0 (Linux; Android 10; HD1913) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.6045.193 Mobile Safari/537.36 EdgA/119.0.2151.78',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Version/14.1.2 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Version/14.1 Safari/537.36',
+    'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0',
+    'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:88.0) Gecko/20100101 Firefox/88.0'
+]
+
+
 
 def is_connected():
     try:
@@ -60,7 +113,7 @@ class TqdmProgress(tqdm):
         """
         if tsize is not None:
             self.total = tsize
-        self.update(b * bsize - self.n)  # will also set self.n = b * bsize
+        pbar.update(progress - pbar.n)# will also set self.n = b * bsize
 
 
 def calculate_md5(fpath, chunk_size=1024 * 1024):
@@ -187,44 +240,71 @@ def download_file_from_google_drive(file_id, dirname=None, filename=None, md5=No
         dirname (str): Directory to place downloaded file in
         filename (str, optional): Name to save the file under. If None, use the id of the file.
         md5 (str, optional): MD5 checksum of the download. If None, do not check
+
+    Examples:
+        >>> download_file_from_google_drive('mbo_bisenetV10_model.pth.tar','1xmSGwOZOo_rKGlaSIhCzaqx5VTw7cyrb')
+
     """
     # Based on https://stackoverflow.com/questions/38511444/python-download-files-from-google-drive-using-url
     import requests
 
-    url = "https://drive.google.com/uc?export=download"
-    if not dirname:
-        dirname=os.path.join(get_trident_dir(),'downloads')
-    if not filename:
-        filename = file_id
+    url = 'https://drive.google.com/uc?'
+    params = {'id': file_id, 'confirm': 't', 'export': 'download'}
+    dirname = os.path.join(get_trident_dir(), 'downloads')  if not dirname else dirname
+    filename = file_id if not file_name else file_name
 
     fpath = os.path.join(dirname, filename)
     _h = _read_h(dirname)
 
-    dest_path = os.path.join(dirname, filename)
-    make_dir_if_need(dest_path)
+    make_dir_if_need(fpath)
     is_downloaded = _h[filename].get('is_downloaded', False) if filename in _h else _h.get('is_downloaded', False)
 
-    if os.path.exists(dest_path) and os.path.isfile(dest_path) and _h != {} and is_downloaded == True and need_up_to_date == False:
+    if os.path.exists(fpath) and os.path.isfile(fpath) and _h != {} and is_downloaded == True and need_up_to_date == False:
         print('archive file is already existing, donnot need download again.')
         return True
     else:
         try:
             session = requests.Session()
-            response = session.get(url, params={'id': file_id, 'confirm': 't'}, stream=True)
+            response = session.get(url, params=params, stream=True)
             token = _get_confirm_token(response)
             if token:
-                params = {'id': file_id, 'confirm': token}
-                response = session.get(url, params=params, stream=True)
-            _save_response_content(response, fpath)
-            _write_h(dirname, True, False, filename)
+                response2 = session.get(url, params=params, stream=True)
+            else:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                inputs = soup.find_all('input')
+
+                for inp in inputs:
+                    if 'name' in inp.attrs and inp.attrs['name'] == 'uuid':
+                        params['uuid'] = inp.attrs['value']
+                    elif 'name' in inp.attrs and inp.attrs['name'] == 'at':
+                        params['at'] = inp.attrs['value']
+                if 'at' not in params:
+                    params['authuser'] = 0
+
+                headers = {
+                    "accept": "application/octet-stream",
+                    "accept-encoding": "gzip, deflate, br",
+                    "user-agent": random.choice(user_agents),
+                }
+                url = 'https://drive.usercontent.google.com/download?'
+                response2 = requests.get(url + urlencode(params), headers=headers, cookies=response.cookies,
+                                         stream=True)
+                file_size = int(response2.headers.get('Content-Length', 0))
+                _save_response_content(response2, fpath)
+                if md5:
+                    is_md5_valid=check_integrity(fpath, md5)
+                    if is_md5_valid:
+                        return fpath
+                    else:
+                        return None
+                return fpath
         except Exception as e:
             _write_h(dirname, False, False, filename)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
             print('***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(dirname,
-                                                                                                                                                         'https://drive.google.com/open?id={0}'.format(
-                                                                                                                                                             file_id)), flush=True)
+                                                                                                                                                         'https://drive.google.com/open?id={0}'.format(                                                                                                                                               file_id)), flush=True)
             print(e)
-            return False
+            return None
 
 
 def download_file_from_onedrive(onedrive_path, dirname, filename=None, md5=None):
@@ -325,50 +405,23 @@ def get_image_from_google_drive(file_id):
         return None
 
 
-def get_file_from_google_drive(file_name, file_id):
+def get_file_from_google_drive(filename, file_id):
     """Download a Google Drive image  and place it in root.
 
     Args:
-        file_name (str, optional): Name to save the file under. If None, use the id of the file.
+        filename (str, optional): Name to save the file under. If None, use the id of the file.
         file_id (str): id of file to be downloaded
 
     Returns:
         the file path of this downloaded image
 
+    Examples:
+        >>> get_file_from_google_drive('mbo_bisenetV10_model.pth.tar','1xmSGwOZOo_rKGlaSIhCzaqx5VTw7cyrb')
+
     """
 
-    import requests
-    url = 'https://drive.google.com/uc?export=download'
 
-    filename = file_id
-
-    _session = get_session()
-    _trident_dir = _session.trident_dir
-    dirname = os.path.join(_trident_dir, 'download')
-    make_dir_if_need(dirname)
-    fpath = os.path.join(dirname, filename)
-
-    if os.path.exists(fpath):
-        pass
-    try:
-        session = requests.Session()
-        response = session.get(url, params={'id': file_id, 'confirm': 't'}, stream=True)
-        token = _get_confirm_token(response)
-        if token:
-            params = {'id': file_id, 'confirm': token}
-            response = session.get(url, params=params, stream=True)
-        _save_response_content(response, fpath)
-        _write_h(dirname, True, False, filename)
-
-
-    except Exception as e:
-        print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
-        print('***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(dirname,
-                                                                                                                                                     'https://drive.google.com/open?id={0}'.format(
-                                                                                                                                                         file_id)), flush=True)
-        print(e)
-        return None
-    return fpath
+    return download_file_from_google_drive(file_id, dirname=os.path.join(get_trident_dir(),'download'), filename=filename, md5=None, need_up_to_date=True)
 
 
 def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
@@ -381,87 +434,40 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
         md5 (str, optional): MD5 checksum of the download. If None, do not check
     """
     # Based on https://stackoverflow.com/questions/38511444/python-download-files-from-google-drive-using-url
-    import requests
-    url = "https://docs.google.com/uc?export=download"
+    need_download_model_json=True
+    need_download=True
+    filename = file_id if not file_name else file_name
+    dirname=os.path.join(get_trident_dir(),'models')
 
-    if not filename:
-        filename = file_id
+    make_dir_if_need(dirname)
     fpath = os.path.join(dirname, filename)
-    isload = False
-    models_md5 = None
-    need_download = True
-    check_internet = None
-    try:
-        if os.path.exists(os.path.join(dirname, 'models_md5.json')) and os.path.isfile(os.path.join(dirname, 'models_md5.json')) and (
-                datetime.datetime.now() - get_file_modified_time(os.path.join(dirname, 'models_md5.json'))).seconds < 24 * 60 * 60:
-            with open(os.path.join(dirname, 'models_md5.json')) as f:
-                models_md5 = json.load(f)
+    if os.path.exists(os.path.join(dirname, 'models_md5.json')) and os.path.isfile(
+            os.path.join(dirname, 'models_md5.json')) and (
+            datetime.datetime.now() - get_file_modified_time(os.path.join(dirname, 'models_md5.json'))).seconds < 24 * 60 * 60:
+        need_download_model_json = False
+
+    download_file_from_google_drive(file_id='12XLjt9Zcaoo90WGG6R5N0U6Sf_KBZZn_', dirname=os.path.join(get_trident_dir(), 'models'), filename='models_md5.json',md5=None, need_up_to_date=need_download_model_json)
+    if os.path.exists(os.path.join(dirname, 'models_md5.json')):
+        with open(os.path.join(dirname, 'models_md5.json')) as f:
+            models_md5 = json.load(f)
+
+    if os.path.exists(fpath):
+        if check_integrity(fpath, models_md5[filename]):
+            need_download = False
+            print('model file is already existing, donnot need download again.')
         else:
-            session = requests.Session()
-            response = session.get(url, params={'id': '12XLjt9Zcaoo90WGG6R5N0U6Sf_KBZZn_'}, stream=False)
-            if response.status_code == 200:
-                if os.path.exists(os.path.join(dirname, 'models_md5.json')):
-                    os.remove(os.path.join(dirname, 'models_md5.json'))
-                with open(os.path.join(dirname, 'models_md5.json'), "wb") as f:
-                    f.write(response.content)
+            print('Your pretrained model has newer version, will you want to update it?')
+            ans = input('(Y/N) << ').lower()
+            if ans in ['yes', 'y']:
+                os.remove(fpath)
+            else:
+                need_download = False
 
-            check_internet = True
-            if os.path.exists(os.path.join(dirname, 'models_md5.json')):
-                with open(os.path.join(dirname, 'models_md5.json')) as f:
-                    models_md5 = json.load(f)
-    except Exception as e:
-        print(e)
-        PrintException()
-        check_internet = False
-
-    if check_internet == False:
-        if os.path.exists(os.path.join(dirname, filename)):
-            print('internet connect  error,model file is already existing, donnot need download again.')
-            return True
-        else:
-            print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
-            print('***Please check your internet or download  files from following url in another computer, \n and then '
-                  'put them into {0}\n {1} '.format(dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
-
-        return False
+    if need_download:
+        return download_file_from_google_drive(file_id, dirname=dirname, filename=filename,
+                                        md5=models_md5[filename], need_up_to_date=need_download)
     else:
-
-        try:
-            if os.path.exists(os.path.join(dirname, filename)):
-                if check_integrity(os.path.join(dirname, filename), models_md5[filename]):
-                    need_download = False
-                    print('model file is already existing, donnot need download again.')
-                else:
-                    print('Your pretrained model has newer version, will you want to update it?')
-                    ans = input('(Y/N) << ').lower()
-                    if ans in ['yes', 'y']:
-                        os.remove(os.path.join(dirname, filename))
-                    else:
-                        need_download = False
-
-            if need_download:
-                session = requests.Session()
-                response = session.get(url, params={'id': file_id,'confirm':'t'}, stream=True)
-                token = _get_confirm_token(response)
-                if token:
-                    params = {'id': file_id, 'confirm': token}
-                    response = session.get(url, params=params, stream=True)
-                _save_response_content(response, fpath)
-                _write_h(dirname, True, False, filename)
-                if check_integrity(os.path.join(dirname, filename), models_md5[filename]):
-                    print('model file is downloaded and validated.')
-                else:
-                    print('model file is downloaded but not match md5.')
-        except Exception as e:
-            _write_h(dirname, False, False, filename)
-            print(e)
-            print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
-            print('***Please check your internet or download  files from following url in another computer, \n and then '
-                  'put them into {0}\n {1} '.format(dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
-            print(e)
-
-        return False
-
+        return fpath
 
 # https://1drv.ms/u/s!AsqOV38qroofiZrqNAQvo2CuX_cyWQE?e=Aa8v7D
 
@@ -554,15 +560,14 @@ def _get_confirm_token(response):
 
 def _save_response_content(response, destination, chunk_size=32768):
     folder, file = os.path.split(destination)
+    file_size = int(response.headers.get('Content-Length', 0))
     progress = 0
-    with open(destination, "wb") as f:
-        pbar = TqdmProgress(response.iter_content(chunk_size=chunk_size), total=None, unit='MB', unit_scale=True, miniters=10, desc=file, leave=True, file=sys.stdout)
-        for chunk in pbar:
-            if chunk:  # filter out keep-alive new chunks
-                f.write(chunk)
-                progress += len(chunk)
-                pbar.update(progress - pbar.n)
-        pbar.close()
+    with tqdm(total=file_size, unit="B", unit_scale=True) as progress_bar:
+        with open(destination, "wb") as file:
+            for data in response.iter_content(chunk_size):
+                progress_bar.update(len(data))
+                file.write(data)
+
 
 
 def extract_archive(file_path, target_folder=None, archive_format='auto'):
