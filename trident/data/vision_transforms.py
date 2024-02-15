@@ -306,13 +306,13 @@ class Resize(VisionTransform):
         if h == eh and w == ew:
             return image
         elif not self.keep_aspect:
-            return cv2.resize(image.copy(), (ew, eh), interpolation=self.interpolation)
+            return cv2.resize(image.copy(), (ew, eh), interpolation=self.interpolation if spec.object_type !=ObjectType.densepose else cv2.INTER_NEAREST)
         else:
 
             if image.shape[-1]== 1:
                 image=image.squeeze(-1)
                 image=np.stack([image,image,image],axis=-1)
-            resized_image = cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
+            resized_image = cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation if spec.object_type !=ObjectType.densepose else cv2.INTER_NEAREST)
 
             shp = list(int_shape(resized_image))
             output = np.ones((eh, ew, 3),dtype=np.float32) * self.background_color
@@ -420,7 +420,7 @@ class Unresize(VisionTransform):
         h, w, th, tw, pad_vert, pad_horz, scale = self._shape_info
 
         if not self.keep_aspect:
-            return cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
+            return cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation if spec.object_type !=ObjectType.densepose else cv2.INTER_NEAREST)
         else:
             if self.align_corner:
                 if ndim(image) == 2:
@@ -433,7 +433,7 @@ class Unresize(VisionTransform):
                 elif ndim(image) == 3:
                     image = image[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2, :]
 
-            resized_image = cv2.resize(image.copy(), (w, h), interpolation=self.interpolation)
+            resized_image = cv2.resize(image.copy(), (w, h), interpolation=self.interpolation if spec.object_type !=ObjectType.densepose else cv2.INTER_NEAREST)
 
             return resized_image
 
@@ -510,7 +510,7 @@ class ShortestEdgeResize(VisionTransform):
         h, w, th, tw, eh, ew, offsetx, offsety = self._shape_info
         if h == eh and w == ew:
             return image
-        image = cv2.resize(image, (tw, th), self.interpolation)
+        image = cv2.resize(image, (tw, th), self.interpolation if spec.object_type !=ObjectType.densepose else cv2.INTER_NEAREST)
         if ndim(image) == 2:
             return image.copy()[offsety:offsety + eh, offsetx:offsetx + ew]
         elif ndim(image) == 3:
@@ -580,7 +580,7 @@ class Rescale(VisionTransform):
             self._shape_info = self._get_shape(image)
         h, w, _ = image.shape
         self.output_size = (int(w * self.scale), int(h * self.scale))
-        return cv2.resize(image, (int(w * self.scale), int(h * self.scale)), self.interpolation)
+        return cv2.resize(image, (int(w * self.scale), int(h * self.scale)), self.interpolation if spec.object_type !=ObjectType.densepose else cv2.INTER_NEAREST)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         coords[:, 0] = coords[:, 0] * self.scale
@@ -647,7 +647,7 @@ class RandomRescaleCrop(VisionTransform):
 
             cropped_img = image[offset_y: offset_y + th, offset_x: offset_x + tw, :]
             cropped_img = cv2.resize(cropped_img, None, fx=1 / target_scale, fy=1 / target_scale,
-                                     interpolation=self.interpolation)
+                                     interpolation=self.interpolation if spec.object_type !=ObjectType.densepose else cv2.INTER_NEAREST)
 
             if cropped_img.shape[0] == eh and cropped_img.shape[1] == ew:
                 return cropped_img
@@ -756,7 +756,7 @@ class RandomCenterCrop(VisionTransform):
             image = image.squeeze(-1)
             image = np.stack([image, image, image], axis=-1)
 
-        resized_image = cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
+        resized_image = cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation if spec.object_type !=ObjectType.densepose else cv2.INTER_NEAREST)
 
         crop_image = resized_image[y: builtins.min(y+eh,th), x:builtins.min(x+ew, tw)]
         #crop_image = resized_image[y: builtins.min(y + eh, th), x:builtins.min(x + ew, tw)]
@@ -978,7 +978,7 @@ class RandomTransformAffine(VisionTransform):
             elif self.border_mode == 'zero':
                 _borderValue = (0, 0, 0)
 
-            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=_borderMode,borderValue=_borderValue, flags=cv2.INTER_AREA)  # , borderMode=cv2.BORDER_REPLICATE
+            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=_borderMode,borderValue=_borderValue, flags=cv2.INTER_AREA  if spec.object_type !=ObjectType.densepose else cv2.INTER_NEAREST)  # , borderMode=cv2.BORDER_REPLICATE
 
             # if shear_factor>0:
             #     image = cv2.warpAffine(image, mat_shear, dsize=(int(nW), image.shape[0]), borderMode=_borderMode,borderValue=_borderValue,flags=cv2.INTER_AREA)

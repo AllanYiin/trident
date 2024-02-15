@@ -137,7 +137,10 @@ class VisionTransform(Transform):
             return getattr(self, "_apply_{}".format('boxes'), None)
         elif 'mask' in key:
             return getattr(self, "_apply_{}".format('mask'), None)
-
+        elif 'depth' in key:
+            return getattr(self, "_apply_{}".format('mask'), None)
+        elif 'densepose' in key:
+            return getattr(self, "_apply_{}".format('image'), None)
         elif 'keypoint' in key or  'landmark' in key:
             return getattr(self, "_apply_{}".format('keypoints'), None)
         elif 'polygon' in key :

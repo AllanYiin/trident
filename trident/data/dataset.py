@@ -44,7 +44,7 @@ if get_backend() == 'pytorch':
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import tensor_to_shape, expand_dims, cast,to_tensor
 
-__all__ = ['Dataset', 'ZipDataset', 'ImageDataset', 'MaskDataset', 'TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'LandmarkDataset', 'Iterator', 'MetricIterator',
+__all__ = ['Dataset', 'ZipDataset', 'ImageDataset', 'MaskDataset','DepthDataset', 'TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'LandmarkDataset', 'Iterator', 'MetricIterator',
            'NumpyDataset', 'RandomNoiseDataset', 'ArrayDataset','IndexDataset']
 
 _UID_PREFIX = collections.defaultdict(int)
@@ -486,15 +486,25 @@ class MaskDataset(Dataset):
 
         if isinstance(mask, str):
             if self.object_type == ObjectType.binary_mask:
-                mask = file2array(mask, flag=cv2.IMREAD_GRAYSCALE)
-                if mask.max() > 1:
-                    mask = mask / mask.max()
-                mask[mask >= 0.5] = 1
-                mask[mask < 0.5] = 0
-                mask.astype(np.int64)
+                if '.png' in mask:
+                    mask = file2array(mask, flag=cv2.IMREAD_UNCHANGED)
+                    if mask.ndim == 3:
+                        mask = mask[:, :, 1]
+                    mask[mask>0]=1
+                    mask.astype(np.int64)
+                else:
+                    mask = file2array(mask, flag=cv2.IMREAD_GRAYSCALE)
+                    if mask.max() > 1:
+                        mask = mask / mask.max()
+                    mask[mask >= 0.5] = 1
+                    mask[mask < 0.5] = 0
+                    mask.astype(np.int64)
 
             elif self.object_type == ObjectType.alpha_mask:
                 mask = file2array(mask, flag=cv2.IMREAD_GRAYSCALE)
+                if mask.ndim == 3:
+                    mask = mask[:, :, 1]
+
             elif self.object_type == ObjectType.label_mask:
                 if '.png' in mask:
                     mask = file2array(mask, flag=cv2.IMREAD_UNCHANGED)
@@ -511,6 +521,8 @@ class MaskDataset(Dataset):
                     mask = mask[:, :, :3]
                     if len(self.palette) > 0:
                         mask = color2label(mask, self.palette).astype(np.int64)
+        if self.object_type != ObjectType.color_mask and len(mask.shape)==3:
+            mask=mask[:,:,0]
 
         if not isinstance(mask, np.ndarray):
             raise ValueError('image data should be ndarray')
@@ -561,6 +573,105 @@ class MaskDataset(Dataset):
         else:
             return mask_data
 
+
+class DepthDataset(Dataset):
+    def __init__(self, depths, class_names=None, object_type: ObjectType = ObjectType.depth_mask, squeeze_channel=False,relative_depths=True,depth_estimator=None, symbol="depth_label", **kwargs):
+        super().__init__(depths, symbol=symbol, object_type=object_type, **kwargs)
+        if object_type not in [ObjectType.depth_mask, ObjectType.disparity_mask]:
+            raise ValueError('Only mask is valid expect image type. ')
+        self.eps=1e-4
+        self.depth_estimator=depth_estimator
+        self.relative_depths=relative_depths
+        self.squeeze_channel=squeeze_channel
+        self.transform_funcs = []
+        self.is_spatial = True
+        self.is_paired_process = False
+        self._element_spec = TensorSpec(shape=tensor_to_shape(self[0] if len(self)>0 else None ,need_exclude_batch_axis=True,is_singleton=True), dtype=Dtype.float32,name=self.symbol, object_type=self.object_type, is_spatial=True)
+
+
+    def depth2disparity(self,depth):
+        disparity = np.zeros_like(depth)
+        disparity[depth >= self.eps] = 1.0 / depth[depth >= self.eps]
+        return disparity
+
+    def disparity2depth(self, disparity):
+        disp = np.abs(disparity)
+        disparity[disp <self.eps] = False
+        depth= np.zeros_like(disp)
+        depth[disp >= self.eps] = (1.0 / disp[disp >= self.eps])
+        del disparity
+        return depth
+
+    def __getitem__(self, index: int):
+        if index >= len(self.items):
+            index = index % len(self.items)
+        mask = self.items[index]  # self.pop(index)
+
+        if isinstance(mask, str):
+            if self.depth_estimator is not None:
+                mask=self.depth_estimator(mask)
+            else:
+                if '.png' in mask:
+                    mask = file2array(mask, flag=cv2.IMREAD_UNCHANGED)
+                else:
+                    mask = file2array(mask, flag=cv2.IMREAD_GRAYSCALE)
+        elif isinstance(mask, np.ndarray):
+            pass
+        else:
+            raise ValueError('depth data should be ndarray or path of image')
+        if self.object_type==ObjectType.disparity_mask:
+            mask=self.depth2disparity(mask)
+        mask=mask/mask.max()
+        if self.squeeze_channel:
+            if np.ndim(mask)==2:
+                pass
+            elif np.ndim(mask)==3:
+                mask=mask[:,:,0]
+        else:
+            if np.ndim(mask) == 2:
+                mask=np.expand_dims(mask,-1)
+            elif np.ndim(mask) == 3:
+                mask = mask[:, :, 0:1]
+        return mask
+
+    def mask_transform(self, mask_data):
+        return self.data_transform(mask_data)
+
+    def data_transform(self, data):
+        if isinstance(data, np.ndarray):
+            for fc in self.transform_funcs:
+                if hasattr(fc,'_apply_mask'):
+                    data = fc._apply_mask(data, spec=self.element_spec)
+                else:
+                    data=fc(data)
+            if len(data.shape) == 2 and self.squeeze_channel == False:
+                data = np.expand_dims(data, -1)
+
+            if not self.squeeze_channel and np.ndim(data)==3:
+                data=data.transpose([1,2,0])
+
+            return data
+        else:
+            return data
+
+    @property
+    def reverse_image_transform_funcs(self):
+        return_list = []
+        for i in range(len(self.transform_funcs)):
+            fn = self.transform_funcs[-1 - i]
+            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Transform) and fn.name == 'normalize'):
+                return_list.append(Unnormalize(fn.mean, fn.std))
+        return_list.append(array2image)
+        return return_list
+
+    def reverse_image_transform(self, depth_data):
+        if self.object_type==ObjectType.disparity_mask:
+            depth_data=self.disparity2depth(depth_data)
+        if np.ndim(depth_data)==3:
+            depth_data=depth_data.transpose([2,0,1])
+            return depth_data
+        else:
+            return depth_data
 
 class LabelDataset(Dataset):
     def __init__(self, labels, object_type=ObjectType.classification_label, class_names=None, symbol="label",
