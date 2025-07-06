@@ -1981,7 +1981,7 @@ class MS_SSIMLoss(_PairwiseLoss):
 
     def calculate_loss(self, output, target, **kwargs):
         target = target.to(output.dtype)
-        return self.ms_ssim(output, target)
+        return 1-self.ms_ssim(output, target)
 
 
 class IoULoss(_ClassificationLoss):
@@ -2523,12 +2523,12 @@ class PerceptionLoss(_PairwiseLoss):
 
 
 class EdgeLoss(_PairwiseLoss):
-    def __init__(self, reduction="mean"):
-        super(EdgeLoss, self).__init__()
+    def __init__(self,  reduction='mean', enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,name='edge_loss'):
+        super(EdgeLoss, self).__init__(axis=1, reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+                                     input_names=input_names, output_names=output_names, name=name)
 
+        self.name = name
         self.reduction = reduction
-    
-
     def first_order(self, x, axis=2):
         h, w = x.size(2), x.size(3)
         if axis == 2:
@@ -2539,8 +2539,13 @@ class EdgeLoss(_PairwiseLoss):
             return None
 
     def calculate_loss(self, output, target, **kwargs):
-        loss = MSELoss(reduction=self.reduction)(self.first_order(output, 2), self.first_order(target, 2)) + MSELoss(
-            reduction=self.reduction)(self.first_order(output, 3), self.first_order(target, 3))
+        if ndim(output)==3:
+            output=output.unsqueeze(1)
+        if ndim(target)==3:
+            target=target.unsqueeze(1)
+
+        loss = MSELoss(reduction="mean")(self.first_order(output, 2), self.first_order(target, 2)) + MSELoss(
+            reduction="mean")(self.first_order(output, 3), self.first_order(target, 3))
         return loss
 
 

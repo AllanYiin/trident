@@ -22,7 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-import torchvision.ops as visionop
+
 from trident.backend import dtype as Dtype
 from trident.backend.common import *
 # from trident.backend.numpy_ops import DTYPE_MAPPING as numpy_DTYPE_MAPPING
@@ -5225,6 +5225,7 @@ def hard_nms(box_scores, iou_threshold: float = 0.5, top_k=-1, candidate_size=20
     return box_scores[picked, :]
 
 def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5):
+    import  torchvision.ops as visionop
     return visionop.nms(boxes, scores, iou_threshold)
 
 

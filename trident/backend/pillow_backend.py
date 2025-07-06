@@ -209,7 +209,7 @@ def mask2array(img):
         if arr.ndim not in [2, 3]:
             raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
         if arr.ndim == 3:
-            if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
+            if arr.shape[-1] in [3, 4] and arr.shape[0] not in [3, 4]:
                 pass
             elif arr.shape[0] in [3, 4]:
                 arr = arr.transpose([1, 2, 0])
@@ -242,15 +242,15 @@ def array2mask(arr:np.ndarray):
         #arr = np.expand_dims(arr, 2)
         mode = 'L'
     elif arr.ndim == 3:
-        if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
+        if arr.shape[-1] in [3, 4] and arr.shape[0] not in [3, 4]:
             pass
         elif arr.shape[0] in [3, 4]:
             arr = arr.transpose([1, 2, 0])
         else:
             raise ValueError('3d image should be 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
-        if arr.shape[3] == 3:
+        if arr.shape[-1] == 3:
             mode = 'RGB'
-        elif arr.shape[3] == 4:
+        elif arr.shape[-1] == 4:
             mode = 'RGBA'
 
     arr = np.clip(arr, 0, 255).astype(np.uint8)

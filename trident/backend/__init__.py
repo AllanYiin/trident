@@ -7,6 +7,7 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from trident.context import *
 from trident.backend.common import *
+from trident.backend.decorators import *
 #from trident.backend import dtype
 #import  trident.backend.numpy_ops
 

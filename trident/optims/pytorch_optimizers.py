@@ -4,6 +4,7 @@ from __future__ import print_function
 import weakref
 import math
 import re
+import gc
 import sys
 from collections import defaultdict
 import numpy as np
@@ -11,12 +12,13 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim import optimizer, lbfgs, adagrad, adadelta, rmsprop, adam
-
+from trident.backend.common import PrintException
 from trident.backend.common import get_class, snake2camel
 from trident.backend.pytorch_ops import *
 
 __all__ = ['Adam', 'SGD', 'LBFGS', 'Adadelta', 'Adagrad', 'RMSprop', 'RAdam', 'PlainRAdam', 'AdamW', 'Lookahead',
-           'Ranger', 'Ranger21', 'RangerLars', 'AdaBelief', 'RangerAdaBelief', 'DiffGrad', 'Lamb', 'Lion','get_optimizer']
+           'Ranger', 'Ranger21', 'RangerLars', 'AdaBelief', 'RangerAdaBelief', 'DiffGrad', 'Lamb', 'Lion',
+           'get_optimizer']
 
 
 def cheb_steps(m, M, T):
@@ -94,10 +96,10 @@ class Optimizer(optimizer.Optimizer):
         self._base_lr = 1e-3
         if 'lr' in defaults:
             self._base_lr = defaults['lr']
-        self.use_adaptive_gradient_clipping = defaults.get('use_adaptive_gradient_clipping',False)
-        self.agc_clip_val=1e-2
-        self.agc_eps=1e-3
-        self.gradient_centralization = defaults.get('gradient_centralization',None)
+        self.use_adaptive_gradient_clipping = defaults.get('use_adaptive_gradient_clipping', False)
+        self.agc_clip_val = 1e-2
+        self.agc_eps = 1e-3
+        self.gradient_centralization = defaults.get('gradient_centralization', None)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -1249,7 +1251,8 @@ class Ranger(Optimizer):
         # prep defaults and init torch.optim base
         defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas,
                         N_sma_threshhold=N_sma_threshhold, eps=eps,
-                        weight_decay=weight_decay, gradient_centralization=gradient_centralization,use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        weight_decay=weight_decay, gradient_centralization=gradient_centralization,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
         super().__init__(params, defaults)
 
         # adjustable threshold
@@ -1489,7 +1492,7 @@ class Ranger21(Optimizer):
                 raise ValueError(
                     "can't produce chebs without num epochs info being passed in"
                 )
-            self.cheb_schedule = get_chebs(self.total_iterations//100)
+            self.cheb_schedule = get_chebs(self.total_iterations // 100)
 
         # self.total_iterations = num_epochs * num_batches_per_epoch
         # if not self.total_iterations:
@@ -1506,8 +1509,7 @@ class Ranger21(Optimizer):
         self.warmup_type = warmup_type
         self.warmup_pct_default = warmup_pct_default
 
-
-        if use_warmup==True and num_warmup_iterations is None:
+        if use_warmup == True and num_warmup_iterations is None:
             beta_warmup_iters = math.ceil(
                 (2 / (1 - betas[1]))
             )  # default untuned linear warmup
@@ -1524,7 +1526,7 @@ class Ranger21(Optimizer):
 
         else:  # user passed in specific num
             self.num_warmup_iters = num_warmup_iterations if num_warmup_iterations is not None else 0
-            self.use_warmup=True  if num_warmup_iterations is not None else False
+            self.use_warmup = True if num_warmup_iterations is not None else False
 
         # warm down
         self.min_lr = warmdown_min_lr
@@ -1609,55 +1611,6 @@ class Ranger21(Optimizer):
     def __setstate__(self, state):
         super(Ranger21, self).__setstate__(state)
 
-    def unit_norm(self, x):
-        """ axis-based Euclidean norm"""
-        # verify shape
-        keepdim = True
-        dim = None
-        try:
-            xlen = len(x.shape)
-
-            # print(f"xlen = {xlen}")
-
-            if xlen <= 1:
-                keepdim = False
-            elif xlen in (2, 3):  # linear layers
-                dim = 1
-            elif xlen == 4:  # conv kernels
-                dim = (1, 2, 3)
-            else:
-                dim = tuple(
-                    [x for x in range(1, xlen)]
-                )  # create 1,..., xlen-1 tuple, while avoiding last dim ...
-
-            return x.norm(dim=dim, keepdim=keepdim, p=2.0)
-        except:
-            print(type(x), )
-            return x
-
-    def agc(self, p):
-        """clip gradient values in excess of the unitwise norm.
-        the hardcoded 1e-6 is simple stop from div by zero and no relation to standard optimizer eps
-        """
-
-        # params = [p for p in parameters if p.grad is not None]
-        # if not params:
-        #    return
-
-        # for p in params:
-        if p.grad is not None and p.dtype != torch.int64:
-            grad = p.grad
-            p_norm = self.unit_norm(p).clamp_(self.agc_eps)
-            g_norm = self.unit_norm(grad)
-
-            max_norm = p_norm * self.agc_clip_val
-
-            clipped_grad = grad * (max_norm / g_norm.clamp(min=1e-6))
-            if clipped_grad.device != grad.device:
-                grad.to(g_norm.device)
-                clipped_grad.to(g_norm.device)
-            new_grads = torch.where(g_norm > max_norm, clipped_grad, grad)
-            p.grad.detach().copy_(new_grads)
 
     def warmup_dampening(self, lr, step):
 
@@ -1795,7 +1748,7 @@ class Ranger21(Optimizer):
             with torch.enable_grad():
                 loss = closure()
 
-        param_size = 0
+        param_size = 1
         variance_ma_sum = 0.0
         for i, group in enumerate(self.param_groups):
             for j, p in enumerate(group["params"]):
@@ -1808,6 +1761,7 @@ class Ranger21(Optimizer):
                     p.data = p.data.float()
                     p.grad = p.grad.float()
 
+                param_size += p.numel()
                 # apply agc if enabled
                 if self.agc_active:
                     self.agc(p)
@@ -1902,7 +1856,9 @@ class Ranger21(Optimizer):
         else:
             variance_normalized = math.sqrt(variance_ma_sum / param_size)
             # variance_mean = variance_ma_sum / param_size
+
         if math.isnan(variance_normalized):
+            print(variance_normalized)
             raise RuntimeError("hit nan for variance_normalized")
 
         # print(f"variance_mean = {variance_mean}")
@@ -1916,6 +1872,7 @@ class Ranger21(Optimizer):
         # ===========================================
         for group in self.param_groups:
             # print(f"In second phase loop")
+
             step = state["step"]
 
             # Perform stable weight decay
@@ -2025,7 +1982,7 @@ class Ranger21(Optimizer):
                         p.data.copy_(x0.addcdiv(s, rms, value=-1))
                     else:
                         z = x0.addcdiv(s, rms, value=-1)
-
+                        ck = 1 - momentum
                         # p is a moving average of z
                         p.data.mul_(1 - ck).add_(z, alpha=ck)
 
@@ -2115,7 +2072,7 @@ class RangerLars(Optimizer):
     """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6, N_sma_threshhold=5, eps=1e-7,
-                 weight_decay=0, gradient_centralization=None, use_adaptive_gradient_clipping=False,**kwargs):
+                 weight_decay=0, gradient_centralization=None, use_adaptive_gradient_clipping=False, **kwargs):
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {alpha}')
@@ -2134,7 +2091,8 @@ class RangerLars(Optimizer):
         # In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to make sure which works best for you.
 
         # prep defaults and init torch.optim base
-        defaults = dict(lr=lr, alpha=alpha, k=k, betas=betas, eps=eps, weight_decay=weight_decay,use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+        defaults = dict(lr=lr, alpha=alpha, k=k, betas=betas, eps=eps, weight_decay=weight_decay,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
 
         super().__init__(params, defaults)
         # radam buffer for state
@@ -2340,7 +2298,7 @@ class LARS(Optimizer):
             exclude_from_weight_decay=exclude_from_weight_decay,
             exclude_from_layer_adaptation=exclude_from_layer_adaptation,
             classic_momentum=classic_momentum,
-            use_adaptive_gradient_clipping = use_adaptive_gradient_clipping,
+            use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
             eeta=eeta,
         )
 
@@ -2502,7 +2460,7 @@ class AdaBelief(Optimizer):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7,
                  weight_decay=0, amsgrad=False, weight_decouple=True, fixed_decay=False, rectify=True,
-                 degenerated_to_sgd=True,  use_adaptive_gradient_clipping=False,gradient_centralization=None, **kwargs):
+                 degenerated_to_sgd=True, use_adaptive_gradient_clipping=False, gradient_centralization=None, **kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2518,7 +2476,8 @@ class AdaBelief(Optimizer):
                     param['buffer'] = [[None, None, None] for _ in range(10)]
 
         defaults = dict(lr=lr, betas=betas, eps=eps,
-                        weight_decay=weight_decay, amsgrad=amsgrad, buffer=[[None, None, None] for _ in range(10)],use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        weight_decay=weight_decay, amsgrad=amsgrad, buffer=[[None, None, None] for _ in range(10)],
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
         super(AdaBelief, self).__init__(params, defaults)
 
         self.degenerated_to_sgd = degenerated_to_sgd
@@ -2741,7 +2700,8 @@ class RangerAdaBelief(Optimizer):
                  alpha=0.5, k=6, N_sma_threshhold=5,  # Ranger options
                  betas=(.95, 0.999), eps=1e-5, weight_decay=0,  # Adam options
                  # Gradient centralization on or off, applied to conv layers only or conv + fc layers
-                 adabelief=True, weight_decouple=True, use_adaptive_gradient_clipping=False, gradient_centralization=None, **kwargs):
+                 adabelief=True, weight_decouple=True, use_adaptive_gradient_clipping=False,
+                 gradient_centralization=None, **kwargs):
 
         if not 0.0 <= alpha <= 1.0:
             raise ValueError(f'Invalid slow update rate: {alpha}')
@@ -2759,7 +2719,8 @@ class RangerAdaBelief(Optimizer):
 
         # prep defaults and init torch.optim base
         defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas,
-                        N_sma_threshhold=N_sma_threshhold, eps=eps, weight_decay=weight_decay,use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        N_sma_threshhold=N_sma_threshhold, eps=eps, weight_decay=weight_decay,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
         super().__init__(params, defaults)
 
         # adjustable threshold
@@ -2961,7 +2922,8 @@ class DiffGrad(Optimizer):
         https://openreview.net/forum?id=ryQu7f-RZ
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, use_adaptive_gradient_clipping=False,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0,
+                 use_adaptive_gradient_clipping=False, gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2972,7 +2934,8 @@ class DiffGrad(Optimizer):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
         self.gradient_centralization = gradient_centralization
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
-                        gradient_centralization=gradient_centralization,use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        gradient_centralization=gradient_centralization,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
         super(DiffGrad, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -3024,8 +2987,7 @@ class DiffGrad(Optimizer):
                 exp_avg, exp_avg_sq, previous_grad = state['exp_avg'], state['exp_avg_sq'], state['previous_grad']
                 beta1, beta2 = group['betas']
 
-                if group['weight_decay'] != 0:
-                    grad.add_(p_data_fp32, alpha=group['weight_decay'])
+
 
                 if self.gradient_centralization in ['all', 'gcc']:
                     if ndim(grad) > 3:
@@ -3052,9 +3014,12 @@ class DiffGrad(Optimizer):
                 exp_avg1 = exp_avg * dfc
                 G_grad = true_divide(exp_avg1, denom)
 
-                # if self.gradient_centralization is not None:
-                #     if ndim(G_grad) > 1:
-                #         G_grad = G_grad - G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
+                if group['weight_decay'] != 0:
+                    G_grad.add_(p_data_fp32, alpha=group['weight_decay'])
+
+                if self.gradient_centralization is not None:
+                    if ndim(G_grad) > 1:
+                        G_grad = G_grad - G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
 
                 step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
 
@@ -3063,6 +3028,7 @@ class DiffGrad(Optimizer):
                 if half_precision:
                     p.data = p.data.half()
                     p.grad = p.grad.half()
+                gc.collect()
         return loss
 
 
@@ -3189,7 +3155,8 @@ class Lion(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-4, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, use_adaptive_gradient_clipping=False,gradient_centralization=None):
+    def __init__(self, params, lr=1e-4, betas=(0.9, 0.999), eps=1e-7, weight_decay=0,
+                 use_adaptive_gradient_clipping=False, gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -3200,7 +3167,8 @@ class Lion(Optimizer):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
         self.gradient_centralization = gradient_centralization
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
-                        gradient_centralization=gradient_centralization,use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        gradient_centralization=gradient_centralization,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
         super(Lion, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -3260,8 +3228,6 @@ class Lion(Optimizer):
                 if group['weight_decay'] != 0:
                     grad.add_(p_data, alpha=group['weight_decay'])
 
-
-
                 # weight update
 
                 update = exp_avg.clone().lerp_(grad, 1 - beta1).sign_()
@@ -3275,8 +3241,8 @@ class Lion(Optimizer):
                     p.data = p.data.half()
                     p.grad = p.grad.half()
 
-
         return loss
+
 
 def get_optimizer(optimizer_name):
     if optimizer_name is None:

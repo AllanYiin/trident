@@ -22,7 +22,7 @@ else:
 
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
-from matplotlib.cm import get_cmap
+from matplotlib import colormaps
 from matplotlib.colors import to_hex
 import matplotlib.patches as patches
 import matplotlib.font_manager
@@ -226,7 +226,7 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
 
 def loss_metric_curve(losses, metrics, metrics_names, legend=None, calculate_base='epoch', max_iteration=None,
                       save_path=None, imshow=False, **kwargs):
-    default_colors = [to_hex(i) for i in get_cmap('tab20').colors]
+    default_colors = [to_hex(i) for i in colormaps.get_cmap('tab20').colors]
     colors = []
     line_type = ['-', '--', '-.', ':']
     fig = plt.gcf()

@@ -306,7 +306,7 @@ class _Context:
         self.enable_mlflow = False
 
 
-        self.locale = locale.getdefaultlocale()[0]
+        self.locale = locale.getdefaultlocale()[0] if  locale.getdefaultlocale() else None
 
         self.image_backend = 'opencv'
         self.epoch_equivalent = 1000

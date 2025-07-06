@@ -1,8 +1,9 @@
 numpy>=1.18
 opencv-python
 six>=1.13.0
-scipy>=1.10.0
 scikit-image>=0.19.0
+scipy
+beautifulsoup4
 scikit-learn
 matplotlib>=3.0.2
 ipython>=7.10.2

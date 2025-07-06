@@ -2,32 +2,16 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import math
-import os
 import random
-import re
-from itertools import repeat
 
 import numpy as np
-import six
-from scipy import misc, ndimage
+from scipy import ndimage
 from skimage import color
-from skimage import exposure
-from skimage import morphology
-from skimage import transform, exposure
-from skimage.filters import *
 
 from trident.backend.common import *
 from trident.backend.tensorspec import *
-
-
-if get_image_backend()=='opencv':
-    from trident.backend.opencv_backend import *
-else:
-    from trident.backend.pillow_backend import *
-
 from trident.backend.common import get_backend
-from trident.data.label_common import check_is_onehot,get_onehot
+from trident.data.label_common import check_is_onehot
 from trident.misc.visualization_utils import generate_palette
 
 __all__ = ['mask2trimap','color2label','label2color','mask_backend_adaptive']
@@ -189,6 +173,11 @@ def mask_backend_adaptive(mask, label_mapping=None, object_type=None):
                     return mask.astype(np.float32)
                 if mask.ndim == 3:
                     mask=color.rgb2gray(mask.astype(np.float32))
+                if mask.max()>1:
+                    mask = mask /mask.max()
+                return mask.astype(np.float32)
+            elif object_type in [ObjectType.depth_mask,ObjectType.di]:
+
                 if mask.max()>1:
                     mask = mask /mask.max()
                 return mask.astype(np.float32)

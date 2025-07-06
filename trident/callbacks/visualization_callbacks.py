@@ -111,7 +111,7 @@ class TileImageCallback(VisualizationCallbackBase):
 
     def plot_tile_image(self, training_context):
         if self.data_feed is None:
-            self.generate_datafeed(training_context)
+            self.data_feed=training_context['data_feed']
 
         tile_images_list = []
 
@@ -121,7 +121,7 @@ class TileImageCallback(VisualizationCallbackBase):
         mask = None
         legends = []
 
-        data_feed = training_context['data_feed']
+
         data = training_context['train_data']
         model = training_context['current_model']
         dataprovider =ctx.get_data_provider()[-1]

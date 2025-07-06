@@ -18,26 +18,25 @@ import urllib.request
 from urllib.parse import urlencode
 import zipfile
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.by import By
 import six
 from scipy.io import loadmat
 from tqdm import tqdm
 
 from trident.backend.common import *
-from trident.context import make_dir_if_need,split_path,sanitize_path
+from trident.context import make_dir_if_need, split_path, sanitize_path
+
 try:
     from urllib.request import urlretrieve
 except ImportError:
     from six.moves.urllib.request import urlretrieve
 
-__all__: object = ['is_connected', 'ensure_dir','ensure_parent_dir','TqdmProgress','calculate_md5','check_integrity','download_file','get_onedrive_directdownload',
-           'download_file_from_google_drive','download_file_from_onedrive','get_image_from_google_drive','get_file_from_google_drive',
-           'download_model_from_google_drive','download_model_from_onedrive','extract_archive','pickle_it','unpickle','save_dict_as_h5',
-          'read_dict_from_h5','get_file_create_time','read_mat']
+__all__: object = ['is_connected', 'ensure_dir', 'ensure_parent_dir', 'TqdmProgress', 'calculate_md5',
+                   'check_integrity', 'download_file', 'get_onedrive_directdownload',
+                   'download_file_from_google_drive', 'download_file_from_onedrive', 'get_image_from_google_drive',
+                   'get_file_from_google_drive',
+                   'download_model_from_google_drive', 'download_model_from_onedrive', 'extract_archive', 'pickle_it',
+                   'unpickle', 'save_dict_as_h5',
+                   'read_dict_from_h5', 'get_file_create_time', 'read_mat']
 
 
 def prepare_chrome_options():
@@ -65,6 +64,7 @@ def prepare_chrome_options():
     chrome_options.add_argument("--disable-software-rasterizer")
     return chrome_options
 
+
 user_agents = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.2151.97',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.2151.97',
@@ -80,7 +80,6 @@ user_agents = [
     'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0',
     'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:88.0) Gecko/20100101 Firefox/88.0'
 ]
-
 
 
 def is_connected():
@@ -113,7 +112,7 @@ class TqdmProgress(tqdm):
         """
         if tsize is not None:
             self.total = tsize
-        pbar.update(progress - pbar.n)# will also set self.n = b * bsize
+        pbar.update(progress - pbar.n)  # will also set self.n = b * bsize
 
 
 def calculate_md5(fpath, chunk_size=1024 * 1024):
@@ -199,7 +198,8 @@ def download_file(src, dirname, filename, desc=''):
             os.remove(os.path.join(dirname, filename))
 
         try:
-            with TqdmProgress(unit='B', unit_scale=True, leave=True, miniters=10, desc=desc) as t:  # all optional kwargs
+            with TqdmProgress(unit='B', unit_scale=True, leave=True, miniters=10,
+                              desc=desc) as t:  # all optional kwargs
                 urlretrieve(src, filename=os.path.join(dirname, filename), reporthook=t.update_to, data=None)
                 _write_h(dirname, True, False, tag=filename)
             return True
@@ -248,10 +248,10 @@ def download_file_from_google_drive(file_id, dirname=None, filename=None, md5=No
     # Based on https://stackoverflow.com/questions/38511444/python-download-files-from-google-drive-using-url
     import requests
 
-    url = 'https://drive.google.com/uc?'
-    params = {'id': file_id, 'confirm': 't', 'export': 'download'}
-    dirname = os.path.join(get_trident_dir(), 'downloads')  if not dirname else dirname
-    filename = file_id if not file_name else file_name
+    url = 'https://drive.usercontent.google.com/uc?'
+    params = {'id': file_id, 'authuser': '0', 'export': 'download'}
+    dirname = os.path.join(get_trident_dir(), 'downloads') if not dirname else dirname
+    filename = file_id if not filename else filename
 
     fpath = os.path.join(dirname, filename)
     _h = _read_h(dirname)
@@ -259,50 +259,65 @@ def download_file_from_google_drive(file_id, dirname=None, filename=None, md5=No
     make_dir_if_need(fpath)
     is_downloaded = _h[filename].get('is_downloaded', False) if filename in _h else _h.get('is_downloaded', False)
 
-    if os.path.exists(fpath) and os.path.isfile(fpath) and _h != {} and is_downloaded == True and need_up_to_date == False:
+    if os.path.exists(fpath) and os.path.isfile(
+            fpath) and _h != {} and is_downloaded == True and need_up_to_date == False:
         print('archive file is already existing, donnot need download again.')
         return True
     else:
         try:
             session = requests.Session()
-            response = session.get(url, params=params, stream=True)
-            token = _get_confirm_token(response)
-            if token:
-                response2 = session.get(url, params=params, stream=True)
-            else:
-                soup = BeautifulSoup(response.text, 'html.parser')
-                inputs = soup.find_all('input')
+            options_headers = {
+                "Origin": "https://drive.google.com",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "x-drive-first-party,x-json-requested",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+            }
 
-                for inp in inputs:
-                    if 'name' in inp.attrs and inp.attrs['name'] == 'uuid':
-                        params['uuid'] = inp.attrs['value']
-                    elif 'name' in inp.attrs and inp.attrs['name'] == 'at':
-                        params['at'] = inp.attrs['value']
-                if 'at' not in params:
-                    params['authuser'] = 0
-
-                headers = {
-                    "accept": "application/octet-stream",
-                    "accept-encoding": "gzip, deflate, br",
-                    "user-agent": random.choice(user_agents),
+            options_response = session.options(url, headers=options_headers)
+            if options_response.status_code == 200:
+                post_headers = {
+                    "Origin": "https://drive.google.com",
+                    "Referer": "https://drive.google.com/",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+                    "X-Drive-First-Party": "DriveWebUi",
+                    "X-JSON-Requested": "true",
+                    "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                    "Accept": "*/*",
+                    "Accept-Encoding": "gzip, deflate, br, zstd",
                 }
-                url = 'https://drive.usercontent.google.com/download?'
-                response2 = requests.get(url + urlencode(params), headers=headers, cookies=response.cookies,
-                                         stream=True)
-                file_size = int(response2.headers.get('Content-Length', 0))
-                _save_response_content(response2, fpath)
-                if md5:
-                    is_md5_valid=check_integrity(fpath, md5)
-                    if is_md5_valid:
-                        return fpath
-                    else:
-                        return None
-                return fpath
+                post_response = session.post(url,  params=params, headers=post_headers)
+
+            # token = _get_confirm_token(response)
+            # if token:
+            #     response2 = session.get(url, params=params, stream=True)
+            # else:
+            jresult=json.loads(post_response.text.split('\n')[-1])
+            download_url=jresult['downloadUrl']
+            headers = {
+                "User-Agent": "Mozilla/5.0",
+                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "accept-encoding": "gzip, deflate, br, zstd",
+            }
+
+            response2 = session.get(download_url, headers=headers,
+                                     stream=True)
+            file_size = int(response2.headers.get('Content-Length', 0))
+            _save_response_content(response2, fpath)
+            if md5:
+                is_md5_valid = check_integrity(fpath, md5)
+                if is_md5_valid:
+                    return fpath
+                else:
+                    return None
+            return fpath
         except Exception as e:
+            PrintException()
             _write_h(dirname, False, False, filename)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
-            print('***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(dirname,
-                                                                                                                                                         'https://drive.google.com/open?id={0}'.format(                                                                                                                                               file_id)), flush=True)
+            print(
+                '***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(
+                    dirname,
+                    'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
             print(e)
             return None
 
@@ -332,7 +347,8 @@ def download_file_from_onedrive(onedrive_path, dirname, filename=None, md5=None)
     # if os.path.exists(os.path.join(dirname, filename)):
     #     print('archive file is already existing, donnot need download again.')
     dest_path = os.path.join(os.path.join(get_trident_dir(), 'models'), filename)
-    if os.path.exists(dest_path) and os.path.isfile(dest_path) and (datetime.datetime.now() - get_file_modified_time(dest_path)).seconds < 12 * 60 * 60:
+    if os.path.exists(dest_path) and os.path.isfile(dest_path) and (
+            datetime.datetime.now() - get_file_modified_time(dest_path)).seconds < 12 * 60 * 60:
         print('archive file is already existing, donnot need download again.')
         return True
     else:
@@ -347,7 +363,9 @@ def download_file_from_onedrive(onedrive_path, dirname, filename=None, md5=None)
         except Exception as e:
             _write_h(dirname, False, False, filename)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
-            print('***Please check your internet or download  files from following url in another computer, \n and then put them into {0} '.format(dirname), flush=True)
+            print(
+                '***Please check your internet or download  files from following url in another computer, \n and then put them into {0} '.format(
+                    dirname), flush=True)
 
             print(e)
             return False
@@ -398,9 +416,11 @@ def get_image_from_google_drive(file_id):
         return fpath
     except Exception as e:
         print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
-        print('***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(dirname,
-                                                                                                                                                     'https://drive.google.com/open?id={0}'.format(
-                                                                                                                                                         file_id)), flush=True)
+        print(
+            '***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(
+                dirname,
+                'https://drive.google.com/open?id={0}'.format(
+                    file_id)), flush=True)
         print(e)
         return None
 
@@ -416,12 +436,13 @@ def get_file_from_google_drive(filename, file_id):
         the file path of this downloaded image
 
     Examples:
-        >>> get_file_from_google_drive('mbo_bisenetV10_model.pth.tar','1xmSGwOZOo_rKGlaSIhCzaqx5VTw7cyrb')
+
+        >>> get_file_from_google_drive('efficientnet-b0.pth','1bxnoDerzoNfiZZLft4ocD3DAgx4v6aTN')
 
     """
 
-
-    return download_file_from_google_drive(file_id, dirname=os.path.join(get_trident_dir(),'download'), filename=filename, md5=None, need_up_to_date=True)
+    return download_file_from_google_drive(file_id, dirname=os.path.join(get_trident_dir(), 'download'),
+                                           filename=filename, md5=None, need_up_to_date=True)
 
 
 def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
@@ -434,19 +455,22 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
         md5 (str, optional): MD5 checksum of the download. If None, do not check
     """
     # Based on https://stackoverflow.com/questions/38511444/python-download-files-from-google-drive-using-url
-    need_download_model_json=True
-    need_download=True
-    filename = file_id if not file_name else file_name
-    dirname=os.path.join(get_trident_dir(),'models')
+    need_download_model_json = True
+    need_download = True
+    filename = file_id if not filename else filename
+    dirname = os.path.join(get_trident_dir(), 'models')
 
     make_dir_if_need(dirname)
     fpath = os.path.join(dirname, filename)
     if os.path.exists(os.path.join(dirname, 'models_md5.json')) and os.path.isfile(
             os.path.join(dirname, 'models_md5.json')) and (
-            datetime.datetime.now() - get_file_modified_time(os.path.join(dirname, 'models_md5.json'))).seconds < 24 * 60 * 60:
+            datetime.datetime.now() - get_file_modified_time(
+        os.path.join(dirname, 'models_md5.json'))).seconds < 24 * 60 * 60:
         need_download_model_json = False
 
-    download_file_from_google_drive(file_id='12XLjt9Zcaoo90WGG6R5N0U6Sf_KBZZn_', dirname=os.path.join(get_trident_dir(), 'models'), filename='models_md5.json',md5=None, need_up_to_date=need_download_model_json)
+    download_file_from_google_drive(file_id='12XLjt9Zcaoo90WGG6R5N0U6Sf_KBZZn_',
+                                    dirname=os.path.join(get_trident_dir(), 'models'), filename='models_md5.json',
+                                    md5=None, need_up_to_date=need_download_model_json)
     if os.path.exists(os.path.join(dirname, 'models_md5.json')):
         with open(os.path.join(dirname, 'models_md5.json')) as f:
             models_md5 = json.load(f)
@@ -465,9 +489,10 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
 
     if need_download:
         return download_file_from_google_drive(file_id, dirname=dirname, filename=filename,
-                                        md5=models_md5[filename], need_up_to_date=need_download)
+                                               md5=models_md5[filename], need_up_to_date=need_download)
     else:
         return fpath
+
 
 # https://1drv.ms/u/s!AsqOV38qroofiZrqNAQvo2CuX_cyWQE?e=Aa8v7D
 
@@ -489,12 +514,15 @@ def download_model_from_onedrive(onedrive_path, dirname, filename=None, md5=None
     need_download = True
     check_internet = None
     try:
-        if os.path.exists(os.path.join(dirname, 'models_md5.json')) and os.path.isfile(os.path.join(dirname, 'models_md5.json')) and (
-                datetime.datetime.now() - get_file_modified_time(os.path.join(dirname, 'models_md5.json'))).seconds < 24 * 60 * 60:
+        if os.path.exists(os.path.join(dirname, 'models_md5.json')) and os.path.isfile(
+                os.path.join(dirname, 'models_md5.json')) and (
+                datetime.datetime.now() - get_file_modified_time(
+            os.path.join(dirname, 'models_md5.json'))).seconds < 24 * 60 * 60:
             with open(os.path.join(dirname, 'models_md5.json')) as f:
                 models_md5 = json.load(f)
         else:
-            download_file_from_onedrive("https://1drv.ms/u/s!AsqOV38qroofiZrqNAQvo2CuX_cyWQE?e=Aa8v7D", dirname, 'models_md5.json')
+            download_file_from_onedrive("https://1drv.ms/u/s!AsqOV38qroofiZrqNAQvo2CuX_cyWQE?e=Aa8v7D", dirname,
+                                        'models_md5.json')
 
             check_internet = True
             if os.path.exists(os.path.join(dirname, 'models_md5.json')):
@@ -512,8 +540,9 @@ def download_model_from_onedrive(onedrive_path, dirname, filename=None, md5=None
         else:
             _write_h(dirname, False, False, filename)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
-            print('***Please check your internet or download  files from following url in another computer, \n and then '
-                  'put them into {0}\n {1} '.format(dirname, url), flush=True)
+            print(
+                '***Please check your internet or download  files from following url in another computer, \n and then '
+                'put them into {0}\n {1} '.format(dirname, url), flush=True)
 
         return False
     else:
@@ -532,7 +561,8 @@ def download_model_from_onedrive(onedrive_path, dirname, filename=None, md5=None
                         need_download = False
 
             if need_download:
-                with TqdmProgress(unit='B', unit_scale=True, leave=True, miniters=10, desc='') as t:  # all optional kwargs
+                with TqdmProgress(unit='B', unit_scale=True, leave=True, miniters=10,
+                                  desc='') as t:  # all optional kwargs
                     urlretrieve(url, filename=os.path.join(dirname, filename), reporthook=t.update_to, data=None)
                 _write_h(dirname, True, False, filename)
                 if check_integrity(os.path.join(dirname, filename), models_md5[filename]):
@@ -543,8 +573,9 @@ def download_model_from_onedrive(onedrive_path, dirname, filename=None, md5=None
             _write_h(dirname, False, False, filename)
             print(e)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
-            print('***Please check your internet or download  files from following url in another computer, \n and then '
-                  'put them into {0}\n {1} '.format(dirname, url), flush=True)
+            print(
+                '***Please check your internet or download  files from following url in another computer, \n and then '
+                'put them into {0}\n {1} '.format(dirname, url), flush=True)
             print(e)
 
         return False
@@ -567,7 +598,6 @@ def _save_response_content(response, destination, chunk_size=32768):
             for data in response.iter_content(chunk_size):
                 progress_bar.update(len(data))
                 file.write(data)
-
 
 
 def extract_archive(file_path, target_folder=None, archive_format='auto'):

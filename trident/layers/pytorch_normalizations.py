@@ -679,8 +679,8 @@ class SpectralNorm(Layer):
         height = w.data.shape[0]
         width = w.view(height, -1).data.shape[1]
 
-        u = Parameter(w.data.new(height).normal_(0, 1), requires_grad=False).to(get_device())
-        v = Parameter(w.data.new(width).normal_(0, 1), requires_grad=False).to(get_device())
+        u = Parameter(w.data.new(height).normal_(0, 1), trainable=False).to(get_device())
+        v = Parameter(w.data.new(width).normal_(0, 1), trainable=False).to(get_device())
         u.data = l2_normalize(u.data)
         v.data = l2_normalize(v.data)
         w_bar = Parameter(w.data).to(get_device())

@@ -14,8 +14,8 @@ import scipy.optimize as sciopt
 import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import math_ops
-from tensorflow.python.training.tracking import base as trackable
-from tensorflow.python.training.tracking import tracking
+
+from tensorflow.python.trackable.base import Trackable
 from trident.backend.common import get_session, get_class, snake2camel,get_time_suffix,camel2snake,get_session_value
 from trident.backend.tensorflow_ops import *
 
@@ -56,7 +56,7 @@ def gc_grads(grads, gradient_centralization=None):
 
 
 
-class Optimizer(trackable.Trackable):
+class Optimizer(Trackable):
     """Base class for all optimizers.
 
     .. warning::

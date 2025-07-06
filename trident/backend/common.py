@@ -27,7 +27,7 @@ from enum import Enum
 from importlib import import_module
 from pydoc import locate
 from time import sleep
-from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType, Dict, List
+from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType, Dict, List, TypeAlias
 
 import numpy as np
 
@@ -148,26 +148,53 @@ def set_session(key, value):
 
 
 def get_backend():
+    """!!! note
+
+    Failed to generate docs
+    """
     return context._context().get_backend()
 
 
 def get_image_backend():
+    """!!! note
+
+    Failed to generate docs
+    """
     return context._context().image_backend
 
 
 def get_device():
+    """!!! note
+
+    Failed to generate docs
+    """
     return context._context().device
 
 
 def is_autocast_enabled():
+    """!!! note
+
+    Failed to generate docs
+    """
     return get_session_value('is_autocast_enabled')
 
 
 def set_autocast_enabled(enabled: bool):
+    """Sets the autocast enabled flag.
+
+    Args:
+        enabled: A boolean value indicating whether autocast is enabled or not."""
     set_session('is_autocast_enabled', enabled)
 
 
 def _is_c_contiguous(data):
+    """Check if the given data is C-contiguous.
+
+    Args:
+        data: The data to check.
+
+    Returns:
+        bool: True if the data is C-contiguous, False otherwise."""
     while isinstance(data, list):
         data = data[0]
     return data.flags.c_contiguous
@@ -236,6 +263,19 @@ def snake2camel(string1):
 
 def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Iterable] = None, value_type=None,
                     name=None):
+    """Formats a number based on its value and previous values.
+
+    Args:
+        num: The number to be formatted.
+        prev_value: The previous value(s) of the number. Can be a single number or an iterable of numbers.
+        value_type: The type of value being formatted. Can be 'loss' or 'metric'.
+        name: The name associated with the number.
+
+    Returns:
+        The formatted number.
+
+    Raises:
+        NotImplementedError: If the number is None or if silent animals are not supported."""
     valid_value_type = ['loss', 'metric']
     percentage_name = ['accuracy', 'rate', 'ratio', 'iou', 'recall', 'rmse', 'similarity', 'fitness', 'utility']
 
@@ -333,11 +373,30 @@ def PrintException():
 
 
 def make_sure(bool_val, error_msg, *args):
+    """Make sure a boolean condition is true.
+
+    Args:
+        bool_val: Boolean condition to check
+        error_msg: Error message to raise if the condition is false
+        *args: Arguments to be formatted into the error message
+
+    Raises:
+        ValueError: If the boolean condition is false"""
     if not bool_val:
         raise ValueError("make_sure failure: " + error_msg % args)
 
 
 class DeviceType(object):
+    """A class to represent a device type.
+
+    Attributes:
+        _Type : Type of the device
+        CPU : Device type for CPU
+        CUDA : Device type for CUDA
+
+    Attributes:
+        type : Type of the device
+        index : Index of the device"""
     _Type = NewType('_Type', int)
     CPU = _Type(0)  # type: _Type
     CUDA = _Type(1)  # type: _Type
@@ -481,6 +540,7 @@ class device:
     def __reduce__(self) -> Tuple[Any, ...]: ...  # THPDevice_reduce
 
 
+
 class TensorShape(object):
     """
 
@@ -547,12 +607,20 @@ class TensorShape(object):
                                 .format(dims, d)), e)
 
     def __repr__(self):
+        """!!! note
+
+        Failed to generate docs
+        """
         if self._dims is not None:
             return "TensorShape(%r)" % [dim for dim in self._dims]
         else:
             return "TensorShape(None)"
 
     def __str__(self):
+        """!!! note
+
+        Failed to generate docs
+        """
         if self._dims is None:
             return "<unknown>"
         elif self.rank == 1:
@@ -607,6 +675,10 @@ class TensorShape(object):
             return np.prod(np.array(dims))
 
     def copy(self):
+        """!!! note
+
+        Failed to generate docs
+        """
         return copy.deepcopy(self)
 
     def __len__(self):
@@ -717,6 +789,16 @@ class TensorShape(object):
         return True
 
     def get_dummy_tensor(self, batch_size=2):
+        """Generate a dummy tensor.
+
+        Args:
+            batch_size: The batch size of the tensor (default is 2)
+
+        Returns:
+            A dummy tensor with the specified batch size.
+
+        Note:
+            The dummy tensor is generated using random values between 0 and 1, and is of type np.float32."""
         shape = [d for d in self._dims]
         if shape[0] is None:
             shape[0] = batch_size
@@ -737,6 +819,10 @@ class OrderedDict(collections.OrderedDict):
     """ more easy-to-use OrderedDict"""
 
     def __init__(self, *args, **kwds):
+        """!!! note
+
+        Failed to generate docs
+        """
         super(OrderedDict, self).__init__(*args, **kwds)
 
     @property
@@ -767,12 +853,44 @@ class OrderedDict(collections.OrderedDict):
         return list(super().items())
 
     def __repr__(self):
+        """!!! note
+
+        Failed to generate docs
+        """
         return '{ ' + (
             ', '.join(['{0}: {1}'.format(k, v if v is not None else 'none') for k, v in self.item_list])) + ' }'
 
 
 class Signature(object):
+    """A class to represent a signature.
+
+    Attributes:
+        inputs : dictionary of input values
+        outputs : dictionary of output values
+        name : name of the signature
+
+    Methods:
+        to_dict() -> Dict[str, Any]:
+            Serialize the signature into a 'jsonable' dictionary.
+
+        maybe_not_complete() -> bool:
+            Check if the signature is complete or not.
+
+        _get_kvsting(k, v) -> str:
+            Get the string representation of a key-value pair.
+
+        __len__() -> int:
+            Get the length of the signature.
+
+        __repr__() -> str:
+            Get the string representation of the signature."""
     def __init__(self, inputs=None, outputs=None, name=None):
+        """Initialize a class object.
+
+        Args:
+            inputs: A dictionary of input values (default is an empty OrderedDict)
+            outputs: A dictionary of output values (default is an empty OrderedDict)
+            name: A string representing the name of the object (default is None)"""
         super().__init__()
         self.name = name
         self.inputs = OrderedDict() if inputs is None else inputs
@@ -801,6 +919,10 @@ class Signature(object):
     #     if inspect.isfunction(fn)
 
     def maybe_not_complete(self):
+        """!!! note
+
+        Failed to generate docs
+        """
         if len(self.inputs) < 1 or len(self.outputs) < 1:
             return True
         completeness = 0
@@ -816,6 +938,14 @@ class Signature(object):
             return True
 
     def _get_kvsting(self, k, v):
+        """Returns a string representation of a key-value pair.
+
+        Args:
+            k: The key of the pair.
+            v: The value of the pair.
+
+        Returns:
+            A string representation of the key-value pair."""
         if v is None:
             return '{0}'.format(k)
         elif isinstance(v, (list, tuple)):
@@ -831,10 +961,18 @@ class Signature(object):
             return '{0}:{1}'.format(k, v)
 
     def __len__(self):
+        """!!! note
+
+        Failed to generate docs
+        """
         return len(self.inputs) + len(self.outputs)
 
     def __repr__(self):
         # ElementTimes(x: Tensor[13]) -> Tensor[13]
+        """!!! note
+
+        Failed to generate docs
+        """
         input_str = ', '.join([self._get_kvsting(k, v) for k, v in self.inputs.item_list]) if len(
             self.inputs.item_list) > 0 else ''
         output_str = ', '.join([self._get_kvsting(k, v) for k, v in self.outputs.item_list]) if len(
@@ -846,15 +984,34 @@ class AverageMeter(object):
     """Computes and stores the average and current value"""
 
     def __init__(self):
+        """!!! note
+
+        Failed to generate docs
+        """
         self.reset()
 
     def reset(self):
+        """!!! note
+
+        Failed to generate docs
+        """
         self.val = 0
         self.avg = 0
         self.sum = 0
         self.count = 0
 
     def update(self, val, n=1):
+        """Updates the values of an object.
+
+        Args:
+            val: The new value to be assigned.
+            n: The number of times the value should be updated. Default is 1.
+
+        Attributes:
+            val: The updated value.
+            sum: The sum of all updated values.
+            count: The total number of updates.
+            avg: The average value of all updates."""
         self.val = val
         self.sum += val * n
         self.count += n
@@ -929,6 +1086,12 @@ class LazyLoader(types.ModuleType):
     """
 
     def __init__(self, local_name, parent_module_globals, name):
+        """Initialize a LazyLoader object.
+
+        Args:
+            local_name: The local name of the object being loaded.
+            parent_module_globals: The globals of the parent module.
+            name: The fully qualified name of the object being loaded."""
         self._local_name = local_name
         self._parent_module_globals = parent_module_globals
 
@@ -958,15 +1121,37 @@ class LazyLoader(types.ModuleType):
         return module
 
     def __getattr__(self, item):
+        """A function to get an attribute dynamically.
+
+        Args:
+            item: name of the attribute to get
+
+        Returns:
+            The value of the attribute
+
+        Raises:
+            AttributeError: If the attribute does not exist"""
         module = self._load()
         return getattr(module, item)
 
     def __dir__(self):
+        """!!! note
+
+        Failed to generate docs
+        """
         module = self._load()
         return dir(module)
 
 
 def to_onehot(label, classes):
+    """Converts a label to one-hot encoding.
+
+    Args:
+        label: The label to be converted.
+        classes: The total number of classes.
+
+    Returns:
+        The one-hot encoded label as a numpy array."""
     onehot = np.zeros(classes)
     onehot[label] = 1
     return onehot
@@ -1040,18 +1225,46 @@ def to_list(x):
 
 
 def is_numpy(x):
+    """Check if an object is a NumPy array.
+
+    Args:
+        x: Object to be checked.
+
+    Returns:
+        True if the object is a NumPy array, False otherwise."""
     return isinstance(x, np.ndarray)
 
 
 def is_alphabet(x: str):
+    """Check if a string consists only of alphabets.
+
+    Args:
+        x: The string to be checked
+
+    Returns:
+        True if the string consists only of alphabets, False otherwise."""
     return all([s in string.ascii_lowercase for s in x.lower()])
 
 
 def is_punctuation(x: str):
+    """Check if a string consists only of punctuation characters.
+
+    Args:
+        x: The string to check.
+
+    Returns:
+        True if the string consists only of punctuation characters, False otherwise."""
     return all([s in string.punctuation for s in x.lower()])
 
 
 def remove_nonprintable(x: str):
+    """Removes non-printable characters from a string.
+
+    Args:
+        x: The input string.
+
+    Returns:
+        The input string with non-printable characters removed."""
     import itertools
     # Use characters of control category
 
@@ -1111,6 +1324,15 @@ def enforce_singleton(x):
 
 
 def check_for_unexpected_keys(name, input_dict, expected_values):
+    """Check for unexpected keys in a dictionary.
+
+    Args:
+        name: Name of the dictionary.
+        input_dict: The dictionary to check for unexpected keys.
+        expected_values: List of expected keys.
+
+    Raises:
+        ValueError: If there are unknown entries in the dictionary."""
     unknown = set(input_dict.keys()).difference(expected_values)
     if unknown:
         raise ValueError(
@@ -1119,6 +1341,17 @@ def check_for_unexpected_keys(name, input_dict, expected_values):
 
 
 def check_keys(model, pretrained_state_dict):
+    """Check keys between a model and a pretrained state dictionary.
+
+    Args:
+        model: The model to check keys against.
+        pretrained_state_dict: The pretrained state dictionary to check keys against.
+
+    Returns:
+        True if the check is successful.
+
+    Raises:
+        AssertionError: If no used pretrained keys are found."""
     ckpt_keys = set(pretrained_state_dict.keys())
     model_keys = set(model.state_dict().keys())
     used_pretrained_keys = model_keys & ckpt_keys
@@ -1191,6 +1424,17 @@ def levenshtein(seq1, seq2):
 
 
 def jaccard_similarity(list1, list2):
+    """Calculates the Jaccard similarity between two lists.
+
+    Args:
+        list1: The first list.
+        list2: The second list.
+
+    Returns:
+        The Jaccard similarity between the two lists.
+
+    Raises:
+        ZeroDivisionError: If both lists are empty."""
     s1 = set(list1)
     s2 = set(list2)
     intersects = s1.intersection(s2)
@@ -1201,6 +1445,28 @@ def text_similarity(list1, list2):
     # if len(list1)>0:
     #     first=list1[0]
     #     last=list1[-1]
+    """Calculate the similarity score between two lists of text.
+
+    Args:
+        list1: The first list of text.
+        list2: The second list of text.
+
+    Returns:
+        The similarity score between the two lists of text.
+
+    Note:
+        This function calculates the similarity score using the following steps:
+        1. Find the number of overlapping elements between the two lists.
+        2. Find the number of elements that are the same from the beginning of the lists.
+        3. Find the number of elements that are the same from the end of the lists.
+        4. Remove the overlapping elements from the lists.
+        5. Calculate the edit distance between the remaining elements of the lists.
+        6. Calculate the maximum possible edit length.
+        7. Calculate the final similarity score as the sum of the overlapping elements and the ratio of the maximum possible edit length to the edit distance.
+        8. Normalize the similarity score by dividing it by the length of the first list.
+
+    Note:
+        This function uses the `levenshtein` function to calculate the edit distance between two lists of text."""
     tmp_list1 = list1.copy()
     tmp_list2 = list2.copy()
     overlap = 0
@@ -1241,7 +1507,31 @@ def text_similarity(list1, list2):
 
 
 def find_minimal_edit_distance_key(keys, lookup_keys):
+    """Find the minimal edit distance key.
+
+    Args:
+        keys: A list of keys.
+        lookup_keys: A list of lookup keys.
+
+    Returns:
+        A dictionary containing the final mapping of keys.
+
+    Raises:
+        ValueError: If a key in the final mapping does not exist."""
     def only_keep_number(input_string):
+        """Removes non-digit characters from a given string and returns the resulting string.
+
+        Args:
+            input_string: The input string to process.
+
+        Returns:
+            The resulting string with only digits.
+
+        Note:
+            This function assumes that the input string contains at least one digit character.
+
+        Raises:
+            None."""
         input_string = input_string.split('_')[-1].split('-')[-1]
         return ''.join([s for s in list(input_string) if s in string.digits])
 
@@ -1316,6 +1606,14 @@ def find_minimal_edit_distance_key(keys, lookup_keys):
 
 
 def addindent(s_, numSpaces):
+    """Adds indentation to a multi-line string.
+
+    Args:
+        s_ (str): The input string.
+        numSpaces (int): The number of spaces to indent each line.
+
+    Returns:
+        str: The input string with indentation added to each line."""
     s = s_.split('\n')
     # don't do anything for single-line stuff
     if len(s) == 1:
@@ -1511,6 +1809,10 @@ def get_terminal_size():
     def _get_terminal_size_tput():
         # get terminal width
         # src: http://stackoverflow.com/questions/263890/how-do-i-find-the-width-height-of-a-terminal-window
+        """!!! note
+
+        Failed to generate docs
+        """
         try:
             cols = int(subprocess.check_call(shlex.split('tput cols')))
             rows = int(subprocess.check_call(shlex.split('tput lines')))
@@ -1519,7 +1821,21 @@ def get_terminal_size():
             pass
 
     def _get_terminal_size_linux():
+        """!!! note
+
+        Failed to generate docs
+        """
         def ioctl_GWINSZ(fd):
+            """Get the size of the terminal window.
+
+            Args:
+                fd: file descriptor of the terminal
+
+            Returns:
+                A tuple containing the number of rows and columns of the terminal window
+
+            Raises:
+                Exception: If the size cannot be determined"""
             try:
                 import fcntl
                 import termios
@@ -1557,6 +1873,14 @@ def get_terminal_size():
 
 
 def gcd(x, y):
+    """Calculate the greatest common divisor (GCD) of two numbers.
+
+    Args:
+        x: First number
+        y: Second number
+
+    Returns:
+        A list of all the common divisors between x and y, including the greatest common divisor."""
     gcds = []
     gcd = 1
     if x % y == 0:
@@ -1569,10 +1893,24 @@ def gcd(x, y):
 
 
 def get_divisors(n):
+    """Get the divisors of a number.
+
+    Args:
+        n: The number to find divisors for.
+
+    Returns:
+        A list of divisors of the number."""
     return [d for d in range(2, n // 2 + 1) if n % d == 0]
 
 
 def isprime(n):
+    """Determines if a number is prime.
+
+    Args:
+        n: The number to check for primality.
+
+    Returns:
+        True if the number is prime, False otherwise."""
     if n >= 9:
         divisors = [d for d in range(2, int(math.sqrt(n))) if n % d == 0]
         return all(n % od != 0 for od in divisors if od != n)
@@ -1583,6 +1921,16 @@ def isprime(n):
 
 
 def next_prime(n):
+    """Find the next prime number after a given number.
+
+    Args:
+        n: The given number.
+
+    Returns:
+        The next prime number after n.
+
+    Raises:
+        NotImplementedError: If the isprime function is not implemented."""
     pos = n + 1
     while True:
         if isprime(pos):
@@ -1591,6 +1939,16 @@ def next_prime(n):
 
 
 def prev_prime(n):
+    """Find the previous prime number.
+
+    Args:
+        n: The number to find the previous prime number for.
+
+    Returns:
+        The previous prime number.
+
+    Raises:
+        NameError: If the isprime function is not defined."""
     pos = n - 1
     while True:
         if isprime(pos):
@@ -1599,6 +1957,16 @@ def prev_prime(n):
 
 
 def nearest_prime(n):
+    """Find the nearest prime number to a given number.
+
+    Args:
+        n: The number to find the nearest prime for.
+
+    Returns:
+        The nearest prime number to the given number.
+
+    Raises:
+        NotImplementedError: If the function `next_prime` or `prev_prime` is not implemented."""
     nextp = next_prime(n)
     prevp = prev_prime(n)
     if abs(nextp - n) < abs(prevp - n):
@@ -1703,12 +2071,25 @@ def map_function_arguments(params, params_dict, *args, **kwargs):
 
 
 class ClassfierType(Enum):
+    """An enumeration class to represent different types of classifiers.
+
+    Attributes:
+        dense : dense classifier
+        global_avgpool : global average pooling classifier
+        centroid : centroid classifier"""
     dense = 'dense'
     global_avgpool = 'global_avgpool'
     centroid = 'centroid'
 
 
 class PaddingMode(Enum):
+    """An enumeration class to represent padding modes.
+
+    Attributes:
+        zero : constant padding mode
+        reflection : reflect padding mode
+        replicate : replicate padding mode
+        circular : circular padding mode"""
     zero = 'constant'
     reflection = 'reflect'
     replicate = 'replicate'
@@ -1716,6 +2097,13 @@ class PaddingMode(Enum):
 
 
 class Color(Enum):
+    """An enumeration class to represent color formats.
+
+    Attributes:
+        rgb : RGB color format
+        bgr : BGR color format
+        gray : grayscale color format
+        rgba : RGBA color format"""
     rgb = 'rgb'
     bgr = 'bgr'
     gray = 'gray'
@@ -1723,18 +2111,35 @@ class Color(Enum):
 
 
 class ShortcutMode(Enum):
+    """!!! note
+
+    Failed to generate docs
+    """
     add = 'add'
     dot = 'dot'
     concate = 'concate'
 
 
 class Interpolation(Enum):
+    """An enumeration class to represent interpolation methods.
+
+    Attributes:
+        Nearest : Nearest neighbor interpolation method
+        Bilinear : Bilinear interpolation method
+        Bicubic : Bicubic interpolation method"""
     Nearest = 'Nearest'
     Bilinear = 'Bilinear'
     Bicubic = 'Bicubic'
 
 
 class GetImageMode(Enum):
+    """An enumeration class to represent different modes for getting an image.
+
+    Attributes:
+        path : mode for getting image from a file path
+        raw : mode for getting raw image data
+        expect : mode for getting expected image data
+        processed : mode for getting processed image data"""
     path = 'path'
     raw = 'raw'
     expect = 'expect'
@@ -1743,6 +2148,7 @@ class GetImageMode(Enum):
 
 class _empty:
     """Marker object for Signature.empty and Parameter.empty."""
+
 
 
 def red_color(text, bolder=False):
@@ -1809,6 +2215,16 @@ def magenta_color(text, bolder=False):
 
 
 def get_args_spec(fn):
+    """Get the argument specification of a function.
+
+    Args:
+        fn: The function to get the argument specification for.
+
+    Returns:
+        The argument specification of the function.
+
+    Note:
+        This function uses the `inspect` module to get the full argument specification of the function."""
     full_arg_spec = inspect.getfullargspec(fn)
     arg_spec = inspect.ArgSpec(args=full_arg_spec.args, varargs=full_arg_spec.varargs, keywords=full_arg_spec.varkw,
                                defaults=full_arg_spec.defaults)
@@ -1816,12 +2232,28 @@ def get_args_spec(fn):
 
 
 def format_arg_spec(v, is_output=False):
+    """Formats the argument specification.
+
+    Args:
+        v: The argument specification
+        is_output: Whether the argument is an output argument
+
+    Returns:
+        The formatted argument specification"""
     s = v.name + ': ' if not is_output and v.name else ''  # (suppress output names, since they duplicate the
     # function name)
     return s + str(v._type)
 
 
 def is_instance(instance, check_class):
+    """Check if an instance belongs to a class or a tuple of classes.
+
+    Args:
+        instance: The instance to check
+        check_class: The class or tuple of classes to check against
+
+    Returns:
+        True if the instance belongs to the class or tuple of classes, False otherwise"""
     if not inspect.isclass(instance) and inspect.isclass(check_class):
         mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
         return check_class.__module__ + '.' + check_class.__qualname__ in mro_list
@@ -1842,11 +2274,23 @@ def is_instance(instance, check_class):
 
 
 def open_browser(url, delay=0):
+    """Opens a web browser with the specified URL.
+
+    Args:
+        url: The URL to open in the web browser.
+        delay: Optional delay in seconds before opening the web browser. Default is 0.
+
+    Returns:
+        None"""
     sleep(delay)
     webbrowser.open_new(url)
 
 
 def launchTensorBoard():
+    """!!! note
+
+    Failed to generate docs
+    """
     make_dir_if_need(os.path.join(_SESSION.working_directory, 'Logs'))
     print('tensorboard --logdir {0} --port {1}'.format(os.path.join(_SESSION.working_directory, 'Logs'),
                                                        _SESSION.tensorboard_port))
@@ -1856,6 +2300,10 @@ def launchTensorBoard():
 
 
 def launchMLFlow():
+    """!!! note
+
+    Failed to generate docs
+    """
     make_dir_if_need(os.path.join(_SESSION.working_directory, 'Logs'))
     print('mlflow ui')
     os.system('mlflow ui')
@@ -1872,6 +2320,13 @@ _websites = "[.](com|net|org|io|gov)"
 
 
 def seg_as_sentence(txt):
+    """Split a given text into sentences.
+
+    Args:
+        txt: The text to be split into sentences.
+
+    Returns:
+        A list of sentences extracted from the given text."""
     txt = re.sub(_prefixes, "\\1<prd>", txt)
     txt = re.sub(_websites, "<prd>\\1", txt)
     if "Ph.D" in txt: txt = txt.replace("Ph.D.", "Ph<prd>D<prd>")

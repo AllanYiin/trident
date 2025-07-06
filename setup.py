@@ -1,5 +1,6 @@
+import os.path
 import pathlib
-
+import os
 import pkg_resources
 from setuptools import setup, find_packages
 
@@ -28,7 +29,7 @@ with pathlib.Path('requirements.txt').open() as requirements_txt:
 
 
 setup(name=NAME,
-      version='0.7.6',
+      version='0.7.9',
       description='Make pytorch and tensorflow two become one.',
       # long_description=long_description,
       # long_description_content_type="text/markdown",

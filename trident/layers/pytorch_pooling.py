@@ -828,8 +828,7 @@ class GlobalAvgPool2d(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
-
-        x = x.mean(dim=[2,3], keepdim=self.keepdims)
+        x=reduce_mean(x,axis=[2,3],keepdims=self.keepdims)
         return x
 
 

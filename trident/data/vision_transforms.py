@@ -1097,8 +1097,15 @@ class RandomTransformAffine(VisionTransform):
             angle = 0
         scale = np.random.uniform(self.zoom_range[0], self.zoom_range[1]) if _check_range_tuple(
             self.zoom_range) else np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range) if self.zoom_range > 0 else 1
-        tx = np.random.uniform(-self.shift_range, self.shift_range) * w
-        ty = np.random.uniform(-self.shift_range, self.shift_range) * h
+        if isinstance(self.shift_range,numbers.Number):
+            tx = np.random.uniform(-self.shift_range, self.shift_range) * w
+            ty = np.random.uniform(-self.shift_range, self.shift_range) * h
+        elif isinstance(self.shift_range,tuple) and len(self.shift_range)==2:
+
+            tx = np.random.uniform(-self.shift_range[1], self.shift_range[1]) * w if self.shift_range[1]>0 else 0
+            ty = np.random.uniform(-self.shift_range[0], self.shift_range[0]) * h if self.shift_range[0]>0 else 0
+        else:
+            print('self.shift_range:',self.shift_range)
         M = np.eye(3)
 
 

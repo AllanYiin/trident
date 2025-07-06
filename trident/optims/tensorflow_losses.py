@@ -9,7 +9,7 @@ import sys
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.training.tracking import tracking
+from tensorflow.python.trackable.autotrackable import AutoTrackable
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
@@ -88,7 +88,7 @@ def _class_unique_value_process(uniques,counts):
 
 
 
-class _ClassificationLoss(Loss, tracking.AutoTrackable):
+class _ClassificationLoss(Loss, AutoTrackable):
     """Calculate loss for  complex classification task."""
 
     def __init__(self, axis=-1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
@@ -461,7 +461,7 @@ class _ClassificationLoss(Loss, tracking.AutoTrackable):
             return loss
 
 
-class _PairwiseLoss(Loss, tracking.AutoTrackable):
+class _PairwiseLoss(Loss, AutoTrackable):
     """Calculate loss for  complex classification task."""
 
     def __init__(self, axis=-1, reduction='batch_mean', enable_ohem=False, ohem_thresh=0.1, name=None, **kwargs):

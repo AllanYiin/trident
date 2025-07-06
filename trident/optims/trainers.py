@@ -771,13 +771,13 @@ class TrainingPlan(object):
 
 
 class GanTrainingPlan(TrainingPlan):
-    def __init__(self):
+    def __init__(self,generator,discriminator):
         super().__init__()
         self.is_generator_first = None
         self.gan_type = None
         self.is_condition_gan = False
-        self.discriminator = None
-        self.generator = None
+        self.discriminator = discriminator
+        self.generator = generator
         self.use_label_smoothing = False
         self.use_label_flipping = False
         self.max_noise_intensity = 0
@@ -1037,8 +1037,8 @@ class GanTrainingPlan(TrainingPlan):
             self.discriminator.with_loss(real_loss, loss_weight=0.5)
             self.discriminator.with_loss(weight_fake_loss, name='weight_fake_loss', loss_weight=0.5)
         elif self.gan_type == 'lsgan':  # least squared
-            if isinstance(self.discriminator.model[-1], Sigmoid):
-                self.discriminator.model.remove_at(-1)
+            # if isinstance(self.discriminator.model[-1], Sigmoid):
+            #     self.discriminator.model.remove_at(-1)
 
             def g_loss(d_fake,real_label):
 

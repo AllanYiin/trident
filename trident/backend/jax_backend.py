@@ -52,6 +52,8 @@ DTYPE_MAPPING = {
     jnp.complex128: Dtype.complex128,
 
 }
+version = jax.__version__
+sys.stdout.write('Jax version:{0}.\n'.format(version))
 
 
 def get_device():

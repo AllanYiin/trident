@@ -2150,9 +2150,6 @@ class Sequential(Layer):
 
 
 
-
-
-
     def build(self, input_shape: TensorShape):
         """
 
@@ -2214,8 +2211,9 @@ class Sequential(Layer):
 
         if len(self._modules) > 0:
             self._output_shape = self[-1]._output_shape
-            if isinstance(self._signature, Signature):
-                self._signature.outputs[self._signature.outputs.key_list[0]].shape = self[-1]._output_shape
+            if not hasattr(self,'_signature'):
+                self._signature = Signature(name=self.name)
+            sig=self.signature
 
 
     def _get_item_by_idx(self, iterator, idx) -> T:
@@ -2251,8 +2249,8 @@ class Sequential(Layer):
             delattr(self, key)
 
         # To preserve numbering
-        str_indices = [str(i) for i in range(len(self._modules))]
-        self._modules = OrderedDict(list(zip(str_indices, self._modules.values())))
+        # str_indices = [str(i) for i in range(len(self._modules))]
+        # self._modules = OrderedDict(list(zip(str_indices, self._modules.values())))
 
     @_copy_to_script_wrapper
     def __len__(self) -> int:
@@ -3275,9 +3273,14 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
             total_params += summary[layer]["nb_params"]
             flops += float(summary[layer]["flops"])
             macc += float(summary[layer]["macc"].sum())
-            total_output += summary[layer]["output_shape"].numel(batch_size=batch_size) if isinstance(
-                summary[layer]["output_shape"], TensorShape) else np.ndarray(
-                [shp.numel(batch_size=batch_size) for shp in summary[layer]["output_shape"]]).sum()
+            try:
+                total_output += summary[layer]["output_shape"].numel(batch_size=batch_size) if isinstance(
+                    summary[layer]["output_shape"], TensorShape) else np.ndarray(
+                    [shp.numel(batch_size=batch_size) for shp in summary[layer]["output_shape"]]).sum()
+            except Exception as e:
+                print(layer)
+
+
             if "trainable" in summary[layer]:
                 trainable_params += summary[layer]["trainable"]
             print(line_new)
