@@ -1280,7 +1280,7 @@ class Model(model.ModelBase,Layer):
         state_dict = None
         pretrained_dict = None
         if ext == '.pth.tar':
-            state_dict = torch.load(file_path, map_location=torch.device('cpu'))
+            state_dict = torch.load(file_path, map_location=torch.device('cpu'), weights_only=False)
         elif ext == '.pth':
             load_path = file_path
             if not os.path.exists(file_path):
@@ -1288,7 +1288,7 @@ class Model(model.ModelBase,Layer):
                     load_path = file_path.replace(ext, '.pth.tar')
                 elif os.path.exists(os.path.join(working_directory, filename + ext)):
                     load_path = os.path.join(working_directory, filename + ext)
-            recovery_pth = fix_layer(torch.load(load_path, map_location=torch.device('cpu')))
+            recovery_pth = fix_layer(torch.load(load_path, map_location=torch.device('cpu'), weights_only=False))
 
             if isinstance(recovery_pth, dict):
                 state_dict = recovery_pth
@@ -2348,7 +2348,7 @@ class LanguageModel(Model):
         state_dict = None
         pretrained_dict = None
         if ext == '.pth.tar':
-            state_dict = torch.load(file_path, map_location=torch.device(get_device()))
+            state_dict = torch.load(file_path, map_location=torch.device(get_device()), weights_only=False)
         elif ext == '.pth':
             load_path = file_path
             if not os.path.exists(file_path):
@@ -2356,7 +2356,7 @@ class LanguageModel(Model):
                     load_path = file_path.replace(ext, '.pth.tar')
                 elif os.path.exists(os.path.join(working_directory, filename + ext)):
                     load_path = os.path.join(working_directory, filename + ext)
-            recovery_pth = torch.load(load_path, map_location=torch.device(get_device()))
+            recovery_pth = torch.load(load_path, map_location=torch.device(get_device()), weights_only=False)
 
             if isinstance(recovery_pth, dict):
                 state_dict = recovery_pth

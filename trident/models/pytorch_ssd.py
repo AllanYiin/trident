@@ -644,7 +644,7 @@ class Ssd(Layer):
             if isinstance(m, (Conv2d, DepthwiseConv2d)):
                 nn.init.xavier_uniform_(m.weight)
 
-        state_dict = torch.load(model, map_location=lambda storage, loc: storage)
+        state_dict = torch.load(model, map_location=lambda storage, loc: storage, weights_only=False)
         state_dict = state_dict['state_dict']
         state_dict = {k: v for k, v in state_dict.items() if
                       not (k.startswith("classification_headers") or k.startswith("regression_headers"))}
