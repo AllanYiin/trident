@@ -35,6 +35,10 @@ pt_version = LooseVersion(vstring=version)
 version1_7 = LooseVersion(vstring='1.7.0')
 ctx = context._context()
 
+# NumPy 2.x 移除了 np.string_，改名為 np.bytes_。
+# 這裡動態建立別名，確保舊程式碼仍可使用 np.string_。
+if not hasattr(np, 'string_'):
+    np.string_ = np.bytes_          # 為 2.x 建立向下相容別名
 
 def is_gpu_available():
     return torch.cuda.is_available()
