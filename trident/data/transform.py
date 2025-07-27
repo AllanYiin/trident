@@ -100,7 +100,7 @@ class VisionTransform(Transform):
             results=OrderedDict()
             sampledata= list(inputs.values())[0]
             spec=inputs.key_list[0]
-            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
+            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and sampledata.ndim > spec.ndim):
                 for i in range(len(sampledata)):
                     self._shape_info = None
                     for spec, data in inputs.items():
@@ -383,7 +383,7 @@ class Compose(Transform):
             results = OrderedDict()
             sampledata = list(inputs.values())[0]
             spec = inputs.key_list[0]
-            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
+            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and sampledata.ndim > spec.ndim):
                 for i in range(len(sampledata)):
                     self._shape_info = None
                     for spec, data in inputs.items():
@@ -468,7 +468,7 @@ class OneOf(Transform):
             results = OrderedDict()
             sampledata = list(inputs.values())[0]
             spec = inputs.key_list[0]
-            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
+            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and sampledata.ndim > spec.ndim):
                 for i in range(len(sampledata)):
                     self.random_index=random.choice(range(len(self.transforms)))
 
