@@ -1,10 +1,10 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import os
 import builtins
 import sys
-
+from typing import Sequence,List,Dict,Any
 from trident.backend.common import if_none, get_plateform
 from trident.backend.opencv_backend import array2image
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
@@ -154,74 +154,223 @@ def plot_bbox(box, img, color=None, label=None, line_thickness=None, **kwargs):
     return img
 
 
-def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **kwargs):
-    if save_path is not None:
-        make_dir_if_need(save_path)
-    distinct_row = list(set([len(ims) for ims in imgs]))
+
+# def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **kwargs):
+#     if save_path is not None:
+#         make_dir_if_need(save_path)
+#
+#     distinct_row = list(set([len(ims) for ims in imgs]))
+#     if len(distinct_row) > 1:
+#         raise ValueError(f'imgs should have same length, but got {distinct_row}')
+#     else:
+#         distinct_row = unpack_singleton(distinct_row)
+#         if 1 <= row < distinct_row:
+#             distinct_row = row
+#
+#     suffix = get_time_suffix()
+#     fig = plt.figure(figsize=(len(imgs) * 3, distinct_row * 3))
+#     plt.ion()
+#
+#     if len(imgs) == 1 and distinct_row == 1:
+#         img = array2image(imgs[0][0])
+#         if save_path is not None:
+#             filename = save_path.format(suffix)
+#             img.save(filename)
+#
+#         if imshow:
+#             plt.imshow(img)
+#             plt.axis("off")
+#             plt.show()
+#         return fig
+#
+#     for m in range(distinct_row * len(imgs)):
+#         ax = plt.subplot(distinct_row, len(imgs), m + 1)
+#
+#         if m < len(imgs) and legend is not None and len(legend) == len(imgs):
+#             ax.set_title(legend[m])
+#
+#         img = imgs[int(m % len(imgs))][int(m // len(imgs))]
+#
+#         if img.ndim == 2:
+#             img = np.stack([img] * 3, axis=-1)
+#         elif img.ndim == 3 and img.shape[-1] == 1:
+#             img = np.concatenate([img] * 3, axis=-1)
+#
+#         ax.imshow(array2image(img))
+#         ax.axis("off")
+#
+#     plt.tight_layout()
+#
+#     if save_path is not None:
+#         filename = save_path.format(suffix)
+#         plt.savefig(filename, bbox_inches='tight')
+#         print(f"Image saved to: {filename}")
+#         if ctx.enable_mlflow:
+#             ctx.mlflow_logger.add_image(filename)
+#
+#     if imshow:
+#         plt.show()
+#
+#     return fig
+
+# def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **kwargs):
+#     if save_path is not None:
+#         make_dir_if_need(save_path)
+#     distinct_row = list(set([len(ims) for ims in imgs]))
+#     if len(distinct_row) > 1:
+#         raise ValueError('imgs should have same length, but got {0}'.format(distinct_row))
+#     else:
+#         distinct_row = unpack_singleton(distinct_row)
+#         if 1 <= row < distinct_row:
+#             distinct_row = row
+#     suffix = get_time_suffix()
+#     fig = plt.figure()
+#     plt.ion()
+#     if len(imgs) == 1 and distinct_row == 1:
+#         img = array2image(imgs[0][0])
+#         if save_path is not None:
+#             filename = save_path.format(suffix)
+#             img.save(filename)
+#
+#         if imshow:
+#
+#             if is_in_ipython():
+#                 plt.axis("off")
+#                 plt.imshow(img)
+#                 plt.ioff()
+#                 display.display(plt.gcf())
+#             else:
+#                 plt.axis("off")
+#                 plt.imshow(img, interpolation="nearest", animated=True)
+#                 plt.ioff()
+#
+#         return fig
+#     else:
+#
+#         # figure, ax = plt.subplots(2, 2)
+#         # fig.set_size_inches(len(imgs) * 2, row * 2)
+#
+#         # plt.ion()  # is not None:
+#
+#         for m in range(distinct_row * len(imgs)):
+#
+#             plt.subplot(distinct_row, len(imgs), m + 1)
+#             if m < len(imgs) and legend is not None and len(legend) == len(imgs):
+#                 plt.gca().set_title(legend[m])
+#
+#             img = (imgs[int(m % len(imgs))][int(m // len(imgs))])
+#             if len(img.shape) == 2:
+#                 img = np.stack([img, img, img], axis=-1)
+#             if len(img.shape) == 3 and img.shape[-1] == 1:
+#                 img = np.concatenate([img, img, img], axis=-1)
+#             plt.imshow(array2image(img), interpolation="nearest", animated=True)
+#             plt.axis("off")
+#         plt.tight_layout()
+#
+#         if save_path is not None:
+#             filename = save_path.format(suffix)
+#             plt.savefig(filename, bbox_inches='tight')
+#             if ctx.enable_mlflow:
+#                 ctx.mlflow_logger.add_image(filename)
+#         if imshow:
+#             if is_in_ipython():
+#                 plt.ioff()
+#                 display.display(plt.gcf())
+#             else:
+#                 plt.ioff()
+#                 # plt.draw()
+#                 # plt.show(block=False)
+#     return fig
+
+def tile_rgb_images(
+    *imgs: Sequence[np.ndarray],
+    row: int = 3,
+    save_path: str | os.PathLike | None = None,
+    imshow: bool = False,
+    legend: List[str] | None = None,
+    figsize_scale: float = 3.0,
+):
+    """
+    以網格方式拼貼影像。
+
+    參數
+    ----
+    *imgs
+        多組影像序列，形狀需一致，例如：tile_rgb_images(batch1, batch2, ...)
+    row
+        最多顯示列數（<= 單組影像數量）；預設 3。
+    save_path
+        儲存路徑範本，例如 ``"./output/tile_{}.png"``，會以 ``get_time_suffix()``
+        取代 ``{}``。若為 ``None`` 則不存檔。
+    imshow
+        是否於函式內 ``plt.show()``；若於 Jupyter 建議設 `True`。
+    legend
+        每一欄的標題清單，長度須等於 ``len(imgs)``。
+    figsize_scale
+        單格影像對應的 figsize 比例，預設 3。
+    """
+    # ----------- 輸入檢查 ----------- #
+    if not imgs:
+        raise ValueError("必須至少傳入一組影像批次，例如 tile_rgb_images(batch1)")
+
+    distinct_row = list({len(ims) for ims in imgs})
     if len(distinct_row) > 1:
-        raise ValueError('imgs should have same length, but got {0}'.format(distinct_row))
+        raise ValueError(f"所有批次須同長度，但收到 {distinct_row}")
+
+    n_row = min(row, unpack_singleton(distinct_row))
+    n_col = len(imgs)
+
+    if legend is not None and len(legend) != n_col:
+        raise ValueError(f"legend 長度應為 {n_col}，但收到 {len(legend)}")
+
+    # ----------- 建立 Figure ----------- #
+    plt.ioff()  # 關閉互動模式，避免多餘輸出
+    fig = plt.figure(figsize=(n_col * figsize_scale, n_row * figsize_scale))
+
+    # ----------- 繪圖 ----------- #
+    for idx in range(n_row * n_col):
+        ax = plt.subplot(n_row, n_col, idx + 1)
+
+        col_id = idx % n_col
+        row_id = idx // n_col
+
+        if legend is not None and row_id == 0:
+            ax.set_title(legend[col_id])
+
+        img = imgs[col_id][row_id]
+
+        # 灰階或單通道轉三通道
+        if img.ndim == 2:
+            img = np.repeat(img[..., None], 3, axis=-1)
+        elif img.ndim == 3 and img.shape[-1] == 1:
+            img = np.repeat(img, 3, axis=-1)
+
+        ax.imshow(array2image(img))
+        ax.axis("off")
+
+    fig.tight_layout()
+
+    # ----------- 儲存 ----------- #
+    if save_path is not None:
+        if "{0}" not in str(save_path) and  "{}" not in str(save_path):
+            # 若使用者未提供占位符，則直接在檔名結尾加時間
+            save_path = f"{save_path}_{get_time_suffix()}"
+        else:
+            save_path = str(save_path).format(get_time_suffix())
+
+        make_dir_if_need(save_path)
+        fig.savefig(save_path, bbox_inches="tight")
+        print(f"[INFO] 影像已儲存：{save_path}")
+
+    # ----------- 顯示 / 關閉 ----------- #
+    if imshow:
+        plt.show()
+        plt.close(fig)
     else:
-        distinct_row = unpack_singleton(distinct_row)
-        if 1 <= row < distinct_row:
-            distinct_row = row
-    suffix = get_time_suffix()
-    fig = plt.figure()
-    plt.ion()
-    if len(imgs) == 1 and distinct_row == 1:
-        img = array2image(imgs[0][0])
-        if save_path is not None:
-            filename = save_path.format(suffix)
-            img.save(filename)
+        plt.close(fig)
 
-        if imshow:
+    return None
 
-            if is_in_ipython():
-                plt.axis("off")
-                plt.imshow(img)
-                plt.ioff()
-                display.display(plt.gcf())
-            else:
-                plt.axis("off")
-                plt.imshow(img, interpolation="nearest", animated=True)
-                plt.ioff()
-
-        return fig
-    else:
-
-        # figure, ax = plt.subplots(2, 2)
-        # fig.set_size_inches(len(imgs) * 2, row * 2)
-
-        # plt.ion()  # is not None:
-
-        for m in range(distinct_row * len(imgs)):
-
-            plt.subplot(distinct_row, len(imgs), m + 1)
-            if m < len(imgs) and legend is not None and len(legend) == len(imgs):
-                plt.gca().set_title(legend[m])
-
-            img = (imgs[int(m % len(imgs))][int(m // len(imgs))])
-            if len(img.shape) == 2:
-                img = np.stack([img, img, img], axis=-1)
-            if len(img.shape) == 3 and img.shape[-1] == 1:
-                img = np.concatenate([img, img, img], axis=-1)
-            plt.imshow(array2image(img), interpolation="nearest", animated=True)
-            plt.axis("off")
-        plt.tight_layout()
-
-        if save_path is not None:
-            filename = save_path.format(suffix)
-            plt.savefig(filename, bbox_inches='tight')
-            if ctx.enable_mlflow:
-                ctx.mlflow_logger.add_image(filename)
-        if imshow:
-            if is_in_ipython():
-                plt.ioff()
-                display.display(plt.gcf())
-            else:
-                plt.ioff()
-                # plt.draw()
-                # plt.show(block=False)
-    return fig
 
 
 def loss_metric_curve(losses, metrics, metrics_names, legend=None, calculate_base='epoch', max_iteration=None,
