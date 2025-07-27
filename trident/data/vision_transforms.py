@@ -826,87 +826,242 @@ class RandomCenterCrop(VisionTransform):
         y = builtins.max(int((th - eh) / 2.0), 0)
         return x, y, th, tw, eh, ew, h, w
 
+#
+# class RandomCrop(VisionTransform):
+#     r"""
+#     Crop the input data randomly. Before applying the crop transform,
+#     pad the image first. If target size is still bigger than the size of
+#     padded image, pad the image size to target size.
+#     param output_size: target size of image, with (height, width) shape.
+#
+#     """
+#
+#     def __init__(self, output_size, name='random_crop', **kwargs):
+#         super().__init__(name)
+#         self.is_spatial = True
+#         self.output_size = output_size
+#         if isinstance(self.output_size, numbers.Number):
+#             self.output_size = (output_size, output_size)
+#
+#     def apply(self, input: Tuple, spec: TensorSpec):
+#         return super().apply(input, spec)
+#
+#     def _apply_image(self, image, spec: TensorSpec):
+#         if self._shape_info is None:
+#             self._shape_info = self._get_shape(image)
+#         h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1 = self._shape_info
+#         if image.ndim == 2 or (image.ndim == 3 and int_shape(image)[-1] == 1):
+#             origin_ndim = image.ndim
+#             if origin_ndim == 3:
+#                 image = image[:, :, 0]
+#             output = np.zeros(self.output_size, dtype=image.dtype)
+#             crop_im = image[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w)]
+#             output[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1]] = crop_im
+#             # 如果目标尺寸大于原图，则左上角填充0
+#             if eh > h or ew > w:
+#                 output[h:eh, :] = 0
+#                 output[:, w:ew] = 0
+#             if origin_ndim == 3:
+#                 output = np.expand_dims(output, -1)
+#             return output
+#         elif image.ndim == 3:
+#             output_shape = self.output_size + (
+#                 1,) if spec is not None and spec.object_type == ObjectType.gray else self.output_size + (3,)
+#             output = np.zeros(output_shape, dtype=image.dtype)
+#             crop_im = image[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w), :]
+#             output[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1], :] = crop_im
+#             if eh > h or ew > w:
+#                 output[h:eh, :, :] = 0
+#                 output[:, w:ew, :] = 0
+#             return output
+#
+#     def _apply_coords(self, coords, spec: TensorSpec):
+#         h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1 = self._shape_info
+#         coords[:, 0] = coords[:, 0] - offset_x + offset_x1
+#         coords[:, 1] = coords[:, 1] - offset_y + offset_y1
+#
+#         return coords
+#
+#     def _apply_mask(self, mask, spec: TensorSpec):
+#         h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1 = self._shape_info
+#         if mask.ndim == 2:
+#             output = np.zeros(self.output_size, dtype=mask.dtype)
+#             crop_mask = mask[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w)]
+#             output[offset_y1:offset_y1 + crop_mask.shape[0], offset_x1:offset_x1 + crop_mask.shape[1]] = crop_mask
+#             return output
+#         elif mask.ndim == 3:
+#             output = np.zeros((*self.output_size, 3), dtype=mask.dtype)
+#             crop_mask = mask[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w), :]
+#             output[offset_y1:offset_y1 + crop_mask.shape[0], offset_x1:offset_x1 + crop_mask.shape[1], :] = crop_mask
+#             return output
+#
+#     def _get_shape(self, image):
+#         h, w = image.shape[:2]
+#         if isinstance(self.output_size, int):
+#             self.output_size = (self.output_size, self.output_size)
+#         eh, ew = self.output_size
+#
+#         offset_x = 0
+#         offset_y = 0
+#
+#         if w > ew:
+#             offset_x = random.randint(0, w - ew)
+#         if h > eh:
+#             offset_y = random.randint(0, h - eh)
+#
+#         offset_x1 = random.randint(0, ew - w) if ew > w else 0
+#         offset_y1 = random.randint(0, eh - h) if eh > h else 0
+#         return h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1
+
 
 class RandomCrop(VisionTransform):
-    r"""
-    Crop the input data randomly. Before applying the crop transform,
-    pad the image first. If target size is still bigger than the size of
-    padded image, pad the image size to target size.
-    param output_size: target size of image, with (height, width) shape.
+    """
+    隨機裁剪輸入數據。在應用裁剪變換之前，先對圖像進行填充。
+    如果目標尺寸仍然大於填充後圖像的尺寸，則將圖像尺寸填充到目標尺寸。
 
+    Args:
+        output_size: 目標圖像尺寸，格式為 (height, width)
+        name: 變換名稱，默認為 'random_crop'
     """
 
     def __init__(self, output_size, name='random_crop', **kwargs):
         super().__init__(name)
         self.is_spatial = True
-        self.output_size = output_size
-        if isinstance(self.output_size, numbers.Number):
-            self.output_size = (output_size, output_size)
+        self.output_size = self._normalize_output_size(output_size)
+
+    def _normalize_output_size(self, output_size):
+        """標準化輸出尺寸為 (height, width) 格式"""
+        if isinstance(output_size, numbers.Number):
+            return (output_size, output_size)
+        return output_size
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
+        """對圖像應用隨機裁剪"""
         if self._shape_info is None:
-            self._shape_info = self._get_shape(image)
-        h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1 = self._shape_info
-        if image.ndim == 2 or (image.ndim == 3 and int_shape(image)[-1] == 1):
-            origin_ndim = image.ndim
-            if origin_ndim == 3:
-                image = image[:, :, 0]
-            output = np.zeros(self.output_size, dtype=image.dtype)
-            crop_im = image[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w)]
-            output[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1]] = crop_im
-            if origin_ndim == 3:
-                output = np.expand_dims(output, -1)
-            return output
+            self._shape_info = self._calculate_crop_params(image)
+
+        crop_params = self._shape_info
+
+        if self._is_grayscale_image(image):
+            return self._crop_grayscale_image(image, crop_params, spec)
         elif image.ndim == 3:
-            output_shape = self.output_size + (
-                1,) if spec is not None and spec.object_type == ObjectType.gray else self.output_size + (3,)
-            output = np.zeros(output_shape, dtype=image.dtype)
-            crop_im = image[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w), :]
-            output[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1], :] = crop_im
-            return output
+            return self._crop_color_image(image, crop_params, spec)
+        else:
+            raise ValueError(f"不支援的圖像維度: {image.ndim}")
+
+    def _is_grayscale_image(self, image):
+        """判斷是否為灰度圖像"""
+        return (image.ndim == 2 or
+                (image.ndim == 3 and int_shape(image)[-1] == 1))
+
+    def _crop_grayscale_image(self, image, crop_params, spec):
+        """裁剪灰度圖像"""
+        original_ndim = image.ndim
+
+        # 確保圖像為 2D
+        if original_ndim == 3:
+            image = image[:, :, 0]
+
+        # 執行裁剪操作
+        output = self._perform_crop_operation(image, crop_params, is_grayscale=True)
+
+        # 恢復原始維度
+        if original_ndim == 3:
+            output = np.expand_dims(output, -1)
+
+        return output
+
+    def _crop_color_image(self, image, crop_params, spec):
+        """裁剪彩色圖像"""
+        channels = (1 if spec is not None and spec.object_type == ObjectType.gray
+                    else 3)
+        output_shape = self.output_size + (channels,)
+
+        return self._perform_crop_operation(image, crop_params,
+                                            output_shape=output_shape,
+                                            is_grayscale=False)
+
+    def _perform_crop_operation(self, image, crop_params, output_shape=None, is_grayscale=True):
+        """執行實際的裁剪操作"""
+        (original_h, original_w, target_h, target_w,
+         crop_start_x, crop_start_y, paste_start_x, paste_start_y) = crop_params
+
+        # 設定輸出形狀
+        if output_shape is None:
+            output_shape = self.output_size
+
+        # 初始化輸出數組
+        output = np.zeros(output_shape, dtype=image.dtype)
+
+        # 計算裁剪區域
+        crop_end_x = min(crop_start_x + target_w, original_w)
+        crop_end_y = min(crop_start_y + target_h, original_h)
+
+        if is_grayscale:
+            cropped_region = image[crop_start_y:crop_end_y, crop_start_x:crop_end_x]
+        else:
+            cropped_region = image[crop_start_y:crop_end_y, crop_start_x:crop_end_x, :]
+
+        # 將裁剪區域貼到輸出數組
+        paste_end_x = paste_start_x + cropped_region.shape[1]
+        paste_end_y = paste_start_y + cropped_region.shape[0]
+
+        if is_grayscale:
+            output[paste_start_y:paste_end_y, paste_start_x:paste_end_x] = cropped_region
+        else:
+            output[paste_start_y:paste_end_y, paste_start_x:paste_end_x, :] = cropped_region
+
+        return output
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1 = self._shape_info
-        coords[:, 0] = coords[:, 0] - offset_x + offset_x1
-        coords[:, 1] = coords[:, 1] - offset_y + offset_y1
+        """對座標應用變換"""
+        (_, _, _, _, crop_start_x, crop_start_y,
+         paste_start_x, paste_start_y) = self._shape_info
+
+        # 調整座標位置
+        coords[:, 0] = coords[:, 0] - crop_start_x + paste_start_x
+        coords[:, 1] = coords[:, 1] - crop_start_y + paste_start_y
 
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1 = self._shape_info
+        """對遮罩應用變換"""
+        crop_params = self._shape_info
+
         if mask.ndim == 2:
-            output = np.zeros(self.output_size, dtype=mask.dtype)
-            crop_mask = mask[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w)]
-            output[offset_y1:offset_y1 + crop_mask.shape[0], offset_x1:offset_x1 + crop_mask.shape[1]] = crop_mask
-            return output
+            return self._perform_crop_operation(mask, crop_params,
+                                                output_shape=self.output_size,
+                                                is_grayscale=True)
         elif mask.ndim == 3:
-            output = np.zeros((*self.output_size, 3), dtype=mask.dtype)
-            crop_mask = mask[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w), :]
-            output[offset_y1:offset_y1 + crop_mask.shape[0], offset_x1:offset_x1 + crop_mask.shape[1], :] = crop_mask
-            return output
+            output_shape = (*self.output_size, 3)
+            return self._perform_crop_operation(mask, crop_params,
+                                                output_shape=output_shape,
+                                                is_grayscale=False)
+        else:
+            raise ValueError(f"不支援的遮罩維度: {mask.ndim}")
 
-    def _get_shape(self, image):
-        h, w = image.shape[:2]
-        if isinstance(self.output_size, int):
-            self.output_size = (self.output_size, self.output_size)
-        eh, ew = self.output_size
+    def _calculate_crop_params(self, image):
+        """計算裁剪參數"""
+        original_h, original_w = image.shape[:2]
+        target_h, target_w = self.output_size
 
-        offset_x = 0
-        offset_y = 0
+        # 計算裁剪起始位置（當原圖大於目標尺寸時）
+        crop_start_x = (random.randint(0, original_w - target_w)
+                        if original_w > target_w else 0)
+        crop_start_y = (random.randint(0, original_h - target_h)
+                        if original_h > target_h else 0)
 
-        if w > ew:
-            offset_x = random.randint(0, w - ew)
-        if h > eh:
-            offset_y = random.randint(0, h - eh)
+        # 計算貼上起始位置（當目標尺寸大於原圖時）
+        paste_start_x = (random.randint(0, target_w - original_w)
+                         if target_w > original_w else 0)
+        paste_start_y = (random.randint(0, target_h - original_h)
+                         if target_h > original_h else 0)
 
-        offset_x1 = random.randint(0, ew - w) if ew > w else 0
-        offset_y1 = random.randint(0, eh - h) if eh > h else 0
-        return h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1
-
-
+        return (original_h, original_w, target_h, target_w,
+                crop_start_x, crop_start_y, paste_start_x, paste_start_y)
 class RandomTransformAffine(VisionTransform):
     r"""Apply Random affine transformation to the input PIL image.
     degrees (Union[int, float, sequence]): Range of the rotation degrees.
