@@ -854,15 +854,16 @@ class RandomCrop(VisionTransform):
             origin_ndim = image.ndim
             if origin_ndim == 3:
                 image = image[:, :, 0]
-            output = np.zeros(self.output_size)
+            output = np.zeros(self.output_size, dtype=image.dtype)
             crop_im = image[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w)]
             output[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1]] = crop_im
             if origin_ndim == 3:
                 output = np.expand_dims(output, -1)
             return output
         elif image.ndim == 3:
-            output = np.zeros(self.output_size + (
-            1,) if spec is not None and spec.object_type == ObjectType.gray else self.output_size + (3,))
+            output_shape = self.output_size + (
+                1,) if spec is not None and spec.object_type == ObjectType.gray else self.output_size + (3,)
+            output = np.zeros(output_shape, dtype=image.dtype)
             crop_im = image[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w), :]
             output[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1], :] = crop_im
             return output
@@ -877,12 +878,12 @@ class RandomCrop(VisionTransform):
     def _apply_mask(self, mask, spec: TensorSpec):
         h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1 = self._shape_info
         if mask.ndim == 2:
-            output = np.zeros(self.output_size).astype(mask.dtype)
+            output = np.zeros(self.output_size, dtype=mask.dtype)
             crop_mask = mask[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w)]
             output[offset_y1:offset_y1 + crop_mask.shape[0], offset_x1:offset_x1 + crop_mask.shape[1]] = crop_mask
             return output
         elif mask.ndim == 3:
-            output = np.zeros((*self.output_size, 3)).astype(mask.dtype)
+            output = np.zeros((*self.output_size, 3), dtype=mask.dtype)
             crop_mask = mask[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w), :]
             output[offset_y1:offset_y1 + crop_mask.shape[0], offset_x1:offset_x1 + crop_mask.shape[1], :] = crop_mask
             return output
@@ -897,11 +898,12 @@ class RandomCrop(VisionTransform):
         offset_y = 0
 
         if w > ew:
-            offset_x = random.choice(range(w - ew))
+            offset_x = random.randint(0, w - ew)
         if h > eh:
-            offset_y = random.choice(range(h - eh))
-        offset_x1 = random.choice(range(ew - w)) if ew > w else 0
-        offset_y1 = random.choice(range(eh - h)) if eh > h else 0
+            offset_y = random.randint(0, h - eh)
+
+        offset_x1 = random.randint(0, ew - w) if ew > w else 0
+        offset_y1 = random.randint(0, eh - h) if eh > h else 0
         return h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1
 
 
