@@ -119,7 +119,8 @@ def _get_enclosing_box(corners):
     return final
 
 def _check_range_tuple(value):
-    return isinstance(value, tuple) and len(value) == 2 and all([isinstance(v, numbers.Number) for v in value])
+    return isinstance(value, (tuple, list)) and len(value) == 2 and all(
+        [isinstance(v, numbers.Number) for v in value])
 
 
 def randomize_with_validate(keep_prob=0.5, valid_range=None, effectless_value=None, **kwargs):
@@ -1095,8 +1096,12 @@ class RandomTransformAffine(VisionTransform):
                                                         self.rotation_range) if self.rotation_range > 0 else 0
         if self.rotation_range == 0:
             angle = 0
-        scale = np.random.uniform(self.zoom_range[0], self.zoom_range[1]) if _check_range_tuple(
-            self.zoom_range) else np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range) if self.zoom_range > 0 else 1
+        if _check_range_tuple(self.zoom_range):
+            scale = np.random.uniform(self.zoom_range[0], self.zoom_range[1])
+        elif isinstance(self.zoom_range, numbers.Number) and self.zoom_range > 0:
+            scale = np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range)
+        else:
+            scale = 1
         if isinstance(self.shift_range,numbers.Number):
             tx = np.random.uniform(-self.shift_range, self.shift_range) * w
             ty = np.random.uniform(-self.shift_range, self.shift_range) * h
