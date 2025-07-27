@@ -108,7 +108,7 @@ class Dataset(DatasetBase):
     def __getitem__(self, index: int) -> Tuple:
         if index >= len(self.items):
             index = index % len(self.items)
-        return self.items[index]
+        return np.array(self.items[index]).astype(np.float32)
 
     def __setattr__(self, name: str, value) -> None:
         object.__setattr__(self, name, value)
@@ -332,7 +332,7 @@ class ArrayDataset(Dataset):
     def __getitem__(self, index: int):
         if index >= len(self.items):
             index = index % len(self.items)
-        return self.items[index]
+        return np.array(self.items[index]).astype(np.float32)
 
     def __len__(self) -> int:
         return len(self.items)
@@ -815,7 +815,7 @@ class LandmarkDataset(Dataset):
     def __getitem__(self, index: int):
         if index >= len(self.items):
             index = index % len(self.items)
-        return self.items[index]
+        return np.array(self.items[index]).astype(np.float32)
 
     def landmark_transform(self, *landmarks):
         return self.data_transform(landmarks)
