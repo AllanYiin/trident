@@ -1722,8 +1722,10 @@ class AdjustHue(VisionTransform):
         hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV_FULL)
         h, s, v = np.split(hsv_image, 3, axis=-1)
         # uint8 addition take cares of rotation across boundaries
-        with np.errstate(over="ignore"):
-            h += np.uint8(self.value * 255)
+        # handle negative hue shift correctly without overflow error
+        shift = int(self.value * 255)
+        h = (h.astype(np.int16) + shift) % 256
+        h = h.astype(np.uint8)
         hsv_image = cv2.merge([h, s, v])
 
         image = cv2.cvtColor(hsv_image, cv2.COLOR_HSV2RGB_FULL)
