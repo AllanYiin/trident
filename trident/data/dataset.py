@@ -38,7 +38,7 @@ try:
     import Queue
 except ImportError:
     import queue as Queue
-
+from trident.backend.numpy_ops import DTYPE_MAPPING
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_ops import tensor_to_shape, expand_dims, cast,to_tensor
 elif get_backend() == 'tensorflow':

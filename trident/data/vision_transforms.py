@@ -1153,45 +1153,44 @@ class RandomTransformAffine(VisionTransform):
 
     def _apply_boxes(self, boxes,spec:TensorSpec):
         mat_img, height, width,angle, is_flip, rr, shear_factor, background_color = self._shape_info
-        if isinstance( self.output_size,numbers.Number):
-            self.output_size=( self.output_size, self.output_size)
-        eh, ew = self.output_size
-        if ndim(boxes)==0:
-            return boxes
+        if rr > self.keep_prob:
+            if isinstance( self.output_size,numbers.Number):
+                self.output_size=( self.output_size, self.output_size)
+            eh, ew = self.output_size
+            if ndim(boxes)==0:
+                return boxes
+            else:
+                if ndim(boxes) == 1:
+                    boxes=np.expand_dims(boxes,0)
+                location= boxes[:, :4]
+                class_info = boxes[:, 4:5] if boxes.shape[-1]>4 else None
+                keypoints = boxes[:, 5:] if boxes.shape[-1]>5 else None
+
+                corners = _get_corners(np.asarray(location))
+
+                corners = corners.reshape(-1, 2)
+                corners = np.hstack((corners, np.ones((corners.shape[0], 1), dtype=type(corners[0][0]))))
+                corners = np.dot(mat_img, corners.T).T
+
+                new_corners = corners.reshape(-1, 8)
+
+                new_bbox = _get_enclosing_box(new_corners)
+
+                if is_flip:
+                    new_bbox = np.stack([width - new_bbox[:, 2], new_bbox[:, 1], width - new_bbox[:, 0], new_bbox[:, 3]], axis=1)
+
+                if keypoints is not None:
+                    coords_keypoints = np.asarray(keypoints).reshape(-1, 2)
+                    keypoints = self._apply_keypoints(coords_keypoints, spec).reshape((-1, keypoints.shape[-1]))
+
+                trans_boxes = new_bbox
+                if class_info is not None  and class_info.shape[-1]>0 and keypoints is not None and len(keypoints)>0:
+                    trans_boxes = np.concatenate((trans_boxes, class_info,keypoints), axis=1)
+                elif class_info is not None  and class_info.shape[-1]>0:
+                    trans_boxes = np.concatenate((trans_boxes, class_info), axis=1)
+                return trans_boxes
         else:
-            if ndim(boxes) == 1:
-                boxes=np.expand_dims(boxes,0)
-            B=boxes.shape[0]
-            location= boxes[:, :4]
-            class_info = boxes[:, 4:5] if boxes.shape[-1]>4 else None
-            keypoints = boxes[:, 5:] if boxes.shape[-1]>5 else None
-
-            corners = _get_corners(np.asarray(location))
-
-
-            corners = corners.reshape(-1, 2)
-            corners = np.hstack((corners, np.ones((corners.shape[0], 1), dtype=type(corners[0][0]))))
-            corners = np.dot(mat_img, corners.T).T
-
-            new_corners = corners.reshape(-1, 8)
-
-            new_bbox = _get_enclosing_box(new_corners)
-
-            # scale_factor_x = nW/width
-            # scale_factor_y = nH/ height
-            # new_bbox[:, :4] /= [scale_factor_x, scale_factor_y, scale_factor_x, scale_factor_y]
-            #
-
-            if keypoints is not None:
-                coords_keypoints = np.asarray(keypoints).reshape(-1, 2)
-                keypoints = self._apply_keypoints(coords_keypoints, spec).reshape((-1, keypoints.shape[-1]))
-
-            trans_boxes = new_bbox
-            if class_info is not None  and class_info.shape[-1]>0 and keypoints is not None and len(keypoints)>0:
-                trans_boxes = np.concatenate((trans_boxes, class_info,keypoints), axis=1)
-            elif class_info is not None  and class_info.shape[-1]>0:
-                trans_boxes = np.concatenate((trans_boxes, class_info), axis=1)
-            return trans_boxes
+            return boxes
 
     def _apply_coords(self, coords, spec: TensorSpec):
         mat_img, height, width, angle, is_flip, rr, shear_factor, background_color = self._shape_info
