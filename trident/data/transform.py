@@ -211,7 +211,7 @@ class VisionTransform(Transform):
         return mask
 
     def _apply_keypoints(self, keypoints,spec:TensorSpec):
-        coords, visibility = keypoints[..., :2].copy(), keypoints[..., 2:]
+        coords, visibility = keypoints[..., :2], keypoints[..., 2:]
         #trans_coords = [self._apply_coords(p,spec) for p in coords]
         trans_coords = self._apply_coords(coords, spec)
         return np.concatenate((trans_coords, visibility), axis=-1)
