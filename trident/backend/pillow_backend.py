@@ -127,7 +127,7 @@ def image2array(img):
 
     arr = None
     if isinstance(img, PngImageFile):
-        arr = np.array(img.im).astype(np.float32)
+        arr = np.array(img).astype(np.float32)
     if isinstance(img, pil_image.Image):
         arr = np.array(img).astype(np.float32)
     elif isinstance(img, np.ndarray):
