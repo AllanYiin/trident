@@ -18,6 +18,7 @@ from trident.backend.pytorch_ops import *
 
 __all__ = ['Adam', 'SGD', 'LBFGS', 'Adadelta', 'Adagrad', 'RMSprop', 'RAdam', 'PlainRAdam', 'AdamW', 'Lookahead',
            'Ranger', 'Ranger21', 'RangerLars', 'AdaBelief', 'RangerAdaBelief', 'DiffGrad', 'Lamb', 'Lion',
+           'Sophia', 'Adan', 'Muon', 'AdamMini', 'GaLore', 'Apollo',
            'get_optimizer']
 
 
@@ -3240,6 +3241,392 @@ class Lion(Optimizer):
                 if half_precision:
                     p.data = p.data.half()
                     p.grad = p.grad.half()
+
+        return loss
+
+
+class Sophia(Optimizer):
+    """Implements Sophia optimizer for large language model pre-training.
+
+    中文：Sophia 透過週期性地估計 Hessian 對角線並在更新時進行裁剪，
+    在大型語言模型訓練中能加速收斂並穩定學習。
+
+    This version follows the simplified algorithm described in the
+    repository documentation. It periodically estimates the Hessian
+    diagonal and uses it to precondition the update with clipping.
+    """
+
+    def __init__(self, params, lr=1e-4, betas=(0.9, 0.99), rho=0.04,
+                 eps=1e-8, weight_decay=0., hessian_interval=10,
+                 use_adaptive_gradient_clipping=False,
+                 gradient_centralization=None):
+        defaults = dict(lr=lr, betas=betas, rho=rho, eps=eps,
+                        weight_decay=weight_decay,
+                        hessian_interval=hessian_interval,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        gradient_centralization=gradient_centralization)
+        super(Sophia, self).__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = closure() if closure is not None else None
+
+        for group in self.param_groups:
+            beta1, beta2 = group['betas']
+            rho = group['rho']
+            lr = group['lr']
+            eps = group['eps']
+            interval = group['hessian_interval']
+
+            for p in group['params']:
+                if p.grad is None or not p.requires_grad:
+                    continue
+
+                grad = p.grad.detach()
+                if group['weight_decay'] != 0:
+                    grad = grad.add(p.data, alpha=group['weight_decay'])
+
+                state = self.state[p]
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['exp_avg'] = torch.zeros_like(p)
+                    state['hessian_diag'] = torch.zeros_like(p)
+
+                exp_avg = state['exp_avg']
+                h_diag = state['hessian_diag']
+
+                state['step'] += 1
+
+                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+
+                if state['step'] % interval == 0:
+                    u = torch.randn_like(grad)
+                    hvp = torch.autograd.grad((grad * u).sum(), p, retain_graph=True)[0]
+                    h_est = u * hvp
+                    h_diag.mul_(beta2).add_(h_est, alpha=1 - beta2)
+
+                denom = h_diag.abs().add_(eps).clamp(max=rho)
+                p.data.addcdiv_(exp_avg, denom, value=-lr)
+
+        return loss
+
+
+class Adan(Optimizer):
+    """Implements Adan optimizer combining adaptive moments and Nesterov momentum.
+
+    中文：Adan 結合自適應動量與 Nesterov 估計，能在各種任務上更快收斂。
+    """
+
+    def __init__(self, params, lr=1e-3, betas=(0.98, 0.92, 0.99),
+                 eps=1e-8, weight_decay=0.,
+                 use_adaptive_gradient_clipping=False,
+                 gradient_centralization=None):
+        assert len(betas) == 3, 'Adan requires three beta values'
+        defaults = dict(lr=lr, betas=betas, eps=eps,
+                        weight_decay=weight_decay,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        gradient_centralization=gradient_centralization)
+        super(Adan, self).__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = closure() if closure is not None else None
+
+        for group in self.param_groups:
+            beta1, beta2, beta3 = group['betas']
+            lr = group['lr']
+            eps = group['eps']
+
+            for p in group['params']:
+                if p.grad is None or not p.requires_grad:
+                    continue
+
+                grad = p.grad.detach()
+                if group['weight_decay'] != 0:
+                    grad = grad.add(p.data, alpha=group['weight_decay'])
+
+                state = self.state[p]
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['m'] = torch.zeros_like(p)
+                    state['v'] = torch.zeros_like(p)
+                    state['n'] = torch.zeros_like(p)
+                    state['prev_grad'] = torch.zeros_like(p)
+
+                m, v, n = state['m'], state['v'], state['n']
+                prev_grad = state['prev_grad']
+
+                grad_diff = grad - prev_grad
+
+                m.mul_(1 - beta1).add_(grad, alpha=beta1)
+                v.mul_(1 - beta2).add_(grad_diff, alpha=beta2)
+                u = grad + (1 - beta2) * grad_diff
+                n.mul_(1 - beta3).addcmul_(u, u, value=beta3)
+
+                state['step'] += 1
+                bias_correction1 = 1 - (1 - beta1) ** state['step']
+                bias_correction3 = 1 - (1 - beta3) ** state['step']
+
+                step_size = lr / bias_correction1
+                denom = (n / bias_correction3).sqrt().add_(eps)
+                p.data.addcdiv_(m, denom, value=-step_size)
+
+                state['prev_grad'].copy_(grad)
+
+        return loss
+
+
+def _orthogonalize(mat, num_iters=5):
+    """Approximate orthogonalization with Newton-Schulz iterations.
+
+    中文：使用 Newton-Schulz 迭代將更新矩陣逼近為正交形式。
+    """
+    if mat.dim() < 2:
+        return mat
+    m, n = mat.shape
+    if m >= n:
+        eye = torch.eye(n, device=mat.device, dtype=mat.dtype)
+        for _ in range(num_iters):
+            mat = 1.5 * mat - 0.5 * mat @ (mat.transpose(0, 1) @ mat)
+    else:
+        eye = torch.eye(m, device=mat.device, dtype=mat.dtype)
+        for _ in range(num_iters):
+            mat = 1.5 * mat - 0.5 * (mat @ mat.transpose(0, 1)) @ mat
+    return mat
+
+
+class Muon(Optimizer):
+    """Momentum optimizer with orthogonalized updates for matrix parameters.
+
+    中文：Muon 針對高維矩陣權重，先計算動量再將更新矩陣正交化，
+    以提升大型模型訓練的穩定度與效率。
+    """
+
+    def __init__(self, params, lr=1e-3, momentum=0.9, weight_decay=0.,
+                 use_adaptive_gradient_clipping=False,
+                 gradient_centralization=None, orthogonal_iters=5):
+        defaults = dict(lr=lr, momentum=momentum, weight_decay=weight_decay,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        gradient_centralization=gradient_centralization,
+                        orthogonal_iters=orthogonal_iters)
+        super(Muon, self).__init__(params, defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = closure() if closure is not None else None
+
+        for group in self.param_groups:
+            momentum = group['momentum']
+            lr = group['lr']
+            k = group['orthogonal_iters']
+
+            for p in group['params']:
+                if p.grad is None or not p.requires_grad:
+                    continue
+
+                grad = p.grad.detach()
+                if group['weight_decay'] != 0:
+                    grad = grad.add(p.data, alpha=group['weight_decay'])
+
+                state = self.state[p]
+                if len(state) == 0:
+                    state['momentum_buffer'] = torch.zeros_like(p)
+
+                buf = state['momentum_buffer']
+                buf.mul_(momentum).add_(grad, alpha=1 - momentum)
+
+                update = buf.clone()
+                if p.dim() >= 2:
+                    update = _orthogonalize(update, num_iters=k)
+
+                p.add_(update, alpha=-lr)
+
+        return loss
+
+
+class AdamMini(Optimizer):
+    """Memory-efficient AdamW variant using shared second moments.
+
+    中文：AdamMini 透過多參數共享二階矩，大幅降低記憶體使用，
+    適合在訓練大型模型時取代 AdamW。
+    """
+
+    def __init__(self, params, lr=1e-4, betas=(0.9, 0.999), eps=1e-8,
+                 weight_decay=0.,
+                 use_adaptive_gradient_clipping=False,
+                 gradient_centralization=None):
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        gradient_centralization=gradient_centralization)
+        super(AdamMini, self).__init__(params, defaults)
+        for group in self.param_groups:
+            group['shared_v'] = torch.zeros(1, device=next(group['params']).device)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = closure() if closure is not None else None
+
+        for group in self.param_groups:
+            beta1, beta2 = group['betas']
+            lr = group['lr']
+            eps = group['eps']
+            shared_v = group['shared_v']
+
+            for p in group['params']:
+                if p.grad is None or not p.requires_grad:
+                    continue
+
+                grad = p.grad.detach()
+                if group['weight_decay'] != 0:
+                    grad = grad.add(p.data, alpha=group['weight_decay'])
+
+                state = self.state[p]
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['exp_avg'] = torch.zeros_like(p)
+
+                exp_avg = state['exp_avg']
+
+                state['step'] += 1
+
+                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+                shared_v.mul_(beta2).add_(grad.pow(2).mean(), alpha=1 - beta2)
+
+                step_size = lr / (1 - beta1 ** state['step'])
+                denom = shared_v.sqrt().add_(eps)
+                p.data.addcdiv_(exp_avg, denom, value=-step_size)
+
+        return loss
+
+
+class GaLore(Optimizer):
+    """Optimizer wrapper applying low-rank projection to gradients.
+
+    中文：GaLore 在每次更新前將梯度以低秩形式近似，
+    有效減少優化器狀態的記憶體佔用。
+    """
+
+    def __init__(self, params, lr=1e-4, betas=(0.9, 0.999), eps=1e-8,
+                 rank=8, weight_decay=0.,
+                 use_adaptive_gradient_clipping=False,
+                 gradient_centralization=None):
+        defaults = dict(lr=lr, betas=betas, eps=eps, rank=rank,
+                        weight_decay=weight_decay,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        gradient_centralization=gradient_centralization)
+        super(GaLore, self).__init__(params, defaults)
+
+    def _low_rank(self, grad, rank):
+        if grad.dim() < 2:
+            return grad
+        u, s, v = torch.linalg.svd(grad, full_matrices=False)
+        s = s[:rank]
+        u = u[:, :rank]
+        v = v[:rank, :]
+        return (u * s) @ v
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = closure() if closure is not None else None
+
+        for group in self.param_groups:
+            beta1, beta2 = group['betas']
+            lr = group['lr']
+            eps = group['eps']
+            rank = group['rank']
+
+            for p in group['params']:
+                if p.grad is None or not p.requires_grad:
+                    continue
+
+                grad = p.grad.detach()
+                if group['weight_decay'] != 0:
+                    grad = grad.add(p.data, alpha=group['weight_decay'])
+
+                grad = self._low_rank(grad, rank)
+
+                state = self.state[p]
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['exp_avg'] = torch.zeros_like(p)
+                    state['exp_avg_sq'] = torch.zeros_like(p)
+
+                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+                state['step'] += 1
+
+                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+
+                bias_correction1 = 1 - beta1 ** state['step']
+                bias_correction2 = 1 - beta2 ** state['step']
+                step_size = lr * math.sqrt(bias_correction2) / bias_correction1
+
+                denom = exp_avg_sq.sqrt().add_(eps)
+                p.data.addcdiv_(exp_avg, denom, value=-step_size)
+
+        return loss
+
+
+class Apollo(Optimizer):
+    """SGD-like memory footprint with AdamW-level performance.
+
+    中文：Apollo 將通道級縮放與隨機投影結合，
+    使優化器狀態接近 SGD 的輕量化，同時維持 AdamW 的效果。
+    """
+
+    def __init__(self, params, lr=1e-4, betas=(0.9, 0.999), eps=1e-8,
+                 rank=1, weight_decay=0.,
+                 use_adaptive_gradient_clipping=False,
+                 gradient_centralization=None):
+        defaults = dict(lr=lr, betas=betas, eps=eps, rank=rank,
+                        weight_decay=weight_decay,
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        gradient_centralization=gradient_centralization)
+        super(Apollo, self).__init__(params, defaults)
+
+        for group in self.param_groups:
+            group['scale'] = torch.zeros(rank, device=next(group['params']).device)
+
+    def _project(self, grad, rank):
+        flat = grad.view(grad.size(0), -1)
+        rand = torch.randn(flat.size(1), rank, device=grad.device)
+        proj = flat @ rand
+        scale = proj.norm(dim=0)
+        return scale
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = closure() if closure is not None else None
+
+        for group in self.param_groups:
+            beta1, beta2 = group['betas']
+            lr = group['lr']
+            eps = group['eps']
+            rank = group['rank']
+            scale = group['scale']
+
+            for p in group['params']:
+                if p.grad is None or not p.requires_grad:
+                    continue
+
+                grad = p.grad.detach()
+                if group['weight_decay'] != 0:
+                    grad = grad.add(p.data, alpha=group['weight_decay'])
+
+                state = self.state[p]
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['exp_avg'] = torch.zeros_like(p)
+
+                exp_avg = state['exp_avg']
+                state['step'] += 1
+
+                scale[:] = self._project(grad, rank)
+
+                exp_avg.mul_(beta1).add_(grad / (scale.view(-1, *([1] * (grad.dim() - 1))) + eps), alpha=1 - beta1)
+
+                step_size = lr / (1 - beta1 ** state['step'])
+                p.data.add_(exp_avg, alpha=-step_size)
 
         return loss
 
