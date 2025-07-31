@@ -393,12 +393,20 @@ class _Context:
 
     @property
     def float_dtype(self):
-        """Return default floating point dtype used across backend."""
+
+        """Return the floating point dtype currently used by the backend.
+
+        The value is determined by :attr:`floatx` and will switch to
+        ``float16`` automatically when automatic mixed precision is enabled on
+        CUDA devices.
+        """
         device = getattr(self, 'device', None)
+        dtype = getattr(Dtype, self.floatx)
         if self.amp_available and self.is_autocast_enabled and device == 'cuda':
             return Dtype.float16
         else:
-            return Dtype.float32
+            return dtype
+
 
     @property
     def module_dict(self):
