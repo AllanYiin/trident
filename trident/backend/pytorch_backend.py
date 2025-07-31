@@ -3275,7 +3275,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
             macc += float(summary[layer]["macc"].sum())
             try:
                 total_output += summary[layer]["output_shape"].numel(batch_size=batch_size) if isinstance(
-                    summary[layer]["output_shape"], TensorShape) else np.ndarray(
+                    summary[layer]["output_shape"], TensorShape) else np.array(
                     [shp.numel(batch_size=batch_size) for shp in summary[layer]["output_shape"]]).sum()
             except Exception as e:
                 print(layer)
