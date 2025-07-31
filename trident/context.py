@@ -9,6 +9,7 @@ from collections import OrderedDict
 from functools import partial
 
 import numpy as np
+from trident.backend import dtype as Dtype
 
 _trident_context=None
 
@@ -318,6 +319,7 @@ class _Context:
         self.amp_available = False
         self.is_autocast_enabled = False
 
+
         self.tensorboard_server='localhost'
         self.tensorboard_port =6006
         self.mlflow_server = 'localhost'
@@ -388,6 +390,21 @@ class _Context:
         if attr == "_context_handle" and value is None:
             raise ValueError("Context handle is none in context!!!")
         return value
+
+    @property
+    def float_dtype(self):
+        """Return the floating point dtype currently used by the backend.
+
+        The value is determined by :attr:`floatx` and will switch to
+        ``float16`` automatically when automatic mixed precision is enabled on
+        CUDA devices.
+        """
+        device = getattr(self, 'device', None)
+        dtype = getattr(Dtype, self.floatx)
+        if self.amp_available and self.is_autocast_enabled and device == 'cuda':
+            return Dtype.float16
+        else:
+            return dtype
 
     @property
     def module_dict(self):
