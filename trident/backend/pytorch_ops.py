@@ -91,7 +91,7 @@ def _set_device(device='cpu'):
         print(e)
 
 
-_float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_enabled == True and _get_device() == 'cuda' else Dtype.float32
+# Default floating point dtype comes from global context
 
 Tensor = torch.Tensor
 
@@ -362,7 +362,7 @@ def to_tensor(x: Any, dtype: Optional[_dtype] = None, device: Device = None, req
             [isinstance(item, numbers.Integral) for item in x]):
         dtype = Dtype.int64
     elif dtype is None:
-        dtype = _float_dtype
+        dtype = ctx.float_dtype
     elif isinstance(dtype, str):
         dtype = str2dtype(dtype)
     if device is None:
@@ -407,7 +407,7 @@ def to_tensor(x: Any, dtype: Optional[_dtype] = None, device: Device = None, req
 
         elif isinstance(x, float):
             if dtype is None:
-                dtype = _float_dtype
+                dtype = ctx.float_dtype
             return torch.tensor(x, dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,
                                                                                                       dtype=dtype,
                                                                                                       requires_grad=requires_grad).to(
@@ -423,14 +423,14 @@ def to_tensor(x: Any, dtype: Optional[_dtype] = None, device: Device = None, req
             elif len(x) == 1:
                 x = unpack_singleton(x)
                 if dtype is None:
-                    dtype = _float_dtype
+                    dtype = ctx.float_dtype
                 x = torch.tensor(x, dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,
                                                                                                        dtype=dtype,
                                                                                                        requires_grad=requires_grad).to(
                     device)
             else:
                 if dtype is None:
-                    dtype = _float_dtype
+                    dtype = ctx.float_dtype
                 x = torch.tensor(x, dtype=dtype).to(device) if requires_grad is None else torch.tensor(x, dtype=dtype,
                                                                                                        requires_grad=requires_grad).to(
                     device)
@@ -439,7 +439,7 @@ def to_tensor(x: Any, dtype: Optional[_dtype] = None, device: Device = None, req
         elif isinstance(x, np.ndarray):
             x = torch.from_numpy(x).to(device)
             if dtype is None:
-                dtype = _float_dtype
+                dtype = ctx.float_dtype
             x = x.type(dtype)
             if not requires_grad:
                 x.requires_grad = False
@@ -613,7 +613,7 @@ def str2dtype(dtype_str: (str, torch.dtype)):
         elif 'float16' in dtype_str.lower() or 'half' in dtype_str.lower():
             return Dtype.float16
         elif 'float' in dtype_str.lower():
-            return _float_dtype
+            return ctx.float_dtype
         elif 'int64' in dtype_str.lower() or 'long' in dtype_str.lower():
             return Dtype.int64
         elif 'int16' in dtype_str.lower() or 'short' in dtype_str.lower():
@@ -626,7 +626,7 @@ def str2dtype(dtype_str: (str, torch.dtype)):
             return Dtype.int32
         elif 'bool' in dtype_str.lower():
             return Dtype.bool
-    return _float_dtype
+    return ctx.float_dtype
 
 
 def cast(x, cast_dtype: (str, torch.dtype)):
@@ -2182,7 +2182,7 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x = x.to(_float_dtype)
+        x = x.to(ctx.float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
         if axis is None and keepdims == False:
             return torch.mean(x)
@@ -2225,7 +2225,7 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x = x.to(_float_dtype)
+        x = x.to(ctx.float_dtype)
     _xdtype = x.dtype
     scale = 1 if _xdtype == Dtype.float32 else builtins.max(numel(x), 1)
     if axis is None or isinstance(axis, (int, list, tuple)):
@@ -2283,7 +2283,7 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x = x.to(_float_dtype)
+        x = x.to(ctx.float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
         if axis is None and keepdims == False:
             result = x.max()
@@ -2347,7 +2347,7 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x = x.to(_float_dtype)
+        x = x.to(ctx.float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
 
         if axis is None and keepdims == False:
@@ -2441,7 +2441,7 @@ def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x = x.to(_float_dtype)
+        x = x.to(ctx.float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
 
         return torch.logsumexp(x, dim=axis, keepdim=keepdims)
@@ -3696,7 +3696,7 @@ def ones(shape: Union[(List, Tuple, torch.Size, TensorShape)], dtype=None, requi
     if isinstance(shape, TensorShape):
         shape = shape.dims
     if dtype is None:
-        dtype = _float_dtype
+        dtype = ctx.float_dtype
     return torch.ones(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 
@@ -3747,7 +3747,7 @@ def zeros(shape: Union[(List, Tuple, torch.Size, TensorShape)], dtype=None, requ
     if isinstance(shape, TensorShape):
         shape = shape.dims
     if dtype is None:
-        dtype = _float_dtype
+        dtype = ctx.float_dtype
     return torch.zeros(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 
@@ -3796,7 +3796,7 @@ def eye(shape: Union[(List, Tuple, torch.Size, TensorShape)], dtype=None, requir
     if isinstance(shape, TensorShape):
         shape = shape.dims
     if dtype is None:
-        dtype = _float_dtype
+        dtype = ctx.float_dtype
 
     if len(shape) == 2:
         return torch.eye(shape[0], shape[1], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
@@ -3854,7 +3854,7 @@ def make_onehot(label, num_classes, axis=-1):
 
     """
 
-    onehot = torch.nn.functional.one_hot(label.long(), num_classes).to(_float_dtype)
+    onehot = torch.nn.functional.one_hot(label.long(), num_classes).to(ctx.float_dtype)
     last_index = ndim(onehot) - 1
     if axis < 0:
         axis += ndim(onehot)
@@ -3937,14 +3937,14 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
     >>> grid1.shape
     torch.Size([3, 2, 2])
     """
-    xs = torch.linspace(0, int(x - 1), int(x), device=get_session_value('device'), dtype=_float_dtype,
+    xs = torch.linspace(0, int(x - 1), int(x), device=get_session_value('device'), dtype=ctx.float_dtype,
                         requires_grad=requires_grad)
-    ys = torch.linspace(0, int(y - 1), int(y), device=get_session_value('device'), dtype=_float_dtype,
+    ys = torch.linspace(0, int(y - 1), int(y), device=get_session_value('device'), dtype=ctx.float_dtype,
                         requires_grad=requires_grad)
     if normalized_coordinates:
-        xs = torch.linspace(0, 1, int(x), device=get_session_value('device'), dtype=_float_dtype,
+        xs = torch.linspace(0, 1, int(x), device=get_session_value('device'), dtype=ctx.float_dtype,
                             requires_grad=requires_grad)
-        ys = torch.linspace(0, 1, int(y), device=get_session_value('device'), dtype=_float_dtype,
+        ys = torch.linspace(0, 1, int(y), device=get_session_value('device'), dtype=ctx.float_dtype,
                             requires_grad=requires_grad)
     grid_x, grid_y = torch.meshgrid([xs, ys])
 
@@ -4088,7 +4088,7 @@ def index_select(x: Tensor, axis: int, indices: Tensor):
 
     """
     num_class = int_shape(x)[axis]
-    if reduce_sum(greater_equal(indices, num_class, dtype=_float_dtype)):
+    if reduce_sum(greater_equal(indices, num_class, dtype=ctx.float_dtype)):
         raise ValueError('Number of class are {0}, indices should not out of the range.'.format(num_class))
     return torch.index_select(x, dim=axis, index=indices)
 
@@ -4245,7 +4245,7 @@ def random_normal(shape, mean: Union[Tensor, float] = 0.0, std: Union[Tensor, fl
         if dtype is not None:
             dtype = str2dtype(dtype)
     if dtype is None:
-        dtype = _float_dtype
+        dtype = ctx.float_dtype
     if device is None:
         device = _get_device()
     if std is None or std < 0.02:
@@ -4376,7 +4376,7 @@ def random_uniform(shape, min_value: Union[Tensor, float] = 0.0, max_value: Unio
         if dtype is not None:
             dtype = str2dtype(dtype)
     if dtype is None:
-        dtype = _float_dtype
+        dtype = ctx.float_dtype
     t = zeros(shape=shape, dtype=dtype)
     t.uniform_(min_value, max_value)
     return t
@@ -4551,7 +4551,7 @@ def rgb2gray(rgb: Tensor, axis=-1):
         >>> print( abs(np.round(gray_tensor.astype(np.float32))-groundtruth_gray.astype(np.float32)).mean())
 
     """
-    rgb = rgb.copy().to(_float_dtype)
+    rgb = rgb.copy().to(ctx.float_dtype)
     if ndim(rgb) not in [3, 4]:
         raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
     if ndim(rgb) == 3:
@@ -4590,7 +4590,7 @@ def rgb2hsv(rgb: Tensor):
         >>> print(hsv_tensor-groundtruth_hsv)
 
     """
-    rgb = rgb.to(_float_dtype) / 255.0
+    rgb = rgb.to(ctx.float_dtype) / 255.0
     if ndim(rgb) not in [3, 4]:
         raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
     is_3d_tensor=False
@@ -4629,7 +4629,7 @@ def hsv2rgb(hsv: Tensor):
         >>> np.abs(to_numpy(hsv2rgb(rgb2hsv(to_tensor(img))))-img).mean()<0.01
         True
     """
-    hsv = hsv.to(_float_dtype) / 255.0
+    hsv = hsv.to(ctx.float_dtype) / 255.0
     if ndim(hsv) not in [3, 4]:
         raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
     is_3d_tensor=False
@@ -4899,7 +4899,7 @@ def gray2rgb(gray: Tensor):
         rgb (tensor):  rgb image ; shape:(H,W,C)
 
     """
-    gray = gray.copy().to(_float_dtype)
+    gray = gray.copy().to(ctx.float_dtype)
     if ndim(gray) == 3 and int_shape(gray)[-1] == 1:
         gray = gray[:, :, 0]
     if ndim(gray) != 2:
@@ -4996,8 +4996,8 @@ def bbox_iou(bboxes1, bboxes2):
     tensor(0.2266)
     """
 
-    bboxes1 = bboxes1.to(_float_dtype)
-    bboxes2 = bboxes2.to(_float_dtype)
+    bboxes1 = bboxes1.to(ctx.float_dtype)
+    bboxes2 = bboxes2.to(ctx.float_dtype)
     x1, y1, x2, y2 = bboxes1[:, 0], bboxes1[:, 1], bboxes1[:, 2], bboxes1[:, 3]
     x1g, y1g, x2g, y2g = bboxes2[:, 0], bboxes2[:, 1], bboxes2[:, 2], bboxes2[:, 3]
 
@@ -5009,7 +5009,7 @@ def bbox_iou(bboxes1, bboxes2):
     xkis2 = torch.minimum(x2, x2g)
     ykis2 = torch.minimum(y2, y2g)
 
-    intsctk = zeros(x1.size()).to(_float_dtype)
+    intsctk = zeros(x1.size()).to(ctx.float_dtype)
     mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
 
     intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
@@ -5040,8 +5040,8 @@ def bbox_diou(bboxes1, bboxes2):
    Array(2.2961e-01, dtype=float32)
 
     """
-    bboxes1 = bboxes1.to(_float_dtype)
-    bboxes2 = bboxes2.to(_float_dtype)
+    bboxes1 = bboxes1.to(ctx.float_dtype)
+    bboxes2 = bboxes2.to(ctx.float_dtype)
     x1, y1, x2, y2 = bboxes1[:, 0], bboxes1[:, 1], bboxes1[:, 2], bboxes1[:, 3]
     x1g, y1g, x2g, y2g = bboxes2[:, 0], bboxes2[:, 1], bboxes2[:, 2], bboxes2[:, 3]
 
@@ -5063,7 +5063,7 @@ def bbox_diou(bboxes1, bboxes2):
     xc2 = torch.max(x2, x2g)
     yc2 = torch.max(y2, y2g)
 
-    intsctk = zeros(x1.size()).to(_float_dtype)
+    intsctk = zeros(x1.size()).to(ctx.float_dtype)
     mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
     intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
     unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
@@ -5097,8 +5097,8 @@ def bbox_ciou(bboxes1, bboxes2):
     tensor(0.2288)
 
     """
-    bboxes1 = bboxes1.to(_float_dtype)
-    bboxes2 = bboxes2.to(_float_dtype)
+    bboxes1 = bboxes1.to(ctx.float_dtype)
+    bboxes2 = bboxes2.to(ctx.float_dtype)
     x1, y1, x2, y2 = bboxes1[:, 0], bboxes1[:, 1], bboxes1[:, 2], bboxes1[:, 3]
     x1g, y1g, x2g, y2g = bboxes2[:, 0], bboxes2[:, 1], bboxes2[:, 2], bboxes2[:, 3]
 
@@ -5124,7 +5124,7 @@ def bbox_ciou(bboxes1, bboxes2):
     xc2 = torch.max(x2, x2g)
     yc2 = torch.max(y2, y2g)
 
-    intsctk = zeros(x1.size()).to(_float_dtype)
+    intsctk = zeros(x1.size()).to(ctx.float_dtype)
     mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
     intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
     unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + ctx.epsilon
@@ -5166,8 +5166,8 @@ def bbox_giou(bboxes1, bboxes2):
 
 
     """
-    bboxes1 = bboxes1.to(_float_dtype)
-    bboxes2 = bboxes2.to(_float_dtype)
+    bboxes1 = bboxes1.to(ctx.float_dtype)
+    bboxes2 = bboxes2.to(ctx.float_dtype)
     x1, y1, x2, y2 = bboxes1[:, 0], bboxes1[:, 1], bboxes1[:, 2], bboxes1[:, 3]
     x1g, y1g, x2g, y2g = bboxes2[:, 0], bboxes2[:, 1], bboxes2[:, 2], bboxes2[:, 3]
 
@@ -5184,7 +5184,7 @@ def bbox_giou(bboxes1, bboxes2):
     xc2 = torch.max(x2, x2g)
     yc2 = torch.max(y2, y2g)
 
-    intsctk = zeros(x1.size()).to(_float_dtype)
+    intsctk = zeros(x1.size()).to(ctx.float_dtype)
     mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
 
     intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
