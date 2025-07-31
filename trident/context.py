@@ -393,6 +393,7 @@ class _Context:
 
     @property
     def float_dtype(self):
+
         """Return the floating point dtype currently used by the backend.
 
         The value is determined by :attr:`floatx` and will switch to
@@ -405,6 +406,7 @@ class _Context:
             return Dtype.float16
         else:
             return dtype
+
 
     @property
     def module_dict(self):
