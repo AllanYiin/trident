@@ -324,6 +324,7 @@ def tile_rgb_images(
         raise ValueError(f"legend 長度應為 {n_col}，但收到 {len(legend)}")
 
     # ----------- 建立 Figure ----------- #
+    plt.close('all')  # 避免在 Jupyter 產生多餘的空白圖框
     plt.ioff()  # 關閉互動模式，避免多餘輸出
     fig = plt.figure(figsize=(n_col * figsize_scale, n_row * figsize_scale))
 
