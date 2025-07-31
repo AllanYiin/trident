@@ -9,7 +9,6 @@ from collections import OrderedDict
 from functools import partial
 
 import numpy as np
-from trident.backend import dtype as Dtype
 
 _trident_context=None
 
@@ -400,6 +399,7 @@ class _Context:
         ``float16`` automatically when automatic mixed precision is enabled on
         CUDA devices.
         """
+        from trident.backend import dtype as Dtype
         device = getattr(self, 'device', None)
         dtype = getattr(Dtype, self.floatx)
         if self.amp_available and self.is_autocast_enabled and device == 'cuda':
