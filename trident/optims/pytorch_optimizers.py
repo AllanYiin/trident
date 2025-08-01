@@ -285,20 +285,21 @@ class Adam(Optimizer):
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
-                half_precision = False
-                if p.data.dtype == torch.float16:
-                    half_precision = True
-                    p.data = p.data.float()
-                    p.grad = p.grad.float()
-
-                grad = p.grad.data
+                state = self.state[p]
+                half_precision = p.data.dtype == torch.float16
+                if half_precision:
+                    if 'fp32_param' not in state:
+                        state['fp32_param'] = p.data.float().clone()
+                    p_fp32 = state['fp32_param']
+                    grad = p.grad.data.float()
+                else:
+                    p_fp32 = p.data
+                    grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
                 if any_abnormal_number(grad):
                     grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
                 amsgrad = group['amsgrad']
-
-                state = self.state[p]
 
                 # State initialization
                 if len(state) == 0:
@@ -321,7 +322,7 @@ class Adam(Optimizer):
                 bias_correction2 = 1 - beta2 ** state['step']
 
                 if group['weight_decay'] != 0:
-                    grad = grad.add(p, alpha=group['weight_decay'])
+                    grad = grad.add(p_fp32, alpha=group['weight_decay'])
 
                 if self.gradient_centralization in ['all', 'gcc']:
                     if len(list(grad.size())) > 3:
@@ -347,10 +348,12 @@ class Adam(Optimizer):
                 #     if ndim(G_grad) > 1:
                 #         G_grad.add_(-G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True))
 
-                p.data.add_(G_grad, alpha=-step_size)
+                p_fp32.add_(G_grad, alpha=-step_size)
                 if half_precision:
-                    p.data = p.data.half()
+                    p.data.copy_(p_fp32.half())
                     p.grad = p.grad.half()
+                else:
+                    p.data.copy_(p_fp32)
         return loss
 
 
@@ -870,11 +873,11 @@ class RAdam(Optimizer):
                     p.data = p.data.float()
                     p.grad = p.grad.float()
 
-                grad = p.grad.data.float()
+                grad = p.grad.data.float() if p.grad.data.dtype != torch.float32 else p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('RAdam does not support sparse gradients')
 
-                p_data = p.data.float()
+                p_data = p.data.float() if p.data.dtype != torch.float32 else p.data
 
                 state = self.state[p]
 
@@ -978,11 +981,11 @@ class PlainRAdam(Optimizer):
                     p.data = p.data.float()
                     p.grad = p.grad.float()
 
-                grad = p.grad.data.float()
+                grad = p.grad.data.float() if p.grad.data.dtype != torch.float32 else p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('RAdam does not support sparse gradients')
 
-                p_data = p.data.float()
+                p_data = p.data.float() if p.data.dtype != torch.float32 else p.data
 
                 state = self.state[p]
 
@@ -1091,7 +1094,7 @@ class AdamW(Optimizer):
                     p.data = p.data.float()
                     p.grad = p.grad.float()
 
-                grad = p.grad.data.float()
+                grad = p.grad.data.float() if p.grad.data.dtype != torch.float32 else p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
 
@@ -1322,7 +1325,7 @@ class Ranger(Optimizer):
                     raise RuntimeError('Ranger optimizer does not support sparse gradients')
 
                 # p_data = p.data
-                p_data_fp32 = p.data.float()
+                p_data_fp32 = p.data.float() if p.data.dtype != torch.float32 else p.data
 
                 state = self.state[p]  # get state dict for this param
 
@@ -1387,7 +1390,8 @@ class Ranger(Optimizer):
                     sys.stderr.write(
                         '{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(
                             self.__class__.__name__))
-                    p_data_fp32 = where(is_abnormal_number(p_data_fp32), p.data.float(), p_data_fp32)
+                    fallback = p.data.float() if p.data.dtype != torch.float32 else p.data
+                    p_data_fp32 = where(is_abnormal_number(p_data_fp32), fallback, p_data_fp32)
 
                 p.data.copy_(p_data_fp32)
 
@@ -1401,7 +1405,8 @@ class Ranger(Optimizer):
                         sys.stderr.write(
                             '{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(
                                 self.__class__.__name__))
-                        slow_p = where(is_abnormal_number(slow_p), p.data.float(), slow_p)
+                        fallback = p.data.float() if p.data.dtype != torch.float32 else p.data
+                        slow_p = where(is_abnormal_number(slow_p), fallback, slow_p)
                     p.data.copy_(slow_p)
 
                 if half_precision:
@@ -1773,7 +1778,7 @@ class Ranger21(Optimizer):
                     raise RuntimeError('Ranger optimizer does not support sparse gradients')
 
                 # p_data = p.data
-                p_data_fp32 = p.data.float()
+                p_data_fp32 = p.data.float() if p.data.dtype != torch.float32 else p.data
 
                 state = self.state[p]  # get state dict for this param
                 momentum = group["momentum"]
@@ -2140,12 +2145,12 @@ class RangerLars(Optimizer):
                     p.grad = p.grad.float()
                 if self.use_adaptive_gradient_clipping:
                     self.agc(p)
-                grad = p.grad.data.float()
+                grad = p.grad.data.float() if p.grad.data.dtype != torch.float32 else p.grad.data
 
                 if grad.is_sparse:
                     raise RuntimeError('Ranger optimizer does not support sparse gradients')
 
-                p_data = p.data.float()
+                p_data = p.data.float() if p.data.dtype != torch.float32 else p.data
 
                 state = self.state[p]  # get state dict for this param
 
@@ -2375,16 +2380,10 @@ class LARS(Optimizer):
                     w_norm = torch.norm(param)
                     g_norm = torch.norm(grad)
 
-                    device = g_norm.get_device()
-                    trust_ratio = torch.where(
-                        w_norm.ge(0),
-                        torch.where(
-                            g_norm.ge(0),
-                            (self.eeta * w_norm / g_norm),
-                            torch.Tensor([1.0]).to(device),
-                        ),
-                        torch.Tensor([1.0]).to(device),
-                    ).item()
+                    if w_norm.item() > 0 and g_norm.item() > 0:
+                        trust_ratio = (self.eeta * w_norm / g_norm).item()
+                    else:
+                        trust_ratio = 1.0
 
                     scaled_lr = lr * trust_ratio
                     if "momentum_buffer" not in param_state:
@@ -2544,7 +2543,7 @@ class AdaBelief(Optimizer):
                 if grad.is_sparse:
                     raise RuntimeError(
                         'AdaBelief does not support sparse gradients, please consider SparseAdam instead')
-                p_data_fp32 = p.data.float()
+                p_data_fp32 = p.data.float() if p.data.dtype != torch.float32 else p.data
                 amsgrad = group['amsgrad']
 
                 state = self.state[p]
@@ -2654,7 +2653,8 @@ class AdaBelief(Optimizer):
                     sys.stderr.write(
                         '{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(
                             self.__class__.__name__))
-                    p_data_fp32 = where(is_abnormal_number(p_data_fp32), p.data.float(), p_data_fp32)
+                    fallback = p.data.float() if p.data.dtype != torch.float32 else p.data
+                    p_data_fp32 = where(is_abnormal_number(p_data_fp32), fallback, p_data_fp32)
 
                 p.data.copy_(p_data_fp32)
                 if half_precision:
@@ -2784,7 +2784,7 @@ class RangerAdaBelief(Optimizer):
 
                 if self.use_adaptive_gradient_clipping:
                     self.agc(p)
-                grad = p.grad.data.float()
+                grad = p.grad.data.float() if p.grad.data.dtype != torch.float32 else p.grad.data
 
                 if not self.weight_decouple:  # if not decoupled weight decay, add weight decay to grad
                     grad.add_(p.data * group['weight_decay'])
@@ -2793,7 +2793,7 @@ class RangerAdaBelief(Optimizer):
                     raise RuntimeError(
                         'Ranger optimizer does not support sparse gradients')
 
-                p_data_fp32 = p.data.float()
+                p_data_fp32 = p.data.float() if p.data.dtype != torch.float32 else p.data
 
                 state = self.state[p]  # get state dict for this param
 
@@ -2965,7 +2965,7 @@ class DiffGrad(Optimizer):
                     half_precision = True
                     p.data = p.data.float()
                     p.grad = p.grad.float()
-                p_data_fp32 = p.data.float()
+                p_data_fp32 = p.data.float() if p.data.dtype != torch.float32 else p.data
 
                 if self.use_adaptive_gradient_clipping:
                     self.agc(p)
@@ -3029,7 +3029,6 @@ class DiffGrad(Optimizer):
                 if half_precision:
                     p.data = p.data.half()
                     p.grad = p.grad.half()
-                gc.collect()
         return loss
 
 
@@ -3202,7 +3201,7 @@ class Lion(Optimizer):
 
                 if self.use_adaptive_gradient_clipping:
                     self.agc(p)
-                grad = p.grad.data.float()
+                grad = p.grad.data.float() if p.grad.data.dtype != torch.float32 else p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
 
