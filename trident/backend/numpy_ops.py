@@ -1330,17 +1330,19 @@ def where(flag, value_if_true, value_if_false):
 ## reduce operation
 ###########################
 
-def reduce_mean(x:_Tensor, axis=None, keepdims=False, **kwargs):
+def reduce_mean(x: _Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, dim: Optional[int] = None):
     """Computes the mean of the input tensor's elements across a specified axis or a list of specified axes.
 
     Args:
         x (np.ndarray): input tensor.
-        axis (int,list):  axis along which the reduction will be performed
-        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
-        **kwargs ():
+        axis (int or list, optional): axis along which the reduction will be performed.
+        keepdims (bool): Keep the reduced dimension or not. Defaults to ``False``.
+        keepdim (bool, optional): Alias for ``keepdims`` for PyTorch compatibility. If provided,
+            its value must match ``keepdims``. This argument may be deprecated in the future.
+        dim (int, optional): Alias of ``axis`` for PyTorch compatibility.
 
     Returns:
-
+        np.ndarray: Reduced tensor.
 
     Examples:
         >>> data = np.array(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
@@ -1355,31 +1357,37 @@ def reduce_mean(x:_Tensor, axis=None, keepdims=False, **kwargs):
 
     """
 
-    axis = kwargs.get('dim', axis)
-    keepdims = kwargs.get('keepdim', keepdims)
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
+    if dim is not None:
+        axis = dim
     if axis is None:
         return np.mean(x)
     elif isinstance(axis, int):
-        return np.mean(x,axis=axis,keepdims=keepdims)
+        return np.mean(x, axis=axis, keepdims=keepdims)
     elif isinstance(axis, list):
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            x =np.mean(x,axis=a, keepdims=keepdims)
+            x = np.mean(x, axis=a, keepdims=keepdims)
         return x
 
 
-def reduce_sum(x:_Tensor, axis=None, keepdims=False, **kwargs):
+def reduce_sum(x: _Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, dim: Optional[int] = None):
     """Computes the sum of the input tensor's elements across a specified axis or a list of specified axes.
 
     Args:
         x (np.ndarray): input tensor.
-        axis (int,list):  axis along which the reduction will be performed
-        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
-        **kwargs ():
+        axis (int or list, optional): axis along which the reduction will be performed.
+        keepdims (bool): Keep the reduced dimension or not. Defaults to ``False``.
+        keepdim (bool, optional): Alias for ``keepdims`` for PyTorch compatibility. If provided,
+            its value must match ``keepdims``. This argument may be deprecated in the future.
+        dim (int, optional): Alias of ``axis`` for PyTorch compatibility.
 
     Returns:
-        The sum of the input tensor's elements across a specified axis or a list of specified axes.
+        np.ndarray: The sum of the input tensor's elements across a specified axis or a list of specified axes.
 
     Examples:
         >>> data = np.array(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
@@ -1395,23 +1403,27 @@ def reduce_sum(x:_Tensor, axis=None, keepdims=False, **kwargs):
         tensor([ 93., 126.])
 
     """
-    axis = kwargs.get('dim', axis)
-    keepdims = kwargs.get('keepdim', keepdims)
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
+    if dim is not None:
+        axis = dim
     if  x.size== 0:
         return zeros(1).astype(np.float32)
     if axis is None:
         return np.sum(x)
     elif isinstance(axis, int):
-        return np.sum(x,axis=axis, keepdims=keepdims)
+        return np.sum(x, axis=axis, keepdims=keepdims)
     elif isinstance(axis, list):
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            x = np.sum(x,axis=a, keepdims=keepdims)
+            x = np.sum(x, axis=a, keepdims=keepdims)
         return x
 
 
-def reduce_max(x:_Tensor, axis=None, keepdims=False, **kwargs):
+def reduce_max(x: _Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, dim: Optional[int] = None):
     """Computes the maximum of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -1452,25 +1464,29 @@ def reduce_max(x:_Tensor, axis=None, keepdims=False, **kwargs):
         tensor(inf, shape=(), dtype=float32)
 
     """
-    axis = kwargs.get('dim', axis)
-    keepdims = kwargs.get('keepdim', keepdims)
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
+    if dim is not None:
+        axis = dim
     if  x.size== 0:
         return zeros(1).astype(np.float32)
     if axis is None:
         return np.max(x)
     elif isinstance(axis, int):
-        arr= np.max(x,axis=axis, keepdims=keepdims)
+        arr = np.max(x, axis=axis, keepdims=keepdims)
         return arr
     elif isinstance(axis, list):
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            arr= np.max(x,axis=a, keepdims=keepdims)
+            arr = np.max(x, axis=a, keepdims=keepdims)
             x = arr
         return x
 
 
-def reduce_min(x:_Tensor, axis=None, keepdims=False, **kwargs):
+def reduce_min(x: _Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, dim: Optional[int] = None):
     """Computes the minimum of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -1512,25 +1528,29 @@ def reduce_min(x:_Tensor, axis=None, keepdims=False, **kwargs):
         tensor(inf, shape=(), dtype=float32)
 
     """
-    axis = kwargs.get('dim', axis)
-    keepdims = kwargs.get('keepdim', keepdims)
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
+    if dim is not None:
+        axis = dim
     if  x.size== 0:
         return zeros(1).astype(np.float32)
     if axis is None:
         return np.min(x)
     elif isinstance(axis, int):
-        arr= np.min(x,axis=axis, keepdims=keepdims)
+        arr = np.min(x, axis=axis, keepdims=keepdims)
         return arr
     elif isinstance(axis, list):
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            arr= np.min(x,axis=a, keepdims=keepdims)
+            arr = np.min(x, axis=a, keepdims=keepdims)
             x = arr
         return x
 
 
-def reduce_logsumexp(x:_Tensor, axis=None, keepdims=False, **kwargs):
+def reduce_logsumexp(x: _Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, dim: Optional[int] = None):
     """Computes log(sum(exp(elements across dimensions of a tensor))).
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -1559,11 +1579,20 @@ def reduce_logsumexp(x:_Tensor, axis=None, keepdims=False, **kwargs):
         axis (int, list, tuple): The dimensions to reduce. If `None` (the default), reduces all dimensions. Must be
         in the range `[-rank(input_tensor), rank(input_tensor))`.
         keepdims (bool): If true, retains reduced dimensions with length 1.
+        keepdim (bool, optional): Alias for ``keepdims`` for PyTorch compatibility. If provided,
+            its value must match ``keepdims``. This argument may be deprecated in the future.
+        dim (int, optional): Alias of ``axis`` for PyTorch compatibility.
 
     Returns:
       The reduced tensor.
 
     """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
+    if dim is not None:
+        axis = dim
     if  x.size== 0:
         return zeros(1).astype(np.float32)
     if axis is None:
@@ -1572,7 +1601,7 @@ def reduce_logsumexp(x:_Tensor, axis=None, keepdims=False, **kwargs):
         return log(reduce_sum(exp(x), axis=axis, keepdims=keepdims))
 
 
-def reduce_prod(x:_Tensor, axis=None, keepdims=False, **kwargs):
+def reduce_prod(x: _Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, dim: Optional[int] = None):
     """Computes the product of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -1597,39 +1626,24 @@ def reduce_prod(x:_Tensor, axis=None, keepdims=False, **kwargs):
     Equivalent to np.prod
     @end_compatibility
     """
-    axis = kwargs.get('dim', axis)
-    keepdims = kwargs.get('keepdim', keepdims)
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
+    if dim is not None:
+        axis = dim
     if  x.size== 0:
         return zeros(1).astype(np.float32)
     if axis is None:
         return None
     if isinstance(axis, int):
-        arr, idx = np.prod(x,axis=axis, keepdims=keepdims)
+        arr, idx = np.prod(x, axis=axis, keepdims=keepdims)
         return arr
     elif isinstance(axis, list):
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            arr, idx = np.prod(x,axis=a, keepdims=keepdims)
-            x = arr
-        return x
-
-
-    axis = kwargs.get('dim', axis)
-    keepdims = kwargs.get('keepdim', keepdims)
-    if  x.size== 0:
-        return zeros(1).astype(np.float32)
-    x=greater(x,0)
-    if axis is None:
-        return np.any(x,keepdims=keepdims)
-    if isinstance(axis, int):
-        arr, idx = np.any(x,axis=axis, keepdims=keepdims)
-        return arr
-    elif isinstance(axis, list):
-        axis = sorted(axis)
-        axis.reverse()
-        for a in axis:
-            arr, idx = np.any(x,axis=a, keepdims=keepdims)
+            arr, idx = np.prod(x, axis=a, keepdims=keepdims)
             x = arr
         return x
 
@@ -2283,40 +2297,54 @@ def gpt_gelu(x):
 ## normalization operation
 ###########################
 
-def moments(x:_Tensor, axis, keepdims=True):
-    """
+def moments(x: _Tensor, axis, keepdims: bool = True, *, keepdim: Optional[bool] = None):
+    """Computes the mean and variance of ``x`` along ``axis``.
 
     Args:
-        keepdims ():
-        x (np.ndarray): input tensor.
-        axis (int) :
+        x (np.ndarray): Input tensor.
+        axis (int or sequence): Axes along which moments are computed.
+        keepdims (bool): Whether to retain reduced dimensions. Defaults to ``True``.
+        keepdim (bool, optional): Alias for ``keepdims`` for PyTorch compatibility. If provided,
+            its value must match ``keepdims``. This argument may be deprecated in the future.
 
     Returns:
-        (np.ndarray): output tensor and have same shape with x.
-
+        Tuple[np.ndarray, np.ndarray]: Mean and variance of ``x``.
 
     """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     _axes = list(axis)
     norm_mean = reduce_mean(x, axis=_axes, keepdims=keepdims)
     norm_variance = reduce_mean(square(x - norm_mean), axis=_axes, keepdims=keepdims)
     return norm_mean, norm_variance
 
 
-def l2_normalize(x: np.ndarray, axis=1, keepdims=True, eps=epsilon()):
-    """
+
+def l2_normalize(x: np.ndarray, axis=1, keepdims: bool = True, eps=epsilon(), *, keepdim: Optional[bool] = None):
+    """L2 normalizes ``x`` along ``axis``.
 
     Args:
         x (np.ndarray): input tensor.
+        axis (int, optional): Axis to normalize. Defaults to ``1``.
+        keepdims (bool): Whether to retain reduced dimensions. Defaults to ``True``.
+        eps (float): Small epsilon to avoid divide-by-zero.
+        keepdim (bool, optional): Alias for ``keepdims`` for PyTorch compatibility. If provided,
+            its value must match ``keepdims``. This argument may be deprecated in the future.
 
     Returns:
         (np.ndarray): output tensor and have same shape with x.
 
-
-
     """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     if ndim(x) == 1:
         axis = 0
-    return x / np.sqrt(np.sum(np.square(x),axis=axis,keepdims=keepdims) + eps)
+    return x / np.sqrt(np.sum(np.square(x), axis=axis, keepdims=keepdims) + eps)
+
 
 
 ############################
