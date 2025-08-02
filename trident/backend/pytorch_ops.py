@@ -4079,13 +4079,35 @@ def index_select(x: Tensor, axis: int, indices: Tensor):
 
 
 @numpy_compatible
-def scatter_add(x: Tensor, indices: Tensor, updates: Tensor):
-    return torch.scatter_add(x, dim=None, index=indices, src=updates)
+def scatter_add(x: Tensor, indices: Tensor, updates: Tensor, dim: int = 0) -> Tensor:
+    """In-place addition of ``updates`` into ``x`` at the given ``indices``.
+
+    Args:
+        x (Tensor): Tensor to be updated in-place.
+        indices (Tensor): Indices at which to add ``updates``.
+        updates (Tensor): Values to add into ``x``.
+        dim (int, optional): Dimension along which to index. Default ``0``.
+
+    Returns:
+        Tensor: The updated tensor ``x``.
+    """
+    return x.scatter_add_(dim, indices, updates)
 
 
 @numpy_compatible
-def scatter_sub(x: Tensor, indices: Tensor, updates: Tensor):
-    return torch.scatter_sub(x, dim=None, index=indices, src=updates)
+def scatter_sub(x: Tensor, indices: Tensor, updates: Tensor, dim: int = 0) -> Tensor:
+    """In-place subtraction of ``updates`` from ``x`` at the given ``indices``.
+
+    Args:
+        x (Tensor): Tensor to be updated in-place.
+        indices (Tensor): Indices at which to subtract ``updates``.
+        updates (Tensor): Values to subtract from ``x``.
+        dim (int, optional): Dimension along which to index. Default ``0``.
+
+    Returns:
+        Tensor: The updated tensor ``x``.
+    """
+    return x.scatter_add_(dim, indices, -updates)
 
 
 @numpy_compatible
