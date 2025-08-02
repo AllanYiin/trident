@@ -303,7 +303,8 @@ class Optimizer(Trackable):
 
         old_lr = self.param_groups[0]['lr']
         if old_lr != new_lr:
-            self.param_groups[0]['lr'] = new_lr
+            for g in self.param_groups:
+                g['lr'] = new_lr
             if verbose:
                 print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 

@@ -120,7 +120,8 @@ class Optimizer(optimizer.Optimizer):
 
         old_lr = self.param_groups[0]['lr']
         if old_lr != new_lr:
-            self.param_groups[0]['lr'] = new_lr
+            for g in self.param_groups:
+                g['lr'] = new_lr
             if verbose:
                 print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
@@ -431,7 +432,8 @@ class SGD(optim.SGD):
 
         old_lr = self.param_groups[0]['lr']
         if old_lr != new_lr:
-            self.param_groups[0]['lr'] = new_lr
+            for g in self.param_groups:
+                g['lr'] = new_lr
             if verbose:
                 print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
@@ -522,7 +524,8 @@ class LBFGS(lbfgs.LBFGS):
 
         old_lr = self.param_groups[0]['lr']
         if old_lr != new_lr:
-            self.param_groups[0]['lr'] = new_lr
+            for g in self.param_groups:
+                g['lr'] = new_lr
             if verbose:
                 print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
@@ -592,7 +595,8 @@ class Adadelta(adadelta.Adadelta):
 
         old_lr = self.param_groups[0]['lr']
         if old_lr != new_lr:
-            self.param_groups[0]['lr'] = new_lr
+            for g in self.param_groups:
+                g['lr'] = new_lr
             if verbose:
                 print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
@@ -663,7 +667,8 @@ class Adagrad(adagrad.Adagrad):
 
         old_lr = self.param_groups[0]['lr']
         if old_lr != new_lr:
-            self.param_groups[0]['lr'] = new_lr
+            for g in self.param_groups:
+                g['lr'] = new_lr
             if verbose:
                 print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
@@ -745,7 +750,8 @@ class RMSprop(rmsprop.RMSprop):
 
         old_lr = self.param_groups[0]['lr']
         if old_lr != new_lr:
-            self.param_groups[0]['lr'] = new_lr
+            for g in self.param_groups:
+                g['lr'] = new_lr
             if verbose:
                 print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
