@@ -3458,22 +3458,19 @@ class Adan(Optimizer):
         return loss
 
 
-def _orthogonalize(mat, num_iters=5):
-    """Approximate orthogonalization with Newton-Schulz iterations.
-
-    中文：使用 Newton-Schulz 迭代將更新矩陣逼近為正交形式。
+def _orthogonalize(mat: torch.Tensor, num_iters: int = 5):
+    """
+    Newton–Schulz approximation of the polar factor (orthogonal part) of `mat`.
+    The in-place implementation avoids an unused `eye` tensor.
     """
     if mat.dim() < 2:
         return mat
     m, n = mat.shape
-    if m >= n:
-        eye = torch.eye(n, device=mat.device, dtype=mat.dtype)
-        for _ in range(num_iters):
-            mat = 1.5 * mat - 0.5 * mat @ (mat.transpose(0, 1) @ mat)
-    else:
-        eye = torch.eye(m, device=mat.device, dtype=mat.dtype)
-        for _ in range(num_iters):
-            mat = 1.5 * mat - 0.5 * (mat @ mat.transpose(0, 1)) @ mat
+    for _ in range(num_iters):
+        if m >= n:
+            mat = 1.5 * mat - 0.5 * mat @ (mat.T @ mat)   # tall or square
+        else:
+            mat = 1.5 * mat - 0.5 * (mat @ mat.T) @ mat   # wide
     return mat
 
 
