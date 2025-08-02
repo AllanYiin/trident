@@ -3543,7 +3543,7 @@ class AdamMini(Optimizer):
                         enable_cautious=enable_cautious)
         super(AdamMini, self).__init__(params, defaults)
         for group in self.param_groups:
-            group['shared_v'] = torch.zeros(1, device=next(group['params']).device)
+            group['shared_v'] = torch.zeros(1, device=next(iter(group['params'])).device)
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -3676,7 +3676,7 @@ class Apollo(Optimizer):
         super(Apollo, self).__init__(params, defaults)
 
         for group in self.param_groups:
-            group['scale'] = torch.zeros(rank, device=next(group['params']).device)
+            group['scale'] = torch.zeros(rank, device=next(iter(group['params'])).device)
 
     def _project(self, grad, rank):
         flat = grad.view(grad.size(0), -1)
