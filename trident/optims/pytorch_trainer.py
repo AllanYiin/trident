@@ -480,6 +480,12 @@ class Model(model.ModelBase,Layer):
 
     def with_optimizer(self, optimizer, **kwargs):
         params = [self._model] if is_tensor(self._model) else self._model.parameters()
+
+        # map cautious_enable to optimizer's enable_cautious
+        cautious_enable = kwargs.pop('cautious_enable', None)
+        if cautious_enable is not None:
+            kwargs.setdefault('enable_cautious', cautious_enable)
+
         if isinstance(optimizer, str):
             optimizer_class = get_optimizer(optimizer)
             self.optimizer = optimizer_class(params, **kwargs)
@@ -490,6 +496,14 @@ class Model(model.ModelBase,Layer):
             self.optimizer = optimizer
         else:
             self.optimizer = optimizer(params, **kwargs)
+
+        # link cautious flag with optimizer if available
+        if cautious_enable is not None and hasattr(self.optimizer, 'enable_cautious'):
+            self.optimizer.enable_cautious = cautious_enable
+        if hasattr(self.optimizer, 'enable_cautious'):
+            self.cautious_enable = self.optimizer.enable_cautious
+        else:
+            self.cautious_enable = cautious_enable if cautious_enable is not None else False
 
         self.base_lr = kwargs.get('lr', kwargs.get('learning_rate', 1e-3))
         self.training_context['current_lr'] = self.base_lr
@@ -1707,6 +1721,12 @@ class MuiltiNetwork(Model):
     def with_optimizer(self, optimizer, **kwargs):
         for k in self._networks.keys():
             self._networks[k].with_optimizer(optimizer=optimizer, **kwargs)
+
+        if 'cautious_enable' in kwargs:
+            self.cautious_enable = kwargs['cautious_enable']
+        elif len(self._networks) > 0:
+            first_network = next(iter(self._networks.values()))
+            self.cautious_enable = getattr(first_network, 'cautious_enable', False)
         return self
 
     def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
