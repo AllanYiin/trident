@@ -101,6 +101,13 @@ class Optimizer(optimizer.Optimizer):
         self.agc_clip_val = 1e-2
         self.agc_eps = 1e-3
         self.gradient_centralization = defaults.get('gradient_centralization', None)
+        # cautious optimizer settings
+        self.enable_cautious = defaults.get('enable_cautious', False)
+        self.cautious_eps = defaults.get('cautious_eps', 1e-8)
+
+    def _apply_cautious(self, update, grad):
+        mask = (update * grad > 0).to(grad.dtype)
+        return update * mask / (mask.mean() + self.cautious_eps)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -243,7 +250,7 @@ class Adam(Optimizer):
     """
 
     def __init__(self, params, lr=1e-3, betas=(0.95, 0.999), eps=1e-7, weight_decay=0, amsgrad=False,
-                 gradient_centralization=None, **kwargs):
+                 gradient_centralization=None, enable_cautious=False, **kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -255,7 +262,8 @@ class Adam(Optimizer):
         if not 0.0 <= weight_decay:
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
         defaults = dict(lr=lr, betas=betas, eps=eps,
-                        weight_decay=weight_decay, amsgrad=amsgrad)
+                        weight_decay=weight_decay, amsgrad=amsgrad,
+                        enable_cautious=enable_cautious)
 
         super(Adam, self).__init__(params, defaults)
         self.gradient_centralization = gradient_centralization
@@ -344,6 +352,8 @@ class Adam(Optimizer):
                 step_size = group['lr'] / bias_correction1
 
                 G_grad = exp_avg / denom
+                if self.enable_cautious:
+                    G_grad = self._apply_cautious(G_grad, grad)
                 # if self.gradient_centralization in ['all', 'gc']:
                 #     if ndim(G_grad) > 1:
                 #         G_grad.add_(-G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True))
@@ -812,7 +822,7 @@ class RAdam(Optimizer):
         """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, N_sma_threshhold=5,
-                 degenerated_to_sgd=True, gradient_centralization=None, **kwargs):
+                 degenerated_to_sgd=True, gradient_centralization=None, enable_cautious=False, **kwargs):
         """Construct a new RAdam optimizer.
         Args:
             params: trainable parameters from model
@@ -843,7 +853,8 @@ class RAdam(Optimizer):
                 if 'betas' in param and (param['betas'][0] != betas[0] or param['betas'][1] != betas[1]):
                     param['buffer'] = [[None, None, None] for _ in range(10)]
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
-                        buffer=[[None, None, None] for _ in range(10)])
+                        buffer=[[None, None, None] for _ in range(10)],
+                        enable_cautious=enable_cautious)
         super(RAdam, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -922,10 +933,13 @@ class RAdam(Optimizer):
                 # more conservative since it's an approximated value
                 if N_sma >= self.N_sma_threshhold:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data.addcdiv_(exp_avg, denom, value=-step_size * group['lr'])
-
+                    update = exp_avg / denom
                 elif step_size > 0:
-                    p_data.add_(exp_avg, alpha=-step_size * group['lr'])
+                    update = exp_avg
+                if N_sma >= self.N_sma_threshhold or step_size > 0:
+                    if self.enable_cautious:
+                        update = self._apply_cautious(update, grad)
+                    p_data.add_(update, alpha=-step_size * group['lr'])
                 p.data.copy_(p_data)
 
                 if half_precision:
@@ -937,7 +951,7 @@ class RAdam(Optimizer):
 
 class PlainRAdam(Optimizer):
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True,
-                 gradient_centralization=None, **kwargs):
+                 gradient_centralization=None, enable_cautious=False, **kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -948,7 +962,8 @@ class PlainRAdam(Optimizer):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
 
         self.degenerated_to_sgd = degenerated_to_sgd
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
+                        enable_cautious=enable_cautious)
 
         super(PlainRAdam, self).__init__(params, defaults)
 
@@ -1016,13 +1031,19 @@ class PlainRAdam(Optimizer):
                         (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
                                 N_sma_max - 2)) / (1 - beta1 ** state['step'])
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data.addcdiv_(grad, denom, value=-step_size)
+                    update = grad / denom
+                    if self.enable_cautious:
+                        update = self._apply_cautious(update, grad)
+                    p_data.add_(update, alpha=-step_size)
                     p.data.copy_(p_data)
                 elif self.degenerated_to_sgd:
                     if group['weight_decay'] != 0:
                         p_data.add_(p_data, alpha=-group['weight_decay'] * group['lr'])
                     step_size = group['lr'] / (1 - beta1 ** state['step'])
-                    p_data.add_(grad, alpha=-step_size)
+                    update = grad
+                    if self.enable_cautious:
+                        update = self._apply_cautious(update, grad)
+                    p_data.add_(update, alpha=-step_size)
                     p.data.copy_(p_data)
 
                 if half_precision:
@@ -1049,10 +1070,14 @@ class AdamW(Optimizer):
     Examples:
         >>> AdamW(lr=0.001, betas=(0.9, 0.999))
 
+    Args:
+        enable_cautious (bool): If True, applies cautious masking to momentum
+            updates as proposed in C-AdamW.
+
     """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, warmup=0,
-                 gradient_centralization=None, **kwargs):
+                 gradient_centralization=None, enable_cautious=False, **kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -1063,7 +1088,8 @@ class AdamW(Optimizer):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
         self._base_lr = lr
         self.gradient_centralization = gradient_centralization
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, warmup=warmup)
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, warmup=warmup,
+                        enable_cautious=enable_cautious)
         super(AdamW, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -1148,8 +1174,11 @@ class AdamW(Optimizer):
                 if self.gradient_centralization in ['all', 'gc']:
                     if ndim(G_grad) > 1:
                         G_grad.add_(-G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True))
-
-                p_data.add_(G_grad, alpha=-step_size)
+                if self.enable_cautious:
+                    mask = (G_grad * grad > 0).to(grad.dtype)
+                    p_data.add_(G_grad * mask / (mask.mean() + self.cautious_eps), alpha=-step_size)
+                else:
+                    p_data.add_(G_grad, alpha=-step_size)
 
                 p.data.copy_(p_data)
 
@@ -1234,7 +1263,8 @@ class Ranger(Optimizer):
     """
 
     def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
-                 weight_decay=0, gradient_centralization=None, use_adaptive_gradient_clipping=False, **kwargs):
+                 weight_decay=0, gradient_centralization=None, use_adaptive_gradient_clipping=False,
+                 enable_cautious=False, **kwargs):
         self.gradient_centralization = gradient_centralization
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
@@ -1256,7 +1286,8 @@ class Ranger(Optimizer):
         defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas,
                         N_sma_threshhold=N_sma_threshhold, eps=eps,
                         weight_decay=weight_decay, gradient_centralization=gradient_centralization,
-                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        enable_cautious=enable_cautious)
         super().__init__(params, defaults)
 
         # adjustable threshold
@@ -1385,6 +1416,8 @@ class Ranger(Optimizer):
                     if ndim(G_grad) > 1:
                         G_grad.add_(-G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True))
 
+                if self.enable_cautious:
+                    G_grad = self._apply_cautious(G_grad, grad)
                 p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
                 if any_abnormal_number(p_data_fp32):
                     sys.stderr.write(
@@ -1446,7 +1479,8 @@ class Ranger21(Optimizer):
                  warmdown_min_lr=3e-5,
                  decay_type="stable",
                  warmup_type="linear",
-                 warmup_pct_default=0.22, **kwargs):
+                 warmup_pct_default=0.22,
+                 enable_cautious=False, **kwargs):
         self._base_lr = lr
         # momentum
         self.momentum_pnm = momentum_type == "pnm"
@@ -1578,7 +1612,8 @@ class Ranger21(Optimizer):
         # prep defaults and init torch.optim base
         defaults = dict(
             lr=lr, momentum=momentum, betas=betas, eps=eps, weight_decay=weight_decay,
-            gradient_centralization=gradient_centralization
+            gradient_centralization=gradient_centralization,
+            enable_cautious=enable_cautious
         )
 
         super().__init__(params, defaults)
@@ -2051,7 +2086,10 @@ class Ranger21(Optimizer):
                         .mul(1 / noise_norm)
                     )
 
-                    p.addcdiv_(pnmomentum, denom, value=-step_size)
+                    update = pnmomentum / denom
+                    if self.enable_cautious:
+                        update = self._apply_cautious(update, grad)
+                    p.add_(update, alpha=-step_size)
 
                     # denom = variance_biased_ma.sqrt().add(eps)
 
@@ -2078,7 +2116,8 @@ class RangerLars(Optimizer):
     """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6, N_sma_threshhold=5, eps=1e-7,
-                 weight_decay=0, gradient_centralization=None, use_adaptive_gradient_clipping=False, **kwargs):
+                 weight_decay=0, gradient_centralization=None, use_adaptive_gradient_clipping=False,
+                 enable_cautious=False, **kwargs):
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {alpha}')
@@ -2098,7 +2137,8 @@ class RangerLars(Optimizer):
 
         # prep defaults and init torch.optim base
         defaults = dict(lr=lr, alpha=alpha, k=k, betas=betas, eps=eps, weight_decay=weight_decay,
-                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        enable_cautious=enable_cautious)
 
         super().__init__(params, defaults)
         # radam buffer for state
@@ -2199,13 +2239,13 @@ class RangerLars(Optimizer):
                         step_size = 1.0 / (1 - beta1 ** state['step'])
                     buffered[2] = step_size
 
-                update = zeros_like(p_data)
                 if N_sma >= 5:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
 
                     G_grad = (exp_avg / denom) * step_size
                 else:
                     G_grad = exp_avg * step_size
+                update = G_grad
 
                 # if group['weight_decay'] != 0:
                 #     update.add_(group['weight_decay'], p_data)
@@ -2216,6 +2256,8 @@ class RangerLars(Optimizer):
                     if ndim(G_grad) > 1:
                         G_grad = G_grad - G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
 
+                if self.enable_cautious:
+                    update = self._apply_cautious(update, grad)
                 radam_norm = update.pow(2.0).sum().sqrt()
                 weight_norm = p.data.pow(2.0).sum().sqrt()
                 if weight_norm == 0 or radam_norm == 0:
@@ -2273,7 +2315,8 @@ class LARS(Optimizer):
             exclude_from_weight_decay=None,
             exclude_from_layer_adaptation=None,
             classic_momentum=True,
-            eeta=0.001, use_adaptive_gradient_clipping=False, **kwargs):
+            eeta=0.001, use_adaptive_gradient_clipping=False,
+            enable_cautious=False, **kwargs):
         """Constructs a LARSOptimizer.
         Args:
         lr: A `float` for learning rate.
@@ -2306,6 +2349,7 @@ class LARS(Optimizer):
             classic_momentum=classic_momentum,
             use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
             eeta=eeta,
+            enable_cautious=enable_cautious,
         )
 
         super(LARS, self).__init__(params, defaults)
@@ -2398,7 +2442,8 @@ class LARS(Optimizer):
                         update = (self.momentum * next_v) + (scaled_lr * grad)
                     else:
                         update = next_v
-
+                    if self.enable_cautious:
+                        update = self._apply_cautious(update, grad)
                     p.data.add_(-update)
                     if half_precision:
                         p.data = p.data.half()
@@ -2460,7 +2505,8 @@ class AdaBelief(Optimizer):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7,
                  weight_decay=0, amsgrad=False, weight_decouple=True, fixed_decay=False, rectify=True,
-                 degenerated_to_sgd=True, use_adaptive_gradient_clipping=False, gradient_centralization=None, **kwargs):
+                 degenerated_to_sgd=True, use_adaptive_gradient_clipping=False, gradient_centralization=None,
+                 enable_cautious=False, **kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2477,7 +2523,8 @@ class AdaBelief(Optimizer):
 
         defaults = dict(lr=lr, betas=betas, eps=eps,
                         weight_decay=weight_decay, amsgrad=amsgrad, buffer=[[None, None, None] for _ in range(10)],
-                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        enable_cautious=enable_cautious)
         super(AdaBelief, self).__init__(params, defaults)
 
         self.degenerated_to_sgd = degenerated_to_sgd
@@ -2613,7 +2660,7 @@ class AdaBelief(Optimizer):
                     # Default update
                     step_size = 1 / bias_correction1
                     G_grad = exp_avg / denom
-
+                
 
                 else:  # Rectified update, forked from RAdam
                     buffered = group['buffer'][int(state['step'] % 10)]
@@ -2648,6 +2695,8 @@ class AdaBelief(Optimizer):
                 #     if ndim(G_grad) > 1:
                 #         G_grad = G_grad - G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
 
+                if self.enable_cautious:
+                    G_grad = self._apply_cautious(G_grad, grad)
                 p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
                 if any_abnormal_number(p_data_fp32):
                     sys.stderr.write(
@@ -2702,7 +2751,7 @@ class RangerAdaBelief(Optimizer):
                  betas=(.95, 0.999), eps=1e-5, weight_decay=0,  # Adam options
                  # Gradient centralization on or off, applied to conv layers only or conv + fc layers
                  adabelief=True, weight_decouple=True, use_adaptive_gradient_clipping=False,
-                 gradient_centralization=None, **kwargs):
+                 gradient_centralization=None, enable_cautious=False, **kwargs):
 
         if not 0.0 <= alpha <= 1.0:
             raise ValueError(f'Invalid slow update rate: {alpha}')
@@ -2721,7 +2770,8 @@ class RangerAdaBelief(Optimizer):
         # prep defaults and init torch.optim base
         defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas,
                         N_sma_threshhold=N_sma_threshhold, eps=eps, weight_decay=weight_decay,
-                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        enable_cautious=enable_cautious)
         super().__init__(params, defaults)
 
         # adjustable threshold
@@ -2878,6 +2928,8 @@ class RangerAdaBelief(Optimizer):
                     if ndim(G_grad) > 1:
                         G_grad = G_grad - G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
 
+                if self.enable_cautious:
+                    G_grad = self._apply_cautious(G_grad, grad)
                 p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
 
                 p.data.copy_(p_data_fp32)
@@ -2924,7 +2976,7 @@ class DiffGrad(Optimizer):
     """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0,
-                 use_adaptive_gradient_clipping=False, gradient_centralization=None):
+                 use_adaptive_gradient_clipping=False, gradient_centralization=None, enable_cautious=False):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2936,7 +2988,8 @@ class DiffGrad(Optimizer):
         self.gradient_centralization = gradient_centralization
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
                         gradient_centralization=gradient_centralization,
-                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        enable_cautious=enable_cautious)
         super(DiffGrad, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -3024,6 +3077,8 @@ class DiffGrad(Optimizer):
 
                 step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
 
+                if self.enable_cautious:
+                    G_grad = self._apply_cautious(G_grad, grad)
                 p.data.add_(G_grad, alpha=-step_size)
 
                 if half_precision:
@@ -3051,7 +3106,7 @@ class Lamb(Optimizer):
     """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6, weight_decay=0, adam=False,
-                 gradient_centralization=None, **kwargs):
+                 gradient_centralization=None, enable_cautious=False, **kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -3062,7 +3117,8 @@ class Lamb(Optimizer):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
         self.gradient_centralization = gradient_centralization
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
-                        gradient_centralization=gradient_centralization)
+                        gradient_centralization=gradient_centralization,
+                        enable_cautious=enable_cautious)
         self.adam = adam
         super(Lamb, self).__init__(params, defaults)
 
@@ -3141,7 +3197,10 @@ class Lamb(Optimizer):
                 if self.adam:
                     trust_ratio = 1
 
-                p.data.add_(adam_step, alpha=-step_size * trust_ratio)
+                update = adam_step
+                if self.enable_cautious:
+                    update = self._apply_cautious(update, grad)
+                p.data.add_(update, alpha=-step_size * trust_ratio)
 
                 if half_precision:
                     p.data = p.data.half()
@@ -3153,10 +3212,15 @@ class Lion(Optimizer):
     r"""Implements Lion, EvoLved Sign Momentum
      new optimizer discovered by Google Brain that is purportedly better than Adam(w).
 
+    Args:
+        enable_cautious (bool): If True, applies cautious masking to momentum
+            updates similar to C-Lion.
+
     """
 
     def __init__(self, params, lr=1e-4, betas=(0.9, 0.999), eps=1e-7, weight_decay=0,
-                 use_adaptive_gradient_clipping=False, gradient_centralization=None):
+                 use_adaptive_gradient_clipping=False, gradient_centralization=None,
+                 enable_cautious=False):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -3168,7 +3232,8 @@ class Lion(Optimizer):
         self.gradient_centralization = gradient_centralization
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
                         gradient_centralization=gradient_centralization,
-                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping)
+                        use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
+                        enable_cautious=enable_cautious)
         super(Lion, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -3231,7 +3296,11 @@ class Lion(Optimizer):
                 # weight update
 
                 update = exp_avg.clone().lerp_(grad, 1 - beta1).sign_()
-                p.add_(update, alpha=- group['lr'])
+                if self.enable_cautious:
+                    mask = (update * grad > 0).to(grad.dtype)
+                    p.add_(update * mask / (mask.mean() + self.cautious_eps), alpha=- group['lr'])
+                else:
+                    p.add_(update, alpha=- group['lr'])
 
                 # decay the momentum running average coefficient
 
@@ -3258,12 +3327,13 @@ class Sophia(Optimizer):
     def __init__(self, params, lr=1e-4, betas=(0.9, 0.99), rho=0.04,
                  eps=1e-8, weight_decay=0., hessian_interval=10,
                  use_adaptive_gradient_clipping=False,
-                 gradient_centralization=None):
+                 gradient_centralization=None, enable_cautious=False):
         defaults = dict(lr=lr, betas=betas, rho=rho, eps=eps,
                         weight_decay=weight_decay,
                         hessian_interval=hessian_interval,
                         use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
-                        gradient_centralization=gradient_centralization)
+                        gradient_centralization=gradient_centralization,
+                        enable_cautious=enable_cautious)
         super(Sophia, self).__init__(params, defaults)
 
     @torch.no_grad()
@@ -3305,7 +3375,10 @@ class Sophia(Optimizer):
                     h_diag.mul_(beta2).add_(h_est, alpha=1 - beta2)
 
                 denom = h_diag.abs().add_(eps).clamp(max=rho)
-                p.data.addcdiv_(exp_avg, denom, value=-lr)
+                update = exp_avg / denom
+                if self.enable_cautious:
+                    update = self._apply_cautious(update, grad)
+                p.data.add_(update, alpha=-lr)
 
         return loss
 
@@ -3319,12 +3392,13 @@ class Adan(Optimizer):
     def __init__(self, params, lr=1e-3, betas=(0.98, 0.92, 0.99),
                  eps=1e-8, weight_decay=0.,
                  use_adaptive_gradient_clipping=False,
-                 gradient_centralization=None):
+                 gradient_centralization=None, enable_cautious=False):
         assert len(betas) == 3, 'Adan requires three beta values'
         defaults = dict(lr=lr, betas=betas, eps=eps,
                         weight_decay=weight_decay,
                         use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
-                        gradient_centralization=gradient_centralization)
+                        gradient_centralization=gradient_centralization,
+                        enable_cautious=enable_cautious)
         super(Adan, self).__init__(params, defaults)
 
     @torch.no_grad()
@@ -3368,7 +3442,10 @@ class Adan(Optimizer):
 
                 step_size = lr / bias_correction1
                 denom = (n / bias_correction3).sqrt().add_(eps)
-                p.data.addcdiv_(m, denom, value=-step_size)
+                update = m / denom
+                if self.enable_cautious:
+                    update = self._apply_cautious(update, grad)
+                p.data.add_(update, alpha=-step_size)
 
                 state['prev_grad'].copy_(grad)
 
@@ -3403,11 +3480,13 @@ class Muon(Optimizer):
 
     def __init__(self, params, lr=1e-3, momentum=0.9, weight_decay=0.,
                  use_adaptive_gradient_clipping=False,
-                 gradient_centralization=None, orthogonal_iters=5):
+                 gradient_centralization=None, orthogonal_iters=5,
+                 enable_cautious=False):
         defaults = dict(lr=lr, momentum=momentum, weight_decay=weight_decay,
                         use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
                         gradient_centralization=gradient_centralization,
-                        orthogonal_iters=orthogonal_iters)
+                        orthogonal_iters=orthogonal_iters,
+                        enable_cautious=enable_cautious)
         super(Muon, self).__init__(params, defaults)
 
     @torch.no_grad()
@@ -3437,7 +3516,8 @@ class Muon(Optimizer):
                 update = buf.clone()
                 if p.dim() >= 2:
                     update = _orthogonalize(update, num_iters=k)
-
+                if self.enable_cautious:
+                    update = self._apply_cautious(update, grad)
                 p.add_(update, alpha=-lr)
 
         return loss
@@ -3453,10 +3533,11 @@ class AdamMini(Optimizer):
     def __init__(self, params, lr=1e-4, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.,
                  use_adaptive_gradient_clipping=False,
-                 gradient_centralization=None):
+                 gradient_centralization=None, enable_cautious=False):
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
                         use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
-                        gradient_centralization=gradient_centralization)
+                        gradient_centralization=gradient_centralization,
+                        enable_cautious=enable_cautious)
         super(AdamMini, self).__init__(params, defaults)
         for group in self.param_groups:
             group['shared_v'] = torch.zeros(1, device=next(group['params']).device)
@@ -3493,7 +3574,10 @@ class AdamMini(Optimizer):
 
                 step_size = lr / (1 - beta1 ** state['step'])
                 denom = shared_v.sqrt().add_(eps)
-                p.data.addcdiv_(exp_avg, denom, value=-step_size)
+                update = exp_avg / denom
+                if self.enable_cautious:
+                    update = self._apply_cautious(update, grad)
+                p.data.add_(update, alpha=-step_size)
 
         return loss
 
@@ -3508,11 +3592,12 @@ class GaLore(Optimizer):
     def __init__(self, params, lr=1e-4, betas=(0.9, 0.999), eps=1e-8,
                  rank=8, weight_decay=0.,
                  use_adaptive_gradient_clipping=False,
-                 gradient_centralization=None):
+                 gradient_centralization=None, enable_cautious=False):
         defaults = dict(lr=lr, betas=betas, eps=eps, rank=rank,
                         weight_decay=weight_decay,
                         use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
-                        gradient_centralization=gradient_centralization)
+                        gradient_centralization=gradient_centralization,
+                        enable_cautious=enable_cautious)
         super(GaLore, self).__init__(params, defaults)
 
     def _low_rank(self, grad, rank):
@@ -3561,7 +3646,10 @@ class GaLore(Optimizer):
                 step_size = lr * math.sqrt(bias_correction2) / bias_correction1
 
                 denom = exp_avg_sq.sqrt().add_(eps)
-                p.data.addcdiv_(exp_avg, denom, value=-step_size)
+                update = exp_avg / denom
+                if self.enable_cautious:
+                    update = self._apply_cautious(update, grad)
+                p.data.add_(update, alpha=-step_size)
 
         return loss
 
@@ -3576,11 +3664,12 @@ class Apollo(Optimizer):
     def __init__(self, params, lr=1e-4, betas=(0.9, 0.999), eps=1e-8,
                  rank=1, weight_decay=0.,
                  use_adaptive_gradient_clipping=False,
-                 gradient_centralization=None):
+                 gradient_centralization=None, enable_cautious=False):
         defaults = dict(lr=lr, betas=betas, eps=eps, rank=rank,
                         weight_decay=weight_decay,
                         use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
-                        gradient_centralization=gradient_centralization)
+                        gradient_centralization=gradient_centralization,
+                        enable_cautious=enable_cautious)
         super(Apollo, self).__init__(params, defaults)
 
         for group in self.param_groups:
@@ -3622,10 +3711,14 @@ class Apollo(Optimizer):
 
                 scale[:] = self._project(grad, rank)
 
-                exp_avg.mul_(beta1).add_(grad / (scale.view(-1, *([1] * (grad.dim() - 1))) + eps), alpha=1 - beta1)
+                norm_grad = grad / (scale.view(-1, *([1] * (grad.dim() - 1))) + eps)
+                exp_avg.mul_(beta1).add_(norm_grad, alpha=1 - beta1)
 
                 step_size = lr / (1 - beta1 ** state['step'])
-                p.data.add_(exp_avg, alpha=-step_size)
+                update = exp_avg
+                if self.enable_cautious:
+                    update = self._apply_cautious(update, norm_grad)
+                p.data.add_(update, alpha=-step_size)
 
         return loss
 
