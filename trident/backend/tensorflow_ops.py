@@ -2110,7 +2110,7 @@ def where(flag, value_if_true=None, value_if_false=None, name='where'):
 # reduce operation
 ###########################
 @numpy_compatible
-def reduce_mean(x: Tensor, axis=None, keepdims=False, name='reduce_mean'):
+def reduce_mean(x: Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, name='reduce_mean'):
     """Computes the mean of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis` by computing the
@@ -2138,6 +2138,8 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, name='reduce_mean'):
         dimensions. Must be in the range `[-rank(input_tensor),
         rank(input_tensor))`.
       keepdims: If true, retains reduced dimensions with length 1.
+      keepdim: Alias for ``keepdims`` for PyTorch compatibility. If provided, its
+        value must match ``keepdims``. This argument may be deprecated in the future.
       name: A name for the operation (optional).
 
     Returns:
@@ -2160,13 +2162,17 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, name='reduce_mean'):
 
     @end_compatibility
     """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     if x.dtype == Dtype.bool:
         x = cast(x, Dtype.float)
     return tf.math.reduce_mean(x, axis=axis, keepdims=keepdims, name=name)
 
 
 @numpy_compatible
-def reduce_sum(x: Tensor, axis=None, keepdims=False, name='reduce_sum'):
+def reduce_sum(x: Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, name='reduce_sum'):
     """Computes the sum of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -2215,6 +2221,8 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, name='reduce_sum'):
         dimensions. Must be in the range `[-rank(input_tensor),
         rank(input_tensor)]`.
       keepdims: If true, retains reduced dimensions with length 1.
+      keepdim: Alias for ``keepdims`` for PyTorch compatibility. If provided, its
+        value must match ``keepdims``. This argument may be deprecated in the future.
       name: A name for the operation (optional).
 
     Returns:
@@ -2226,6 +2234,10 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, name='reduce_sum'):
     @end_compatibility
     """
 
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     if x.dtype == Dtype.bool:
         x = cast(x, Dtype.float)
     _xdtype = x.dtype
@@ -2236,7 +2248,7 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, name='reduce_sum'):
 
 
 @numpy_compatible
-def reduce_max(x: Tensor, axis=None, keepdims=False, name='reduce_max'):
+def reduce_max(x: Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, name='reduce_max'):
     """Computes the maximum of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -2256,6 +2268,8 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, name='reduce_max'):
         dimensions. Must be in the range `[-rank(input_tensor),
         rank(input_tensor))`.
       keepdims: If true, retains reduced dimensions with length 1.
+      keepdim: Alias for ``keepdims`` for PyTorch compatibility. If provided, its
+        value must match ``keepdims``. This argument may be deprecated in the future.
       name (str): op name
 
     Returns:
@@ -2279,11 +2293,15 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, name='reduce_max'):
         Tensor(inf, shape=(), dtype=float32)
 
     """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     return tf.math.reduce_max(x, axis=axis, keepdims=keepdims, name=name)
 
 
 @numpy_compatible
-def reduce_min(x: Tensor, axis=None, keepdims=False, name='reduce_min'):
+def reduce_min(x: Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, name='reduce_min'):
     """Computes the minimum of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -2303,6 +2321,8 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, name='reduce_min'):
         dimensions. Must be in the range `[-rank(input_tensor),
         rank(input_tensor))`.
       keepdims: If true, retains reduced dimensions with length 1.
+      keepdim: Alias for ``keepdims`` for PyTorch compatibility. If provided, its
+        value must match ``keepdims``. This argument may be deprecated in the future.
       name (str): op name
 
     Returns:
@@ -2326,11 +2346,15 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, name='reduce_min'):
         Tensor(inf, shape=(), dtype=float32)
 
     """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     return tf.math.reduce_min(x, axis=axis, keepdims=keepdims, name=name)
 
 
 @numpy_compatible
-def reduce_std(x: Tensor, axis=None, keepdims=False, name='reduce_min'):
+def reduce_std(x: Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, name='reduce_min'):
     """Computes the minimum of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -2350,6 +2374,8 @@ def reduce_std(x: Tensor, axis=None, keepdims=False, name='reduce_min'):
         dimensions. Must be in the range `[-rank(input_tensor),
         rank(input_tensor))`.
       keepdims: If true, retains reduced dimensions with length 1.
+      keepdim: Alias for ``keepdims`` for PyTorch compatibility. If provided, its
+        value must match ``keepdims``. This argument may be deprecated in the future.
       name (str): op name
 
     Returns:
@@ -2373,11 +2399,15 @@ def reduce_std(x: Tensor, axis=None, keepdims=False, name='reduce_min'):
         Tensor(inf, shape=(), dtype=float32)
 
     """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     return tf.math.reduce_std(x, axis=axis, keepdims=keepdims, name=name)
 
 
 @numpy_compatible
-def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, name='reduce_logsumexp'):
+def reduce_logsumexp(x: Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, name='reduce_logsumexp'):
     """Computes log(sum(exp(elements across dimensions of a tensor))).
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -2404,7 +2434,9 @@ def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, name='reduce_logsumex
     Args:
         x (tf.tensor): Input_tensor,the tensor to reduce. Should have numeric type.
         axis (int, list, tuple): The dimensions to reduce. If `None` (the default), reduces all dimensions. Must be in the range `[-rank(input_tensor), rank(input_tensor))`.
-        keepdims (bool): If true, retains reduced dimensions with length 1.
+      keepdims (bool): If true, retains reduced dimensions with length 1.
+      keepdim (bool, optional): Alias for ``keepdims`` for PyTorch compatibility. If provided,
+        its value must match ``keepdims``. This argument may be deprecated in the future.
         name (str): op name
 
     Returns:
@@ -2413,11 +2445,15 @@ def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, name='reduce_logsumex
     """
     if x.dtype == Dtype.bool:
         x = cast(x, Dtype.float)
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     return tf.math.reduce_logsumexp(x, axis=axis, keepdims=keepdims, name=name)
 
 
 @numpy_compatible
-def reduce_prod(x: Tensor, axis=None, keepdims=False, name='reduce_prod'):
+def reduce_prod(x: Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, name='reduce_prod'):
     """Computes the product of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -2434,6 +2470,8 @@ def reduce_prod(x: Tensor, axis=None, keepdims=False, name='reduce_prod'):
         dimensions. Must be in the range `[-rank(input_tensor),
         rank(input_tensor))`.
       keepdims: If true, retains reduced dimensions with length 1.
+      keepdim: Alias for ``keepdims`` for PyTorch compatibility. If provided, its
+        value must match ``keepdims``. This argument may be deprecated in the future.
       name (str): op name
 
     Returns:
@@ -2443,11 +2481,19 @@ def reduce_prod(x: Tensor, axis=None, keepdims=False, name='reduce_prod'):
     Equivalent to np.prod
     @end_compatibility
     """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     return tf.math.reduce_prod(x, axis=axis, keepdims=keepdims, name=name)
 
 
 @numpy_compatible
-def reduce_any(x: Tensor, axis=None, keepdims=False, name='reduce_prod'):
+def reduce_any(x: Tensor, axis=None, keepdims: bool = False, *, keepdim: Optional[bool] = None, name='reduce_prod'):
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     x = tf.greater(x, 0)
     return tf.math.reduce_any(x, axis=axis, keepdims=keepdims, name=name)
 
@@ -3167,7 +3213,7 @@ def gpt_gelu(x: Tensor, name='gpt_gelu'):
 # normalization operation
 ###########################
 @numpy_compatible
-def moments(x: Tensor, axis, keepdims=True):
+def moments(x: Tensor, axis, keepdims: bool = True, *, keepdim: Optional[bool] = None):
     """Calculates the mean and variance of `x`.
 
       The mean and variance are calculated by aggregating the contents of `x`
@@ -3193,17 +3239,25 @@ def moments(x: Tensor, axis, keepdims=True):
       Returns:
         Two `Tensor` objects: `mean` and `variance`.
       """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     return tf.nn.moments(x, axes=axis, keepdims=keepdims)
 
 
-def norm(x: Tensor, order=None, axis=-1, keepdims=False):
+def norm(x: Tensor, order=None, axis=-1, keepdims: bool = False, *, keepdim: Optional[bool] = None):
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     if order is None:
         order = 'euclidean'
     return tf.norm(x, ord=order, axis=axis, keepdims=keepdims)
 
 
 @numpy_compatible
-def l2_normalize(x: Tensor, axis=-1, keepdims=True, eps=epsilon()):
+def l2_normalize(x: Tensor, axis=-1, keepdims: bool = True, eps=epsilon(), *, keepdim: Optional[bool] = None):
     """
 
     Args:
@@ -3224,6 +3278,10 @@ def l2_normalize(x: Tensor, axis=-1, keepdims=True, eps=epsilon()):
         >>> reduce_mean(l2_normalize(b)-tf.nn.l2_normalize(b)).numpy()
         0.0
     """
+    if keepdim is not None:
+        if keepdims != keepdim:
+            raise ValueError("keepdims and keepdim 不可同時指定不同值")
+        keepdims = keepdim
     return x / (tf.norm(x, keepdims=keepdims) + eps)
 
 
