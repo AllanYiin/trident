@@ -376,11 +376,12 @@ def to_tensor(x: Any, dtype: Optional[_dtype] = None, device: Device = None, req
             else:
                 if dtype == Dtype.int32:
                     dtype = Dtype.int64
-                x = x.type(dtype)
+                if x.dtype != dtype:
+                    x = x.to(dtype)
             x = x.to(device)
             if isinstance(requires_grad, bool) and requires_grad != x.requires_grad:
                 x.requires_grad = requires_grad
-            return x.to(dtype)
+            return x
         return None
     else:
         if x is None:
@@ -440,7 +441,8 @@ def to_tensor(x: Any, dtype: Optional[_dtype] = None, device: Device = None, req
             x = torch.from_numpy(x).to(device)
             if dtype is None:
                 dtype = ctx.float_dtype
-            x = x.type(dtype)
+            if x.dtype != dtype:
+                x = x.to(dtype)
             if not requires_grad:
                 x.requires_grad = False
             elif requires_grad:
@@ -456,19 +458,19 @@ def to_scalar(x: Any) -> Optional[Union[_int, _float]]:
     elif is_tensor(x):
         x = x.squeeze()
         if ndim(x) == 0:
-            return x.item()
+            return float(x.detach().cpu())
         elif ndim(x) == 1:
-            return x[-1].item()
+            return float(x[-1].detach().cpu())
         else:
-            return x.mean().item()
+            return float(x.mean().detach().cpu())
     elif isinstance(x, np.ndarray):
         x = np.squeeze(x)
         if len(x.shape) == 0:
-            return x.item()
+            return float(x)
         elif len(x.shape) == 1:
-            return x[-1].item()
+            return float(x[-1])
         else:
-            return x.mean().item()
+            return float(x.mean())
     elif isinstance(x, numbers.Number):
         return x
     elif isinstance(x, (list, tuple)) and len(x) > 0:
@@ -664,26 +666,9 @@ def cast(x, cast_dtype: (str, torch.dtype)):
     """
     cast_dtype = str2dtype(cast_dtype)
     if isinstance(cast_dtype, torch.dtype):
-        if cast_dtype == Dtype.float64 or cast_dtype == Dtype.double:
-            return x.double()
-        elif cast_dtype == Dtype.float16 or cast_dtype == Dtype.half:
-            return x.half()
-        elif cast_dtype == Dtype.float32:
-            return x.float()
-        elif cast_dtype == Dtype.int64:
-            return x.long()
-        elif cast_dtype == Dtype.int32:
-            return x.int()
-        elif cast_dtype == Dtype.int16:
-            return x.short()
-        elif cast_dtype == Dtype.int8:
-            return x.char()
-        elif cast_dtype == Dtype.uint8:
-            return x.byte()
-        elif cast_dtype == Dtype.bool:
-            return x.bool()
-        else:
-            return x
+        if x.dtype != cast_dtype:
+            return x.to(cast_dtype)
+        return x
 
 
 def to(x, *args, **kwargs):
@@ -4088,7 +4073,7 @@ def index_select(x: Tensor, axis: int, indices: Tensor):
 
     """
     num_class = int_shape(x)[axis]
-    if reduce_sum(greater_equal(indices, num_class, dtype=ctx.float_dtype)):
+    if bool(torch.any(greater_equal(indices, num_class, dtype=Dtype.bool))):
         raise ValueError('Number of class are {0}, indices should not out of the range.'.format(num_class))
     return torch.index_select(x, dim=axis, index=indices)
 
@@ -4299,9 +4284,9 @@ def random_normal_like(x, mean: Union[Tensor, float] = 0.0, std: Union[Tensor, f
     if std is None or std < 0.02:
         std = 0.02
     if is_tensor(std):
-        std = std.item()
+        std = to_scalar(std)
     if is_tensor(mean):
-        mean = mean.item()
+        mean = to_scalar(mean)
 
     return torch.normal(mean=mean, std=std, size=x.shape, dtype=x.dtype, device=x.device)
 
@@ -4641,7 +4626,9 @@ def hsv2rgb(hsv: Tensor):
     _x = _c * (- torch.abs(hsv_h * 6. % 2. - 1) + 1.)
     _m = hsv_l - _c
     _o = torch.zeros_like(_c)
-    idx = (hsv_h * 6.).type(torch.uint8)
+    idx = (hsv_h * 6.)
+    if idx.dtype != torch.uint8:
+        idx = idx.to(torch.uint8)
     idx = (idx % 6).expand(-1, 3, -1, -1)
     rgb = torch.empty_like(hsv)
     rgb[idx == 0] = torch.cat([_c, _x, _o], dim=1)[idx == 0]
@@ -5214,7 +5201,7 @@ def hard_nms(box_scores, iou_threshold: float = 0.5, top_k=-1, candidate_size=20
     indexes = indexes[:candidate_size]
     while len(indexes) > 0:
         current = indexes[0]
-        picked.append(current.item())
+        picked.append(current.detach().cpu().tolist())
         if 0 < top_k == len(picked) or len(indexes) == 1:
             break
         current_box = boxes[current, :]
