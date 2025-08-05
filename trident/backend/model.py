@@ -325,7 +325,7 @@ class ModelBase(object):
                 self._signature.inputs[self._signature.inputs.key_list[0]].shape = tensor_to_shape(to_tensor(img_data),
                                                                                                    need_exclude_batch_axis=False)
                 self._signature.inputs[self._signature.inputs.key_list[0]].object_type = ObjectType.rgb
-                self._signature.inputs[self._signature.inputs.key_list[0]].dtype = dtype.float32
+                self._signature.inputs[self._signature.inputs.key_list[0]].dtype = ctx.float_dtype
 
             return img_data
         else:
@@ -731,7 +731,7 @@ class ModelBase(object):
                     loss_weight = to_tensor(1.0)
                     if k in self.loss_weights:
                         loss_weight = self.loss_weights[k]
-                    loss_weight = to_tensor(loss_weight, 'float32')
+                    loss_weight = to_tensor(loss_weight, ctx.float_dtype)
                     # print(-1, 'train_data', self.train_data.value_list[-1].shape, 'abnormal:', any_abnormal_number( self.train_data.value_list[-1]))
                     # print(self.train_data.value_list[-1])
                     this_loss = loss_weight * try_map_args_and_call(v, self.train_data,
