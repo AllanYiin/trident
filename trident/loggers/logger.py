@@ -1,0 +1,48 @@
+import functools
+import operator
+from abc import ABC, abstractmethod
+
+class BaseLogger(ABC):
+    """
+    Base logger handler. See implementations: TensorboardLogger, VisdomLogger, PolyaxonLogger, MLflowLogger, ...
+
+    """
+
+    def log_metrics(self, metric_name,value, step):
+
+        """Record metrics.
+        :param float metrics: Dictionary with metric names as keys and measured quanties as values
+        :param int|None step: Step number at which the metrics should be recorded
+        """
+        raise NotImplementedError()
+
+    def log_aggregate(self, agg, step):
+
+        """Record metrics.
+        :param float metric: Dictionary with metric names as keys and measured quanties as values
+        :param int|None step: Step number at which the metrics should be recorded
+        """
+        raise NotImplementedError()
+
+
+
+    def save(self):
+
+        """Save log data."""
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
+
+    def close(self):
+        pass
+
+
+
+
+
+        pass
+
