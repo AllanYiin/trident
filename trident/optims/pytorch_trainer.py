@@ -1075,7 +1075,7 @@ class Model(model.ModelBase,Layer):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
-        if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+        if isinstance(self._model, nn.Module) and any_abnormal_number(self._model):
             is_abnormal = True
             for para in self._model.parameters():
                 if any_abnormal_number(para):
@@ -2242,10 +2242,12 @@ class LanguageModel(Model):
         self.preprocess_flow = []
 
     def save_model(self, save_path=None, **kwargs):
+        is_abnormal = False
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
-        if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+        if isinstance(self._model, nn.Module) and any_abnormal_number(self._model):
+            is_abnormal = True
             for para in self._model.parameters():
                 if any_abnormal_number(para):
                     para.data.copy_(
@@ -2260,7 +2262,7 @@ class LanguageModel(Model):
         else:
             save_path = self.training_context['save_path']
 
-        if isinstance(self._model, nn.Module):
+        if isinstance(self._model, nn.Module) and not is_abnormal:
             try:
                 folder, filename, ext = split_path(save_path)
                 if filename == '':
@@ -2294,7 +2296,7 @@ class LanguageModel(Model):
                 ctx.print(e)
                 PrintException()
 
-        elif isinstance(self._model, torch.Tensor):
+        elif isinstance(self._model, torch.Tensor) and not is_abnormal:
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
