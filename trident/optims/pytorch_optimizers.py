@@ -3393,13 +3393,29 @@ class Adan(Optimizer):
     """Implements Adan optimizer combining adaptive moments and Nesterov momentum.
 
     中文：Adan 結合自適應動量與 Nesterov 估計，能在各種任務上更快收斂。
+
+    Args:
+        params: iterable of parameters to optimize or dicts defining parameter groups.
+        lr (float): learning rate.
+        betas (Tuple[float, float, float] | Tuple[float, float]):
+            coefficients for computing running averages. If two values are
+            provided, they are interpreted as ``(beta1, beta3)`` and ``beta2``
+            will be filled with the recommended default ``0.92``.
     """
 
     def __init__(self, params, lr=1e-3, betas=(0.98, 0.92, 0.99),
                  eps=1e-8, weight_decay=0.,
                  use_adaptive_gradient_clipping=False,
                  gradient_centralization=None, enable_cautious=False):
-        assert len(betas) == 3, 'Adan requires three beta values'
+        # allow specifying two betas (beta1, beta3) and insert the recommended
+        # default for beta2. this keeps backward compatibility with optimizers
+        # expecting only beta1 and beta2 while adhering to Adan's requirement
+        # of three beta values.
+        if len(betas) == 2:
+            betas = (betas[0], 0.92, betas[1])
+        elif len(betas) != 3:
+            raise AssertionError('Adan requires two or three beta values')
+
         defaults = dict(lr=lr, betas=betas, eps=eps,
                         weight_decay=weight_decay,
                         use_adaptive_gradient_clipping=use_adaptive_gradient_clipping,
