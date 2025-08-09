@@ -1004,13 +1004,13 @@ class Model(ModelBase,Layer):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
-        if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+        if isinstance(self._model, tf.Module) and any_abnormal_number(self._model):
             is_abnormal = True
-            for para in self._model.parameters():
+            for para in getattr(self._model, "weights", []):
                 if any_abnormal_number(para):
-                    para.data.copy_(
-                        where(is_abnormal_number(para), random_normal_like(para, mean=0, std=0.02).to(get_device()),
-                              para))
+                    para.assign(
+                        where(is_abnormal_number(para),
+                              random_normal_like(para, mean=0, std=0.02).to(para.device), para))
         if is_tensor(self._model) and any_abnormal_number(self._model):
             is_abnormal = True
 
@@ -1104,7 +1104,7 @@ class Model(ModelBase,Layer):
                 ctx.print(e)
                 PrintException()
                 gc.collect()
-        elif self._model._is_keras:
+        elif self._model._is_keras and not is_abnormal:
             try:
                 folder, filename, ext = split_path(save_path)
                 if filename == '':
@@ -1144,7 +1144,7 @@ class Model(ModelBase,Layer):
                 self._model.train()
                 ctx.print(e)
                 PrintException()
-        elif is_tensor(self._model):
+        elif is_tensor(self._model) and not is_abnormal:
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
@@ -2316,14 +2316,17 @@ class LanguageModel(Model):
         self.preprocess_flow = []
 
     def save_model(self, save_path=None, **kwargs):
+        is_abnormal = False
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
-        if isinstance(self._model, Layer) and any_abnormal_number(self._model):
-            for para in self._model.parameters():
-                if any_abnormal_number(para.value()):
+        if isinstance(self._model, tf.Module) and any_abnormal_number(self._model):
+            is_abnormal = True
+            for para in getattr(self._model, "weights", []):
+                if any_abnormal_number(para.value() if hasattr(para, "value") else para):
                     para.assign(
-                        where(is_nan(para), random_normal_like(para.value(), mean=0, std=0.02).to(para.device), para))
+                        where(is_nan(para), random_normal_like(para.value() if hasattr(para, "value") else para,
+                                                             mean=0, std=0.02).to(para.device), para))
 
         if save_path is not None:
             pass
@@ -2337,7 +2340,7 @@ class LanguageModel(Model):
         save_path = os.path.join(folder, filename + ext)
         self.training_context['save_path'] = save_path
 
-        if isinstance(self._model, Layer):
+        if isinstance(self._model, Layer) and not is_abnormal:
             folder, filename, ext = split_path(save_path)
             ext = '.pth.tar_'
             save_path = os.path.join(folder, filename + ext)
@@ -2369,7 +2372,7 @@ class LanguageModel(Model):
 
 
 
-        elif is_tensor(self._model):
+        elif is_tensor(self._model) and not is_abnormal:
             save_path = self.get_save_path(save_path, default_folder='Models',
                                            default_file_name='{0}_epoch{1}.npy_'.format(self._model.name,
                                                                                         self.training_context[
