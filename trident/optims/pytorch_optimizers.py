@@ -3326,8 +3326,8 @@ class Sophia(Optimizer):
     在大型語言模型訓練中能加速收斂並穩定學習。
 
     This version follows the simplified algorithm described in the
-    repository documentation. It periodically estimates the Hessian
-    diagonal and uses it to precondition the update with clipping.
+    repository documentation. It uses an EMA of squared gradients as a
+    Hessian diagonal approximation and clips the update for stability.
     """
 
     def __init__(self, params, lr=1e-4, betas=(0.9, 0.99), rho=0.04,
@@ -3357,7 +3357,11 @@ class Sophia(Optimizer):
                 if p.grad is None or not p.requires_grad:
                     continue
 
+                if self.use_adaptive_gradient_clipping:
+                    self.agc(p)
                 grad = p.grad.detach()
+                if self.gradient_centralization in ['all', 'gcc']:
+                    grad = centralize_gradient(grad, gc_conv_only=self.gradient_centralization == 'gcc')
                 if group['weight_decay'] != 0:
                     grad = grad.add(p.data, alpha=group['weight_decay'])
 
@@ -3374,14 +3378,13 @@ class Sophia(Optimizer):
 
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
 
-                if state['step'] % interval == 0:
-                    u = torch.randn_like(grad)
-                    hvp = torch.autograd.grad((grad * u).sum(), p, retain_graph=True)[0]
-                    h_est = u * hvp
+                if state['step'] % interval == 0 or state['step'] == 1:
+                    h_est = grad * grad
                     h_diag.mul_(beta2).add_(h_est, alpha=1 - beta2)
 
-                denom = h_diag.abs().add_(eps).clamp(max=rho)
+                denom = h_diag.add(eps)
                 update = exp_avg / denom
+                update.clamp_(min=-rho, max=rho)
                 if self.enable_cautious:
                     update = self._apply_cautious(update, grad)
                 p.data.add_(update, alpha=-lr)
