@@ -93,7 +93,7 @@ class _ClassificationLoss(Loss, AutoTrackable):
 
     def __init__(self, axis=-1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
                  cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_thresh=0.1, name=None, **kwargs):
+                 ohem_thresh=0.1, input_names=None, output_names=None, name=None, **kwargs):
         """
 
         Args:
@@ -127,7 +127,8 @@ class _ClassificationLoss(Loss, AutoTrackable):
 
         """
         super(_ClassificationLoss, self).__init__(reduction=reduction, sample_weight=sample_weight, axis=axis,
-                                                  enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, namename=name)
+                                                  enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+                                                  input_names=input_names, output_names=output_names, name=name)
         self._set_name_scope()
         self._built = False
         self.label_statistics = None
@@ -464,7 +465,8 @@ class _ClassificationLoss(Loss, AutoTrackable):
 class _PairwiseLoss(Loss, AutoTrackable):
     """Calculate loss for  complex classification task."""
 
-    def __init__(self, axis=-1, reduction='batch_mean', enable_ohem=False, ohem_thresh=0.1, name=None, **kwargs):
+    def __init__(self, axis=-1, reduction='batch_mean', enable_ohem=False, ohem_thresh=0.1,
+                 input_names=None, output_names=None, name=None, **kwargs):
         """
 
         Args:
@@ -498,7 +500,8 @@ class _PairwiseLoss(Loss, AutoTrackable):
 
         """
         super(_PairwiseLoss, self).__init__(reduction=reduction, axis=axis, enable_ohem=enable_ohem,
-                                            ohem_thresh=ohem_thresh, name=name)
+                                            ohem_thresh=ohem_thresh, input_names=input_names,
+                                            output_names=output_names, name=name)
         self._set_name_scope()
 
         # initilize weight
@@ -665,9 +668,12 @@ class CrossEntropyLoss(_ClassificationLoss):
 
     def __init__(self, axis=-1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
                  cutoff=None, label_smooth=False,
-                 reduction='mean', enable_ohem=False, ohem_thresh=0.1, name='CrossEntropyLoss'):
-        super().__init__(axis, sample_weight, auto_balance, from_logits, ignore_index, cutoff, label_smooth, reduction,
-                         enable_ohem, ohem_thresh, name)
+                 reduction='mean', enable_ohem=False, ohem_thresh=0.1,
+                 input_names=None, output_names=None, name='CrossEntropyLoss'):
+        super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits,
+                         ignore_index=ignore_index, cutoff=cutoff, label_smooth=label_smooth, reduction=reduction,
+                         enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, input_names=input_names,
+                         output_names=output_names, name=name)
 
         self.need_target_onehot = False
 
@@ -790,9 +796,12 @@ class NLLLoss(_ClassificationLoss):
 
     def __init__(self, axis=-1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
                  cutoff=None, label_smooth=False,
-                 reduction='mean', enable_ohem=False, ohem_thresh=0.1, name='NLLLoss'):
-        super().__init__(axis, sample_weight, auto_balance, from_logits, ignore_index, cutoff, label_smooth, reduction,
-                         enable_ohem, ohem_thresh, name)
+                 reduction='mean', enable_ohem=False, ohem_thresh=0.1,
+                 input_names=None, output_names=None, name='NLLLoss'):
+        super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits,
+                         ignore_index=ignore_index, cutoff=cutoff, label_smooth=label_smooth, reduction=reduction,
+                         enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, input_names=input_names,
+                         output_names=output_names, name=name)
 
         self.need_target_onehot = True
 
@@ -853,9 +862,11 @@ class F1ScoreLoss(_ClassificationLoss):
 
     def __init__(self, beta=1, axis=-1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
                  cutoff=None, label_smooth=False, reduction='mean',
-                 enable_ohem=False, ohem_thresh=0.1, name='CrossEntropyLoss'):
-        super().__init__(axis, sample_weight, auto_balance, from_logits, ignore_index, cutoff, label_smooth, reduction,
-                         enable_ohem, ohem_thresh, name)
+                 enable_ohem=False, ohem_thresh=0.1, input_names=None, output_names=None, name='F1ScoreLoss'):
+        super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits,
+                         ignore_index=ignore_index, cutoff=cutoff, label_smooth=label_smooth, reduction=reduction,
+                         enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, input_names=input_names,
+                         output_names=output_names, name=name)
         self.beta = beta
 
         self.need_target_onehot = True
@@ -912,9 +923,11 @@ class FocalLoss(_ClassificationLoss):
     def __init__(self, alpha=0.5, gamma=2, normalized=False, threshold=None, axis=-1, sample_weight=None,
                  auto_balance=False,
                  from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean',
-                 enable_ohem=False, ohem_thresh=0.1, name='FocalLoss'):
-        super().__init__(axis, sample_weight, auto_balance, from_logits, ignore_index, cutoff, label_smooth, reduction,
-                         enable_ohem, ohem_thresh, name)
+                 enable_ohem=False, ohem_thresh=0.1, input_names=None, output_names=None, name='FocalLoss'):
+        super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits,
+                         ignore_index=ignore_index, cutoff=cutoff, label_smooth=label_smooth, reduction=reduction,
+                         enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, input_names=input_names,
+                         output_names=output_names, name=name)
         self.alpha = alpha
         self.gamma = gamma
         self.threshold = threshold
@@ -966,11 +979,11 @@ class FocalLoss(_ClassificationLoss):
 class BCELoss(_ClassificationLoss):
     def __init__(self, axis=-1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
                  cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_thresh=0.1, name='BCELoss'):
+                 ohem_thresh=0.1, input_names=None, output_names=None, name='BCELoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits,
                          ignore_index=ignore_index, cutoff=cutoff,
                          label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
-                         name=name)
+                         input_names=input_names, output_names=output_names, name=name)
 
         self.num_classes = None
         self.is_logsoftmax = False
@@ -1045,7 +1058,7 @@ class DiceLoss(_ClassificationLoss):
 
     def __init__(self, smooth=1, axis=-1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
                  cutoff=None, label_smooth=False, reduction='mean',
-                 enable_ohem=False, ohem_thresh=0.1, name='DiceLoss'):
+                 enable_ohem=False, ohem_thresh=0.1, input_names=None, output_names=None, name='DiceLoss'):
         """
         Args:
             axis (int): the axis where the class label is.
@@ -1058,8 +1071,10 @@ class DiceLoss(_ClassificationLoss):
             name (stringf):
         """
 
-        super().__init__(axis, sample_weight, auto_balance, from_logits, ignore_index, cutoff, label_smooth, reduction,
-                         enable_ohem, ohem_thresh, name)
+        super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits,
+                         ignore_index=ignore_index, cutoff=cutoff, label_smooth=label_smooth, reduction=reduction,
+                         enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, input_names=input_names,
+                         output_names=output_names, name=name)
         self.smooth = smooth
         self.is_logsoftmax = False
         self.need_target_onehot = True
@@ -1115,8 +1130,10 @@ class L1Loss(_PairwiseLoss):
      See :class:`~torch.nn.L1Loss` for details.
      """
 
-    def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.1, name='L1Loss'):
-        super(L1Loss, self).__init__(reduction)
+    def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.1, input_names=None, output_names=None,
+                 name='L1Loss'):
+        super(L1Loss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+                                     input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
 
@@ -1145,8 +1162,10 @@ class L2Loss(_PairwiseLoss):
         See :class:`~torch.nn.MSELoss` for details.
         """
 
-    def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.1, name='MSELoss'):
-        super(L2Loss, self).__init__(reduction)
+    def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.1, input_names=None, output_names=None,
+                 name='MSELoss'):
+        super(L2Loss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+                                     input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
 
@@ -1202,8 +1221,8 @@ class MSELoss(_PairwiseLoss):
 
     """
 
-    def __init__(self, axis=-1, reduction='mean', name='MSELoss'):
-        super().__init__(axis, reduction, name)
+    def __init__(self, axis=-1, reduction='mean', name='MSELoss', input_names=None, output_names=None):
+        super().__init__(axis=axis, reduction=reduction, input_names=input_names, output_names=output_names, name=name)
 
     def calculate_loss(self, output, target):
         """
@@ -1233,9 +1252,10 @@ class SmoothL1Loss(_PairwiseLoss):
     See :class:`~torch.nn.SmoothL1Loss` for details.
     """
 
-    def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.1, name='SmoothL1Loss'):
+    def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.1, input_names=None, output_names=None,
+                 name='SmoothL1Loss'):
         super(SmoothL1Loss, self).__init__(enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, reduction=reduction,
-                                           name=name)
+                                           input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
         self.huber_delta = 0.5
@@ -1262,8 +1282,10 @@ class SmoothL1Loss(_PairwiseLoss):
 
 
 class WingLoss(_PairwiseLoss):
-    def __init__(self, omega=10, epsilon=2, reduction='mean', enable_ohem=False, ohem_thresh=0.1, name='WingLoss'):
-        super(WingLoss, self).__init__(enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, reduction=reduction, name=name)
+    def __init__(self, omega=10, epsilon=2, reduction='mean', enable_ohem=False, ohem_thresh=0.1,
+                 input_names=None, output_names=None, name='WingLoss'):
+        super(WingLoss, self).__init__(enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, reduction=reduction,
+                                       input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.omega = omega
         self.epsilon = epsilon
@@ -1298,8 +1320,9 @@ class WingLoss(_PairwiseLoss):
 
 class AdaptiveWingLoss(_PairwiseLoss):
     def __init__(self, omega=14, theta=0.5, epsilon=1, alpha=2.1, enable_ohem=False, ohem_thresh=0.1,
-                 name='AdaptiveWingLoss'):
-        super(AdaptiveWingLoss, self).__init__()
+                 input_names=None, output_names=None, name='AdaptiveWingLoss'):
+        super(AdaptiveWingLoss, self).__init__(enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+                                               input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.omega = omega
         self.theta = theta
@@ -1334,8 +1357,9 @@ class AdaptiveWingLoss(_PairwiseLoss):
 
 
 class PerceptionLoss(_PairwiseLoss):
-    def __init__(self, net, reduction="mean"):
-        super(PerceptionLoss, self).__init__()
+    def __init__(self, net, reduction="mean", input_names=None, output_names=None, name='PerceptionLoss'):
+        super(PerceptionLoss, self).__init__(reduction=reduction, input_names=input_names,
+                                             output_names=output_names, name=name)
         if isinstance(net, ModelBase):
             net = net.model
         self.ref_model = net
@@ -1392,9 +1416,10 @@ class PerceptionLoss(_PairwiseLoss):
 
 
 class EdgeLoss(_PairwiseLoss):
-    def __init__(self, enable_ohem=False, ohem_thresh=0.1, name='EdgeLoss'):
+    def __init__(self, enable_ohem=False, ohem_thresh=0.1, input_names=None, output_names=None, name='EdgeLoss'):
+        super(EdgeLoss, self).__init__(enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+                                       input_names=input_names, output_names=output_names, name=name)
         self.name = name
-        super(EdgeLoss, self).__init__()
 
     def first_order(self, x, axis=2):
         if ndim(x) == 3:
@@ -1418,11 +1443,12 @@ class EdgeLoss(_PairwiseLoss):
 class IoULoss(_ClassificationLoss):
     def __init__(self, axis=-1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=0, cutoff=None,
                  label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_thresh=0.1, name='lou_loss'):
-        super(IoULoss, self).__init__(raxis=axis, sample_weight=sample_weight, auto_balance=auto_balance,
+                 ohem_thresh=0.1, input_names=None, output_names=None, name='lou_loss'):
+        super(IoULoss, self).__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance,
                                       from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
                                       label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem,
-                                      ohem_thresh=ohem_thresh, name=name)
+                                      ohem_thresh=ohem_thresh, input_names=input_names, output_names=output_names,
+                                      name=name)
         self.need_target_onehot = True
         self.is_multiselection = False
         self.is_logsoftmax = False
@@ -1448,8 +1474,10 @@ class IoULoss(_ClassificationLoss):
 
 
 class SoftIoULoss(Loss):
-    def __init__(self, n_classes, reduction="mean", reduced=False):
-        super(SoftIoULoss, self).__init__()
+    def __init__(self, n_classes, reduction="mean", reduced=False, input_names=None, output_names=None,
+                 name='SoftIoULoss'):
+        super(SoftIoULoss, self).__init__(reduction=reduction, input_names=input_names,
+                                          output_names=output_names, name=name)
         self.n_classes = n_classes
         self.reduction = reduction
         self.reduced = reduced
