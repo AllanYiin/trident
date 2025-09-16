@@ -2459,8 +2459,9 @@ class StyleLoss(nn.Module):
 
 
 class PerceptionLoss(_PairwiseLoss):
-    def __init__(self, net, reduction="mean"):
-        super(PerceptionLoss, self).__init__()
+    def __init__(self, net, reduction="mean", input_names=None, output_names=None, name='PerceptionLoss'):
+        super(PerceptionLoss, self).__init__(reduction=reduction, input_names=input_names,
+                                             output_names=output_names, name=name)
         if isinstance(net, ModelBase):
             net = net.model
         self.ref_model = net
