@@ -6,6 +6,7 @@ import math
 import re
 import gc
 import sys
+import warnings
 from collections import defaultdict
 import numpy as np
 import torch
@@ -1576,19 +1577,40 @@ class Ranger21(Optimizer):
 
         # warm down
         self.min_lr = warmdown_min_lr
-        self.warmdown_lr_delta = self._base_lr - self.min_lr
         self.warmdown_active = warmdown_active
+        self.warmup_curr_pct = 0.01  # used to verify warmup reaches full set point.
 
         if self.warmdown_active:
-            self.warm_down_start_pct = warmdown_start_pct
-            self.start_warm_down = int(
-                self.warm_down_start_pct * self.total_iterations
-            )
-            self.warmdown_total_iterations = (
+            if self.min_lr is None:
+                self.min_lr = 0.0
+            if self.min_lr > self._base_lr:
+                warnings.warn(
+                    (
+                        "warmdown_min_lr ({:.3e}) is greater than the base learning rate ({:.3e}); "
+                        "clamping warmdown minimum to the base learning rate to avoid increases during warmdown."
+                    ).format(self.min_lr, self._base_lr),
+                    RuntimeWarning,
+                )
+                self.min_lr = self._base_lr
+
+            self.warmdown_lr_delta = self._base_lr - self.min_lr
+
+            if self.warmdown_lr_delta <= 0:
+                self.warmdown_active = False
+            else:
+                self.warm_down_start_pct = warmdown_start_pct
+                self.start_warm_down = int(
+                    self.warm_down_start_pct * self.total_iterations
+                )
+                self.warmdown_total_iterations = (
                     self.total_iterations - self.start_warm_down
-            )
-            self.warmdown_displayed = False  # print when warmdown begins...
-            self.warmup_curr_pct = 0.01  # used to verify warmup reaches full set point.
+                )
+                self.warmdown_displayed = False  # print when warmdown begins...
+        if not self.warmdown_active:
+            self.warmdown_lr_delta = max(0.0, self._base_lr - (self.min_lr or 0.0))
+            self.start_warm_down = self.total_iterations
+            self.warmdown_total_iterations = 0
+            self.warmdown_displayed = False
 
             """
             print(f"debug warmdown:\n")
