@@ -111,7 +111,14 @@ class TileImageCallback(VisualizationCallbackBase):
 
     def plot_tile_image(self, training_context):
         if self.data_feed is None:
-            self.data_feed=training_context['data_feed']
+            self.data_feed = training_context['data_feed']
+
+        # 當前批次的資料鍵值可能與 callback 初始化時不同，
+        # 因此當缺少必要鍵值時，重新建立 data_feed。
+        if (self.include_input and ('input' not in self.data_feed or self.data_feed['input'] not in training_context['train_data'])) \
+                or (self.include_target and ('target' not in self.data_feed or self.data_feed['target'] not in training_context['train_data'])) \
+                or (self.include_output and ('output' not in self.data_feed or self.data_feed['output'] not in training_context['train_data'])):
+            self.data_feed = self.generate_datafeed(training_context)
 
         tile_images_list = []
 
@@ -129,10 +136,10 @@ class TileImageCallback(VisualizationCallbackBase):
             self.reverse_image_transform = dataprovider.reverse_image_transform
             #self.reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
 
-        input_arr = to_numpy(data[self.data_feed['input']].copy())  if self.include_input else None
-        target_arr = to_numpy(data[self.data_feed['target']].copy()) if self.include_target else None
-        output_arr = to_numpy(data[self.data_feed['output']].copy()) if self.include_output else None
-        if _check_logsoftmax_logit(output_arr) or reduce_max(output_arr) <= 0:
+        input_arr = to_numpy(data[self.data_feed['input']].copy()) if self.include_input and self.data_feed['input'] in data else None
+        target_arr = to_numpy(data[self.data_feed['target']].copy()) if self.include_target and self.data_feed['target'] in data else None
+        output_arr = to_numpy(data[self.data_feed['output']].copy()) if self.include_output and self.data_feed['output'] in data else None
+        if output_arr is not None and (_check_logsoftmax_logit(output_arr) or reduce_max(output_arr) <= 0):
             output_arr = exp(output_arr)
         
         
@@ -142,21 +149,21 @@ class TileImageCallback(VisualizationCallbackBase):
         output_arr_list=[]
 
         for i in range(self.rows):
-            if self.include_input:
+            if self.include_input and input_arr is not None:
                 input_arr_list.append(self.reverse_image_transform(input_arr[i]))
-            if self.include_target:
+            if self.include_target and target_arr is not None:
                 target_arr_list.append(self.reverse_image_transform(target_arr[i]))
-            if self.include_output:
+            if self.include_output and output_arr is not None:
                 output_arr_list.append(self.reverse_image_transform(output_arr[i]))
         #input_arr = np.stack(new_input_arr, axis=0)
 
-        if self.include_input:
+        if self.include_input and len(input_arr_list) > 0:
             tile_images_list.append(input_arr_list)
             legends.append('input image')
-        if self.include_target:
+        if self.include_target and len(target_arr_list) > 0:
             tile_images_list.append(target_arr_list)
             legends.append('target image')
-        if self.include_output:
+        if self.include_output and len(output_arr_list) > 0:
             tile_images_list.append(output_arr_list)
             legends.append('output image')
 
