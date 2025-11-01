@@ -58,6 +58,22 @@ class VisualizationCallbackBase(CallbackBase):
         if imshow is None and self.is_in_ipython:
             self.imshow = True
 
+    def ensure_data_feed(self, training_context, required_keys=None):
+        if required_keys is None:
+            required_keys = []
+        if self.data_feed is None and 'data_feed' in training_context:
+            self.data_feed = training_context['data_feed']
+        if self.data_feed is None or not isinstance(self.data_feed, OrderedDict):
+            self.data_feed = OrderedDict()
+        regenerate = False
+        for key in required_keys:
+            if key not in self.data_feed or self.data_feed[key] is None:
+                regenerate = True
+                break
+        if regenerate:
+            self.generate_datafeed(training_context)
+        return self.data_feed
+
     def generate_datafeed(self,training_context):
         dataprovider = ctx.get_data_provider()[-1]
         if self.data_feed is None:
@@ -110,8 +126,14 @@ class TileImageCallback(VisualizationCallbackBase):
         self.data_feed = data_feed
 
     def plot_tile_image(self, training_context):
-        if self.data_feed is None:
-            self.data_feed=training_context['data_feed']
+        required_keys = []
+        if self.include_input:
+            required_keys.append('input')
+        if self.include_target:
+            required_keys.append('target')
+        if self.include_output:
+            required_keys.append('output')
+        self.ensure_data_feed(training_context, required_keys=required_keys)
 
         tile_images_list = []
 
@@ -129,40 +151,63 @@ class TileImageCallback(VisualizationCallbackBase):
             self.reverse_image_transform = dataprovider.reverse_image_transform
             #self.reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
 
-        input_arr = to_numpy(data[self.data_feed['input']].copy())  if self.include_input else None
-        target_arr = to_numpy(data[self.data_feed['target']].copy()) if self.include_target else None
-        output_arr = to_numpy(data[self.data_feed['output']].copy()) if self.include_output else None
-        if _check_logsoftmax_logit(output_arr) or reduce_max(output_arr) <= 0:
+        def _prepare_array(key_name):
+            if not key_name or key_name not in data:
+                return None
+            value = data[key_name]
+            if hasattr(value, 'detach'):
+                value = value.detach()
+            if hasattr(value, 'clone'):
+                value = value.clone()
+            elif hasattr(value, 'copy'):
+                value = value.copy()
+            return to_numpy(value)
+
+        input_key = self.data_feed.get('input') if self.data_feed else None
+        target_key = self.data_feed.get('target') if self.data_feed else None
+        output_key = self.data_feed.get('output') if self.data_feed else None
+
+        input_arr = _prepare_array(input_key) if self.include_input else None
+        target_arr = _prepare_array(target_key) if self.include_target else None
+        output_arr = _prepare_array(output_key) if self.include_output else None
+        if output_arr is not None and (_check_logsoftmax_logit(output_arr) or reduce_max(output_arr) <= 0):
             output_arr = exp(output_arr)
-        
-        
+
+
 
         input_arr_list = []
         target_arr_list = []
         output_arr_list=[]
 
+        include_input = self.include_input and input_arr is not None
+        include_target = self.include_target and target_arr is not None
+        include_output = self.include_output and output_arr is not None
+
         for i in range(self.rows):
-            if self.include_input:
+            if include_input and i < len(input_arr):
                 input_arr_list.append(self.reverse_image_transform(input_arr[i]))
-            if self.include_target:
+            if include_target and i < len(target_arr):
                 target_arr_list.append(self.reverse_image_transform(target_arr[i]))
-            if self.include_output:
+            if include_output and i < len(output_arr):
                 output_arr_list.append(self.reverse_image_transform(output_arr[i]))
         #input_arr = np.stack(new_input_arr, axis=0)
 
-        if self.include_input:
+        if include_input:
             tile_images_list.append(input_arr_list)
             legends.append('input image')
-        if self.include_target:
+        if include_target:
             tile_images_list.append(target_arr_list)
             legends.append('target image')
-        if self.include_output:
+        if include_output:
             tile_images_list.append(output_arr_list)
             legends.append('output image')
 
 
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
+        if len(tile_images_list) == 0:
+            ctx.print('TileImageCallback: no available images to visualize.')
+            return
         fig = tile_rgb_images(*tile_images_list, row=self.rows, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True, legend=legends)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True, walltime=time.time())
