@@ -1,5 +1,6 @@
 import builtins
 import inspect
+import io
 import math
 
 from PIL import Image
@@ -38,8 +39,9 @@ __all__ = ['Resize', 'Unresize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', 
            'Normalize', 'Unnormalize', 'CLAHE', 'Lighting', 'HorizontalFlip', 'RandomMirror', 'AdjustGamma',
            'RandomBlur', 'RandomAdjustGamma', 'Blur', 'InvertColor',
            'RandomInvertColor', 'GrayScale', 'RandomGrayScale', 'RandomGridMask', 'GridMask', 'ToLowResolution',
-           'ImageDilation', 'ImageErosion', 'ErosionThenDilation', 'DilationThenErosion', 'AdaptiveBinarization',
-           'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic', 'DetectionMixup']
+           'RandomLowResolution', 'RandomJPEGCompression', 'ImageDilation', 'ImageErosion', 'ErosionThenDilation',
+           'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic',
+           'DetectionMixup']
 
 def _check_float_dtype(arr):
     return arr.astype(np.float32)
@@ -3072,6 +3074,78 @@ class ToLowResolution(VisionTransform):
             image = Rescale(scale=math.pow(2, -1))(image)
             image = Rescale(scale=self.scale)(image)
         return image
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        return mask
+
+
+class RandomLowResolution(VisionTransform):
+    def __init__(self, scale_range=(0.5, 0.9), p=0.3, name='random_low_resolution', **kwargs):
+        super().__init__(name)
+        self.is_spatial = False
+        self.scale_range = scale_range
+        self.keep_prob = p
+
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        if random.random() > self.keep_prob:
+            return image
+        height, width = image.shape[:2]
+        scale = random.uniform(*self.scale_range)
+        new_width = max(1, int(width * scale))
+        new_height = max(1, int(height * scale))
+        image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+        image = cv2.resize(image, (width, height), interpolation=cv2.INTER_LINEAR)
+        return np.clip(image, 0, 255).astype(np.float32)
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        return mask
+
+
+class RandomJPEGCompression(VisionTransform):
+    def __init__(self, quality_range=(25, 70), p=0.3, name='random_jpeg_compression', **kwargs):
+        super().__init__(name)
+        self.is_spatial = False
+        self.quality_range = quality_range
+        self.keep_prob = p
+
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        if random.random() > self.keep_prob:
+            return image
+        image = np.clip(image, 0, 255).astype(np.uint8)
+        if image.ndim == 2:
+            pil_image = Image.fromarray(image, mode='L')
+            return_as_gray = True
+        elif image.ndim == 3 and image.shape[-1] == 1:
+            pil_image = Image.fromarray(image[:, :, 0], mode='L')
+            return_as_gray = True
+        else:
+            pil_image = Image.fromarray(image[:, :, :3], mode='RGB')
+            return_as_gray = False
+        buffer = io.BytesIO()
+        quality = random.randint(*self.quality_range)
+        pil_image.save(buffer, format='JPEG', quality=quality)
+        buffer.seek(0)
+        compressed = Image.open(buffer)
+        if return_as_gray:
+            compressed = compressed.convert('L')
+            output = np.array(compressed, dtype=np.float32)
+            if image.ndim == 3 and image.shape[-1] == 1:
+                output = output[:, :, None]
+        else:
+            output = np.array(compressed.convert('RGB'), dtype=np.float32)
+        return np.clip(output, 0, 255)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         return coords
