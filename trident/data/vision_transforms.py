@@ -40,8 +40,8 @@ __all__ = ['Resize', 'Unresize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', 
            'RandomBlur', 'RandomAdjustGamma', 'Blur', 'InvertColor',
            'RandomInvertColor', 'GrayScale', 'RandomGrayScale', 'RandomGridMask', 'GridMask', 'ToLowResolution',
            'RandomLowResolution', 'RandomJPEGCompression', 'ImageDilation', 'ImageErosion', 'ErosionThenDilation',
-           'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic',
-           'DetectionMixup']
+           'RandomBitDepth', 'RandomGaussianNoise', 'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise',
+           'RandomErasing', 'ToRGB', 'ImageMosaic', 'DetectionMixup']
 
 def _check_float_dtype(arr):
     return arr.astype(np.float32)
@@ -3148,6 +3148,63 @@ class RandomJPEGCompression(VisionTransform):
         else:
             output = np.array(compressed.convert('RGB'), dtype=np.float32)
         return np.clip(output, 0, 255)
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        return mask
+
+
+class RandomBitDepth(VisionTransform):
+    def __init__(self, bit_depth_range=(3, 7), p=0.3, name='random_bit_depth', **kwargs):
+        super().__init__(name)
+        self.is_spatial = False
+        self.bit_depth_range = bit_depth_range
+        self.keep_prob = p
+
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        if random.random() > self.keep_prob:
+            return image
+
+        min_depth, max_depth = self.bit_depth_range
+        bit_depth = int(np.clip(random.randint(min_depth, max_depth), 1, 8))
+        if bit_depth >= 8:
+            return image
+
+        levels = (2 ** bit_depth) - 1
+        image = np.clip(image, 0, 255)
+        image = np.round(image / 255.0 * levels) / levels * 255.0
+        return image.astype(np.float32)
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        return mask
+
+
+class RandomGaussianNoise(VisionTransform):
+    def __init__(self, sigma_range=(3.0, 12.0), p=0.3, name='random_gaussian_noise', **kwargs):
+        super().__init__(name)
+        self.is_spatial = False
+        self.sigma_range = sigma_range
+        self.keep_prob = p
+
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        if random.random() > self.keep_prob:
+            return image
+
+        sigma = random.uniform(*self.sigma_range)
+        noise = np.random.normal(0.0, sigma, image.shape)
+        image = np.clip(image + noise, 0, 255)
+        return image.astype(np.float32)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         return coords
