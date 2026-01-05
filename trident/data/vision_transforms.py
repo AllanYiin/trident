@@ -3095,6 +3095,7 @@ class RandomLowResolution(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if random.random() > self.keep_prob:
             return image
+
         height, width = image.shape[:2]
         scale = random.uniform(*self.scale_range)
         new_width = max(1, int(width * scale))
@@ -3123,6 +3124,7 @@ class RandomJPEGCompression(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if random.random() > self.keep_prob:
             return image
+
         image = np.clip(image, 0, 255).astype(np.uint8)
         if image.ndim == 2:
             pil_image = Image.fromarray(image, mode='L')
