@@ -3078,6 +3078,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
             summary[m_key] = OrderedDict()
             summary[m_key]["visits"] = 0
             summary[m_key]["class_name"] = module.__class__.__name__
+            summary[m_key]["output_shape"] = None
             if hasattr(module, 'keep_output'):
                 summary[m_key]["keep_output"] = module.keep_output
             else:
@@ -3122,7 +3123,13 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
 
                     summary[m_key][para_type][name] = list(int_shape(para))
                     num_params = np.prod(np.array(list(int_shape(para)), dtype=np.float64))
-                    spatial_dims = np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
+                    output_shape = summary[m_key].get("output_shape")
+                    if isinstance(output_shape, TensorShape):
+                        spatial_dims = np.prod(np.array(output_shape[2:]).astype(np.float64))
+                    elif isinstance(output_shape, (list, tuple)) and len(output_shape) > 0 and isinstance(output_shape[0], TensorShape):
+                        spatial_dims = np.prod(np.array(output_shape[0][2:]).astype(np.float64))
+                    else:
+                        spatial_dims = 1
                     if module.relative_name if hasattr(module, 'relative_name') else module.name == m_key and summary[m_key]["visits"] == 0:
                         params += num_params
                         if para.requires_grad:
@@ -3247,7 +3254,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
                                                                                            str(max_name_len) + 's').replace(
                 '35s', str(max_weight_len) + 's').format(
                 (layer + "  [" + class_name + "]").ljust(max_name_len, ' '),
-                (is_keep + str(summary[layer]["output_shape"])).ljust(25, ' '),
+                (is_keep + str(summary[layer].get("output_shape", None))).ljust(25, ' '),
                 str(summary[layer]["weight"].item_list[0] if 'weight' in summary[layer] and len(
                     summary[layer]["weight"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(
                     max_weight_len, ' '),
@@ -3262,7 +3269,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
                                                                                              str(max_name_len) + 's').replace(
                         '35s', str(max_weight_len) + 's').format(
                         " ".ljust(max_name_len + len(layer + "  [" + class_name + "]") // 2, " "),
-                        " ".ljust(25 + len(is_keep + str(summary[layer]["output_shape"])) // 2, " "),
+                        " ".ljust(25 + len(is_keep + str(summary[layer].get("output_shape", None))) // 2, " "),
                         str(summary[layer]["weight"].item_list[n] if n < len(
                             summary[layer]["weight"]) else ' ').replace('(', '').replace(')', '').ljust(max_weight_len,
                                                                                                         " "),
