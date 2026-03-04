@@ -2207,6 +2207,10 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
 
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
+    if not is_tensor(x):
+        if isinstance(x, Iterable):
+            return builtins.sum(x)
+        return builtins.sum([x])
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
