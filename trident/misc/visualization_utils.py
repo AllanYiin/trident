@@ -82,6 +82,25 @@ __all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram', 'generate_
            'plot_3d_histogram', 'plot_centerloss']
 
 
+def _get_axis_converter(axis):
+    if hasattr(axis, 'get_converter'):
+        return axis.get_converter()
+    return getattr(axis, 'converter', None)
+
+
+def _set_axis_converter(axis, converter):
+    if converter is None:
+        return
+    if hasattr(axis, 'set_converter'):
+        axis.set_converter(converter)
+    elif hasattr(axis, 'converter'):
+        axis.converter = converter
+
+
+def _copy_axis_converter(source_axis, target_axis):
+    _set_axis_converter(target_axis, _get_axis_converter(source_axis))
+
+
 def generate_palette(num_classes: int, format: str = 'rgb'):
     """Generate palette used in visualization.
 
@@ -416,6 +435,7 @@ def loss_metric_curve(losses, metrics, metrics_names, legend=None, calculate_bas
     else:
 
         metric_ax2 = metric_ax1.twinx()
+        _copy_axis_converter(metric_ax1.xaxis, metric_ax2.xaxis)
         first_axis_range = None
         second_axis_range = None
         first_axis_keys = []
