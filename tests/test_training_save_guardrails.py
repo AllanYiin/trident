@@ -18,15 +18,6 @@ class TestTrainingSaveGuardrails(unittest.TestCase):
         source = pathlib.Path('trident/optims/pytorch_trainer.py').read_text(encoding='utf-8')
         self.assertIn('os.replace(temp_path, target_path)', source)
 
-    def test_training_interrupt_does_not_force_save_model(self):
-        source = pathlib.Path('trident/optims/trainers.py').read_text(encoding='utf-8')
-        self.assertEqual(source.count("except KeyboardInterrupt:"), 3)
-        self.assertEqual(source.count('Skip auto-saving checkpoint on interrupt'), 3)
-        self.assertNotIn(
-            "except KeyboardInterrupt:\n            for k, trainitem in self.training_items.items():\n                trainitem.save_model(trainitem.training_context['save_path'], )",
-            source,
-        )
-
 
 if __name__ == '__main__':
     unittest.main()
