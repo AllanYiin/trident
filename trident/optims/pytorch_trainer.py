@@ -1072,20 +1072,29 @@ class Model(model.ModelBase,Layer):
     @measure_perf
     def save_model(self, save_path=None, **kwargs):
         is_abnormal = False
+
+        def _atomic_file_save(target_path, save_func):
+            temp_path = '{0}.{1}.tmp'.format(target_path, uuid.uuid4().hex)
+            try:
+                with open(temp_path, 'wb') as f:
+                    save_func(f)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temp_path, target_path)
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
         if isinstance(self._model, nn.Module) and any_abnormal_number(self._model):
             is_abnormal = True
-            for para in self._model.parameters():
-                if any_abnormal_number(para):
-                    para.data.copy_(
-                        where(is_abnormal_number(para), random_normal_like(para, mean=0, std=0.02).to(get_device()),
-                              para))
+            sys.stderr.write(self._get_name() + ' nan/inf detected in model weights. Skip saving.\n')
         if is_tensor(self._model) and any_abnormal_number(self._model):
             is_abnormal = True
 
-            sys.stderr.write(self._get_name() + '  nan detected!!\n')
+            sys.stderr.write(self._get_name() + ' nan/inf detected in tensor weights. Skip saving.\n')
         if save_path is not None:
             folder, filename, ext = split_path(save_path)
             if filename == '':
@@ -1094,7 +1103,12 @@ class Model(model.ModelBase,Layer):
         else:
             save_path = self.training_context['save_path']
 
-        if isinstance(self._model, nn.Module) and not is_abnormal:
+        if is_abnormal:
+            for callback in self.training_context['callbacks']:
+                callback.on_model_saving_end(self.training_context)
+            return False
+
+        if isinstance(self._model, nn.Module):
             try:
                 folder, filename, ext = split_path(save_path)
                 if not os.path.exists(folder):
@@ -1112,21 +1126,13 @@ class Model(model.ModelBase,Layer):
 
 
                 try:
-                    with open(save_path+'_', 'wb') as f:
-                        torch.save({
-                            'state_dict': self._model.state_dict(),
-                            'backend': 'pytorch',
-                            'trident_version': __version__,
-                            'pytorch_version': str(torch.__version__),
-                            'signature': self._model.signature
-                        }, f)
-
-                    if os.path.exists(save_path):
-                        os.remove(save_path)
-                        os.rename(save_path+'_', save_path)
-                    else:
-                        shutil.move(save_path+'_', save_path)
-
+                    _atomic_file_save(save_path, lambda f: torch.save({
+                        'state_dict': self._model.state_dict(),
+                        'backend': 'pytorch',
+                        'trident_version': __version__,
+                        'pytorch_version': str(torch.__version__),
+                        'signature': self._model.signature
+                    }, f))
                 except Exception as e:
                     ctx.print(e)
 
@@ -1135,14 +1141,7 @@ class Model(model.ModelBase,Layer):
 
 
                 try:
-                    with open(save_path+'_', 'wb') as f:
-                        save(self._model, f)
-
-                    if os.path.exists(save_path):
-                        os.remove(save_path)
-                        os.rename(save_path+'_', save_path)
-                    else:
-                        shutil.move(save_path+'_', save_path)
+                    _atomic_file_save(save_path, lambda f: save(self._model, f))
                 except Exception as e:
                     ctx.print(e)
 
@@ -1157,7 +1156,7 @@ class Model(model.ModelBase,Layer):
                 PrintException()
                 gc.collect()
 
-        elif is_tensor(self._model) and not is_abnormal:
+        elif is_tensor(self._model):
             folder, filename, ext = split_path(save_path)
             if not os.path.exists(folder):
                 folder = os.path.join(get_trident_dir(), 'models')
@@ -1175,14 +1174,9 @@ class Model(model.ModelBase,Layer):
             try:
                 numpy_model = to_numpy(self._model)
                 np.save(temppath, numpy_model)
-                if os.path.exists(save_path):
-                    os.remove(save_path)
-                    shutil.move(temppath, save_path)
-                    # os.rename(move_path, save_path)
-                else:
-                    shutil.move(temppath, save_path)
-                    sys.stdout.write(
-                        'Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
+                os.replace(temppath, save_path)
+                sys.stdout.write(
+                    'Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
             except Exception as e:
                 ctx.print(e)
                 if os.path.exists(temppath):
@@ -2243,17 +2237,25 @@ class LanguageModel(Model):
 
     def save_model(self, save_path=None, **kwargs):
         is_abnormal = False
+
+        def _atomic_file_save(target_path, save_func):
+            temp_path = '{0}.{1}.tmp'.format(target_path, uuid.uuid4().hex)
+            try:
+                with open(temp_path, 'wb') as f:
+                    save_func(f)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(temp_path, target_path)
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
         if isinstance(self._model, nn.Module) and any_abnormal_number(self._model):
             is_abnormal = True
-            for para in self._model.parameters():
-                if any_abnormal_number(para):
-                    para.data.copy_(
-                        where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
-
-            sys.stderr.write(self._get_name() + '  nan detected!!\n')
+            sys.stderr.write(self._get_name() + ' nan/inf detected in model weights. Skip saving.\n')
         if save_path is not None:
             folder, filename, ext = split_path(save_path)
             if filename == '':
@@ -2262,53 +2264,57 @@ class LanguageModel(Model):
         else:
             save_path = self.training_context['save_path']
 
-        if isinstance(self._model, nn.Module) and not is_abnormal:
+        if is_abnormal:
+            for callback in self.training_context['callbacks']:
+                callback.on_model_saving_end(self.training_context)
+            return False
+
+        if isinstance(self._model, nn.Module):
             try:
                 folder, filename, ext = split_path(save_path)
                 if filename == '':
                     filename = self.name
 
-                ext = '.pth.tar_'
+                ext = '.pth.tar'
                 save_path = os.path.join(folder, filename + ext)
                 make_dir_if_need(sanitize_path(save_path))
                 save_path = sanitize_path(save_path)
                 device = get_device()
                 self._model.eval()
                 self._model.cpu()
-                torch.save({
+                _atomic_file_save(save_path, lambda f: torch.save({
                     'state_dict': self._model.state_dict(),
                     'vocabs': self.vocabs,
                     'backend': 'pytorch',
                     'trident_version': __version__,
                     'pytorch_version': torch.__version__,
                     'signature': self._model.signature
-                }, save_path)
+                }, f))
 
-                shutil.copy2(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
-                os.remove(save_path)
-                save_path = save_path.replace('pth.tar_', 'pth_')
-                save(self._model, save_path)
-                shutil.copy2(save_path, save_path.replace('.pth_', '.pth'))
-                os.remove(save_path)
+                save_path = save_path.replace('.pth.tar', '.pth')
+                _atomic_file_save(save_path, lambda f: save(self._model, f))
                 self._model.train()
                 self._model.to(device)
             except Exception as e:
                 ctx.print(e)
                 PrintException()
 
-        elif isinstance(self._model, torch.Tensor) and not is_abnormal:
+        elif isinstance(self._model, torch.Tensor):
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
 
-            ext = '.npy_'
+            ext = '.npy'
             save_path = os.path.join(folder, filename + ext)
             make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
             numpy_model = to_numpy(self._model)
-            np.save(save_path, numpy_model)
-            shutil.copy2(save_path, save_path.replace('.npy_', '.npy'))
-            os.remove(save_path)
+            temppath = '{0}.{1}.tmp'.format(save_path, uuid.uuid4().hex)
+            with open(temppath, 'wb') as f:
+                np.save(f, numpy_model)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temppath, save_path)
             sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
         else:
             raise ValueError(
