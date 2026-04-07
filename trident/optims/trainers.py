@@ -752,14 +752,12 @@ class TrainingPlan(object):
 
 
         except KeyboardInterrupt:
-            for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'], )
+            ctx.print('Training interrupted. Skip auto-saving checkpoint on interrupt to avoid overwriting existing model.')
             data_provider.mode = 'tuple'
         except Exception as e:
             ctx.print(e)
             PrintException()
-            for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'], )
+            ctx.print('Training aborted by exception. Skip auto-saving checkpoint to avoid overwriting existing model.')
             data_provider.mode = 'tuple'
 
     def resume(self):
@@ -1483,14 +1481,12 @@ class GanTrainingPlan(TrainingPlan):
 
 
         except KeyboardInterrupt:
-            for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'], )
+            ctx.print('Training interrupted. Skip auto-saving checkpoint on interrupt to avoid overwriting existing model.')
             data_provider.mode = 'tuple'
         except Exception as e:
             ctx.print(e)
             PrintException()
-            for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'], )
+            ctx.print('Training aborted by exception. Skip auto-saving checkpoint to avoid overwriting existing model.')
             data_provider.mode = 'tuple'
 
 
@@ -2215,12 +2211,10 @@ class CycleGanTrainingPlan(TrainingPlan):
 
 
         except KeyboardInterrupt:
-            for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'], )
+            ctx.print('Training interrupted. Skip auto-saving checkpoint on interrupt to avoid overwriting existing model.')
             data_provider.mode = 'tuple'
         except Exception as e:
             ctx.print(e)
             PrintException()
-            for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'], )
+            ctx.print('Training aborted by exception. Skip auto-saving checkpoint to avoid overwriting existing model.')
             data_provider.mode = 'tuple'
