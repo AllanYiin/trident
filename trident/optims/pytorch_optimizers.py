@@ -224,6 +224,13 @@ class Optimizer(optimizer.Optimizer):
         new_grads = torch.where(g_norm > max_norm, clipped_grad, p.grad)
         p.grad.detach().copy_(new_grads)
 
+    def _should_apply_adaptive_gradient_clipping(self):
+        if not self.use_adaptive_gradient_clipping:
+            return False
+        # Trainer marks this flag during gradient accumulation.
+        # AGC should only run when full accumulated gradients are ready.
+        return not getattr(self, '_trident_is_accumulating_gradients', False)
+
 
 class Adam(Optimizer):
     """Implements Adam algorithm.
@@ -1355,7 +1362,7 @@ class Ranger(Optimizer):
                     half_precision = True
                     p.data = p.data.float()
                     p.grad = p.grad.float()
-                if self.use_adaptive_gradient_clipping:
+                if self._should_apply_adaptive_gradient_clipping():
                     self.agc(p)
                 grad = p.grad.data
 
@@ -2211,7 +2218,7 @@ class RangerLars(Optimizer):
                     half_precision = True
                     p.data = p.data.float()
                     p.grad = p.grad.float()
-                if self.use_adaptive_gradient_clipping:
+                if self._should_apply_adaptive_gradient_clipping():
                     self.agc(p)
                 grad = p.grad.data.float() if p.grad.data.dtype != torch.float32 else p.grad.data
 
@@ -2434,7 +2441,7 @@ class LARS(Optimizer):
                     p.grad = p.grad.float()
 
                 param = p.data
-                if self.use_adaptive_gradient_clipping:
+                if self._should_apply_adaptive_gradient_clipping():
                     self.agc(p)
                 grad = p.grad.data
 
@@ -2612,7 +2619,7 @@ class AdaBelief(Optimizer):
                     p.data = p.data.float()
                     p.grad = p.grad.float()
 
-                if self.use_adaptive_gradient_clipping:
+                if self._should_apply_adaptive_gradient_clipping():
                     self.agc(p)
                 grad = p.grad.data
                 if grad.is_sparse:
@@ -2860,7 +2867,7 @@ class RangerAdaBelief(Optimizer):
                     p.data = p.data.float()
                     p.grad = p.grad.float()
 
-                if self.use_adaptive_gradient_clipping:
+                if self._should_apply_adaptive_gradient_clipping():
                     self.agc(p)
                 grad = p.grad.data.float() if p.grad.data.dtype != torch.float32 else p.grad.data
 
@@ -3048,7 +3055,7 @@ class DiffGrad(Optimizer):
                     p.grad = p.grad.float()
                 p_data_fp32 = p.data.float() if p.data.dtype != torch.float32 else p.data
 
-                if self.use_adaptive_gradient_clipping:
+                if self._should_apply_adaptive_gradient_clipping():
                     self.agc(p)
                 grad = p.grad.data
                 if grad.is_sparse:
@@ -3172,7 +3179,7 @@ class Lamb(Optimizer):
                     p.data = p.data.float()
                     p.grad = p.grad.float()
 
-                if self.use_adaptive_gradient_clipping:
+                if self._should_apply_adaptive_gradient_clipping():
                     self.agc(p)
                 grad = p.grad.data
                 if grad.is_sparse:
@@ -3292,7 +3299,7 @@ class Lion(Optimizer):
                     p.data = p.data.float()
                     p.grad = p.grad.float()
 
-                if self.use_adaptive_gradient_clipping:
+                if self._should_apply_adaptive_gradient_clipping():
                     self.agc(p)
                 grad = p.grad.data.float() if p.grad.data.dtype != torch.float32 else p.grad.data
                 if grad.is_sparse:
@@ -3379,7 +3386,7 @@ class Sophia(Optimizer):
                 if p.grad is None or not p.requires_grad:
                     continue
 
-                if self.use_adaptive_gradient_clipping:
+                if self._should_apply_adaptive_gradient_clipping():
                     self.agc(p)
                 grad = p.grad.detach()
                 if self.gradient_centralization in ['all', 'gcc']:

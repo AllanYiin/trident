@@ -956,6 +956,8 @@ class Model(model.ModelBase,Layer):
     def do_gradient_update(self, log_gradients=False):
         try:
             accumulate_grads = (self.training_context['steps'] + 1) % self.accumulation_steps != 0
+            if self.optimizer is not None:
+                setattr(self.optimizer, '_trident_is_accumulating_gradients', accumulate_grads)
             need_backward = self.training_context['stop_update'] == 0 or (
                     0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
                 'stop_update'])
