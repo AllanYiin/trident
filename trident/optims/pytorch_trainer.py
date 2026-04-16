@@ -153,6 +153,14 @@ class Model(model.ModelBase,Layer):
             if not isinstance(output, Layer):
                 output = fix_pytorch_module(output, input_shape=input_shape, input_tensor=inputs)
             output.train()
+            output_signature = None
+            if hasattr(output, 'signature'):
+                output_signature = output.signature
+            if output_signature is None:
+                output_signature = get_signature(output)
+                output._signature = output_signature
+                if hasattr(output, 'signature'):
+                    output.signature = output_signature
             # c._signature = get_signature(output)
 
 
@@ -161,7 +169,7 @@ class Model(model.ModelBase,Layer):
 
             if inputs is not None and not isinstance(inputs, (tuple, list, dict)):
                 inputs = (inputs,)
-            elif inputs is not None and len(output.signature.inputs) >= len(inputs) > 0:
+            elif inputs is not None and len(output._signature.inputs) >= len(inputs) > 0:
                 if not isinstance(inputs, dict):
                     for i in range(len(inputs)):
                         k = output._signature.inputs.key_list[i]
@@ -170,7 +178,7 @@ class Model(model.ModelBase,Layer):
                                                                                 is_singleton=False,
                                                                                 optional=output._signature.inputs[k].optional, name=k)
                 else:
-                    available_items = output.signature.inputs.key_list.copy()
+                    available_items = output._signature.inputs.key_list.copy()
                     for k, v in inputs.items():
                         if k in output._signature.inputs.key_list:
                             output._signature.inputs[k] = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True,
@@ -190,7 +198,7 @@ class Model(model.ModelBase,Layer):
                                     available_items.remove(sk)
                                     break
 
-            elif input_shape is not None and len(output.signature.inputs) >= len(input_shape):
+            elif input_shape is not None and len(output._signature.inputs) >= len(input_shape):
                 if not isinstance(input_shape, dict):
                     for i in range(len(input_shape)):
                         k = output._signature.inputs.key_list[i]
@@ -205,7 +213,7 @@ class Model(model.ModelBase,Layer):
 
 
                 else:
-                    available_items = output.signature.inputs.key_list.copy()
+                    available_items = output._signature.inputs.key_list.copy()
                     for k, v in input_shape.items():
                         if k in output._signature.inputs.key_list:
                             output._signature.inputs[k].shape = TensorShape([None] + v)
@@ -232,7 +240,7 @@ class Model(model.ModelBase,Layer):
                 args = None
                 if isinstance(inputs, dict):
                     inp=OrderedDict()
-                    for k,v in output.signature.inputs.item_list:
+                    for k,v in output._signature.inputs.item_list:
                         if k in inputs:
                             inp[k]=inputs[k]
                         elif v.optional:
@@ -257,27 +265,27 @@ class Model(model.ModelBase,Layer):
                 out = output(*dummay_input)
             output.to(get_device())
             if is_tensor(out):
-                if  len(output.signature.outputs)==0:
-                    output.signature.outputs['output']=TensorSpec.tensor_to_spec(out,need_exclude_batch_axis=True,is_singleton=False) if out is not None else TensorSpec(
+                if  len(output._signature.outputs)==0:
+                    output._signature.outputs['output']=TensorSpec.tensor_to_spec(out,need_exclude_batch_axis=True,is_singleton=False) if out is not None else TensorSpec(
                             shape=TensorShape([None]), optional=True, name=k)
-                elif  len(output.signature.outputs)==1:
-                    output.signature.outputs[output.signature.outputs.key_list[0]] = TensorSpec.tensor_to_spec(out,
+                elif  len(output._signature.outputs)==1:
+                    output._signature.outputs[output._signature.outputs.key_list[0]] = TensorSpec.tensor_to_spec(out,
                                                                                    need_exclude_batch_axis=True,
                                                                                    is_singleton=False) if out is not None else TensorSpec(
                             shape=TensorShape([None]), optional=True, name=k)
             elif is_instance(out,'OrderedDict'):
                 for k, v in out.__dict__.items():
-                    if v is not None or k in output.signature.outputs:
+                    if v is not None or k in output._signature.outputs:
                         spec = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True,is_singleton=False,
                                                          name=k) if v is not None else TensorSpec(
                             shape=TensorShape([None]), optional=True, name=k)
-                        if k in output.signature.outputs:
-                            spec.optional = output.signature.outputs[k].optional
-                            spec.default = output.signature.outputs[k].default
-                        output.signature.outputs[k] = spec
+                        if k in output._signature.outputs:
+                            spec.optional = output._signature.outputs[k].optional
+                            spec.default = output._signature.outputs[k].default
+                        output._signature.outputs[k] = spec
             elif isinstance(out, (list, tuple)):
                 for i in range(len(out)):
-                    output.signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]),
+                    output._signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]),
                                                                                  name='output_{0}'.format(i))
 
             self._model = output
