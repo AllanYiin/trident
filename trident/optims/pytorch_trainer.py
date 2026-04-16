@@ -1876,12 +1876,13 @@ class ImageClassificationModel(Model):
         self._idx2lab = {}
         self._lab2idx = {}
 
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
-                self._model.signature.inputs.value_list[0].object_type is None:
-            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and \
-                self._model.signature.outputs.value_list[0].object_type is None:
-            self._model.signature.outputs.value_list[0].object_type = ObjectType.classification_label
+        model_signature = getattr(self._model, 'signature', None)
+        if model_signature is not None and len(model_signature.inputs.value_list) > 0 and \
+                model_signature.inputs.value_list[0].object_type is None:
+            model_signature.inputs.value_list[0].object_type = ObjectType.rgb
+        if model_signature is not None and len(model_signature.outputs.value_list) > 0 and \
+                model_signature.outputs.value_list[0].object_type is None:
+            model_signature.outputs.value_list[0].object_type = ObjectType.classification_label
 
     @property
     def class_names(self):
