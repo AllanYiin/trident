@@ -153,6 +153,10 @@ class Model(model.ModelBase,Layer):
             if not isinstance(output, Layer):
                 output = fix_pytorch_module(output, input_shape=input_shape, input_tensor=inputs)
             output.train()
+            if not hasattr(output, 'signature') or output.signature is None:
+                output._signature = get_signature(output)
+                if hasattr(output, 'signature'):
+                    output.signature = output._signature
             # c._signature = get_signature(output)
 
 
