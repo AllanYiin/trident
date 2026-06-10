@@ -140,7 +140,7 @@ def set_device(device=None):
         print(e)
 
 
-def load(f):
+def load(f, weights_only=True):
     """
 
     Args:
@@ -151,7 +151,7 @@ def load(f):
 
     """
 
-    item = torch.load(f, map_location=torch.device('cpu'), weights_only=False)
+    item = torch.load(f, map_location=torch.device('cpu'), weights_only=weights_only)
     if isinstance(item, nn.Module):
         item.eval()
         item.to(get_device())
