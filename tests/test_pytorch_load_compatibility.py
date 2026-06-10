@@ -11,6 +11,13 @@ class TestPytorchLoadCompatibility(unittest.TestCase):
     def test_word2vec_load_explicitly_opts_into_legacy_module_checkpoint(self):
         source = pathlib.Path('trident/models/pytorch_embedded.py').read_text(encoding='utf-8')
         self.assertIn("load(os.path.join(dirname, 'word2vec_chinese.pth'), weights_only=False)", source)
+        self.assertIn('recovery_model = fix_layer(recovery_model)', source)
+
+    def test_fix_layer_restores_modern_state_dict_hook_containers(self):
+        source = pathlib.Path('trident/backend/pytorch_backend.py').read_text(encoding='utf-8')
+        self.assertIn("'_state_dict_hooks'", source)
+        self.assertIn("'_load_state_dict_pre_hooks'", source)
+        self.assertIn("'_load_state_dict_post_hooks'", source)
 
 
 if __name__ == '__main__':

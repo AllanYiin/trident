@@ -98,6 +98,7 @@ class Word2Vec(Embedding):
         download_model_from_google_drive('13XZPWh8QhEsC8EdIp1niLtZz0ipatSGC', dirname, 'word2vec_chinese.pth')
         # This pretrained file is a legacy whole-module checkpoint from Trident's fixed Google Drive source.
         recovery_model = load(os.path.join(dirname, 'word2vec_chinese.pth'), weights_only=False)
+        recovery_model = fix_layer(recovery_model)
         recovery_weight=recovery_model.state_dict()['weight']
         shp=int_shape(recovery_weight)
 

@@ -3657,11 +3657,22 @@ def fix_layer(layer: Layer):
         if not hasattr(module, 'get_root'):
             setattr(module, 'get_root', MethodType(get_root, layer))
 
-        if not hasattr(module, '_state_dict_pre_hooks'):
-            object.__setattr__(module, '_forward_hooks_with_kwargs', OrderedDict())
-            object.__setattr__(module, '_forward_pre_hooks_with_kwargs', OrderedDict())
-            object.__setattr__(module, '_backward_pre_hooks', OrderedDict())
-            object.__setattr__(module, '_state_dict_pre_hooks', OrderedDict())
+        for hook_name in (
+                '_backward_pre_hooks',
+                '_backward_hooks',
+                '_forward_hooks',
+                '_forward_hooks_with_kwargs',
+                '_forward_hooks_always_called',
+                '_forward_pre_hooks',
+                '_forward_pre_hooks_with_kwargs',
+                '_state_dict_hooks',
+                '_state_dict_pre_hooks',
+                '_load_state_dict_pre_hooks',
+                '_load_state_dict_post_hooks'):
+            if not hasattr(module, hook_name):
+                object.__setattr__(module, hook_name, OrderedDict())
+        if not hasattr(module, '_is_full_backward_hook'):
+            object.__setattr__(module, '_is_full_backward_hook', None)
 
         if not hasattr(module, 'uuid'):
             module.uuid = uuid.uuid4().node
