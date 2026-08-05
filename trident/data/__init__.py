@@ -34,3 +34,10 @@ from trident.data.image_reader import ImageReader,ImageThread
 
 
 
+
+# The new modeling pipeline uses explicit aliases here so legacy wildcard
+# imports keep their historical Dataset/Iterator/DataProvider meanings.
+from trident.data import pipeline
+from trident.data.pipeline import (DataProvider as PipelineDataProvider,
+                                   Dataset as PipelineDataset,
+                                   Iterator as PipelineIterator)
