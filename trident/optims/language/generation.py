@@ -1,0 +1,73 @@
+"""Shared native/Hugging Face generation with explicit padding and sampling."""
+import torch
+
+from .objectives import forward_model, unwrap_model
+
+
+def sample_token(logits, temperature=0.0, top_k=0, top_p=1.0, generator=None):
+    if temperature < 0 or top_k < 0 or not 0 < top_p <= 1:
+        raise ValueError("invalid sampling parameters")
+    logits = logits.float()
+    if temperature == 0:
+        return logits.argmax(-1)
+    logits = logits / temperature
+    if top_k:
+        threshold = logits.topk(min(top_k, logits.shape[-1]), dim=-1).values[:, -1:]
+        logits = logits.masked_fill(logits < threshold, float("-inf"))
+    if top_p < 1:
+        sorted_logits, order = logits.sort(-1, descending=True)
+        remove = sorted_logits.softmax(-1).cumsum(-1) > top_p
+        remove[:, 1:] = remove[:, :-1].clone()
+        remove[:, 0] = False
+        logits = logits.scatter(1, order, sorted_logits.masked_fill(remove, float("-inf")))
+    return torch.multinomial(logits.softmax(-1), 1, generator=generator).squeeze(-1)
+
+
+@torch.no_grad()
+def generate_tokens(model, input_ids, attention_mask=None, max_new_tokens=32,
+                    temperature=0.0, top_k=0, top_p=1.0, eos_token_id=None,
+                    pad_token_id=None, generator=None):
+    if max_new_tokens < 0:
+        raise ValueError("max_new_tokens must be nonnegative")
+    config = getattr(unwrap_model(model), "config", None)
+    capacity = getattr(config, "max_position_embeddings", None)
+    if capacity is not None and input_ids.shape[-1] + max_new_tokens > capacity:
+        raise ValueError("prompt plus max_new_tokens exceeds model context capacity")
+    eos_token_id = eos_token_id if eos_token_id is not None else getattr(config, "eos_token_id", None)
+    pad_token_id = pad_token_id if pad_token_id is not None else getattr(config, "pad_token_id", 0)
+    pad_token_id = 0 if pad_token_id is None else pad_token_id
+    mask = torch.ones_like(input_ids) if attention_mask is None else attention_mask.long()
+    if input_ids.ndim != 2 or mask.shape != input_ids.shape or not bool(mask.any(-1).all()):
+        raise ValueError("generation requires a nonempty prompt per sample")
+    # Canonical left padding gives every sample a last real prompt token.
+    output = torch.full_like(input_ids, pad_token_id)
+    left_mask = torch.zeros_like(mask)
+    for index, row in enumerate(input_ids):
+        tokens = row[mask[index].bool()]
+        output[index, -len(tokens):] = tokens
+        left_mask[index, -len(tokens):] = 1
+    mask = left_mask
+    active = torch.ones(output.shape[0], dtype=torch.bool, device=output.device)
+    eos_ids = [] if eos_token_id is None else ([eos_token_id] if isinstance(eos_token_id, int) else eos_token_id)
+    was_training = model.training
+    model.eval()
+    cache = None
+    try:
+        for _ in range(max_new_tokens):
+            data = {"input_ids": output if cache is None else output[:, -1:], "attention_mask": mask}
+            extra = {"use_cache": True}
+            if cache is not None:
+                extra["past_key_values"] = cache
+            result = forward_model(model, data, **extra)
+            token = sample_token(result["logits"][:, -1], temperature, top_k, top_p, generator)
+            token = torch.where(active, token, torch.full_like(token, pad_token_id))
+            output = torch.cat((output, token[:, None]), dim=-1)
+            mask = torch.cat((mask, active.long()[:, None]), dim=-1)
+            for eos in eos_ids:
+                active = active & (token != eos)
+            cache = result.get("past_key_values")
+            if not bool(active.any()):
+                break
+    finally:
+        model.train(was_training)
+    return output

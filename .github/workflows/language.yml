@@ -1,0 +1,53 @@
+name: Native language training
+
+on:
+  push:
+    paths:
+      - 'trident/optims/language/**'
+      - 'trident/optims/trainers.py'
+      - 'trident/optims/pytorch_trainer.py'
+      - 'trident/backend/model.py'
+      - 'trident/models/pytorch_causal_lm.py'
+      - 'trident/data/pipeline/**'
+      - 'examples/language/**'
+      - 'tests/test_language*'
+      - 'setup.py'
+      - 'requirements.txt'
+      - '.github/workflows/language.yml'
+  pull_request:
+    paths:
+      - 'trident/optims/language/**'
+      - 'trident/optims/trainers.py'
+      - 'trident/optims/pytorch_trainer.py'
+      - 'trident/backend/model.py'
+      - 'trident/models/pytorch_causal_lm.py'
+      - 'trident/data/pipeline/**'
+      - 'examples/language/**'
+      - 'tests/test_language*'
+      - 'setup.py'
+      - 'requirements.txt'
+      - '.github/workflows/language.yml'
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.12']
+    env:
+      TRIDENT_BACKEND: pytorch
+      PYTHONDONTWRITEBYTECODE: '1'
+      HF_HOME: ${{ runner.temp }}/huggingface
+      TORCH_HOME: ${{ runner.temp }}/torch
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[llm,llm-hf,llm-serve]' pytest httpx
+      - run: >-
+          python -m pytest -q
+          tests/test_language_core.py tests/test_language_extended.py
+          tests/test_language_runtime.py tests/test_language_examples.py
+          --basetemp '${{ runner.temp }}/trident-language'

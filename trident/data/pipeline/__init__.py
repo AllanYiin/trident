@@ -7,6 +7,9 @@ from .collate import (FieldCollator, HuggingFaceCollator, PaddingCollator,
                       RaggedBatch, RaggedCollator, Seq2SeqCollator,
                       TokenizerCollator, default_collate)
 from .dataset import Dataset, HuggingFaceDataset
+from .language import (BPETokenizer, ByteTokenizer, CausalLMCollator, ChatTemplate,
+                       JSONLSource, PackedCollator, PreferenceCollator, SFTCollator,
+                       jsonl_dataset, load_tokenizer, train_bpe_tokenizer)
 from .errors import (CollationError, DataPipelineError, MemoryBudgetError,
                      SchemaValidationError, SourceError, TransformError)
 from .framework import to_tensorflow_dataset, to_torch_dataloader
@@ -23,6 +26,9 @@ from .transforms import (Compose, CopyPaste, CutMix, GeometryCompose,
                          TransformContext, TransformRecord)
 
 __all__ = [
+    "BPETokenizer", "ByteTokenizer", "CausalLMCollator", "ChatTemplate", "JSONLSource",
+    "PackedCollator", "PreferenceCollator", "SFTCollator", "jsonl_dataset",
+    "load_tokenizer", "train_bpe_tokenizer",
     "Batch", "CollationError", "ColumnarSource", "Compose", "DataPipelineError",
     "DataProvider", "Dataset", "FolderSource", "IterableFactorySource", "LegacySource",
     "TrainingPlanAdapter",

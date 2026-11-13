@@ -72,6 +72,13 @@ a
 
 ## How To Use
 
+### Native PyTorch language-model training
+
+Optional fluent Pretrain/SFT/LoRA/DPO, distillation, GRPO/CISPO/PPO, bounded tool-use rollouts,
+full-state resume and Hugging Face export are documented in
+[the runnable language examples](examples/language/README.md).
+Install the optional `llm` extra; existing vision and TensorFlow entry points are unchanged.
+
 #### Step 0: Install
 
 Simple installation from PyPI

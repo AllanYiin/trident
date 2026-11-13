@@ -231,12 +231,40 @@ class TrainingPlan(object):
         self._dataloaders[data_loader.__class__.__name__] = data_loader
         return self
 
+    def with_checkpointing(self, directory, every_updates=100):
+        """Full-state checkpoints for opt-in language training items."""
+        if not isinstance(every_updates, int) or every_updates < 1:
+            raise ValueError('every_updates must be a positive integer')
+        self._language_checkpointing = dict(directory=str(directory), every_updates=every_updates)
+        return self
+
+    def resume_from(self, checkpoint, reshard=False):
+        self._language_resume = str(checkpoint)
+        self._language_reshard = bool(reshard)
+        return self
+
+    def with_validation_loader(self, loader):
+        self._language_validation_loader = loader
+        return self
+
+    def with_distributed(self, backend=None, find_unused_parameters=False):
+        self._language_distributed = dict(backend=backend, find_unused_parameters=find_unused_parameters)
+        return self
+
+    def limit_updates(self, updates):
+        """Stop after this many successful optimizer updates in this invocation."""
+        if not isinstance(updates, int) or updates < 1:
+            raise ValueError('updates must be a positive integer')
+        self._language_max_updates = updates
+        return self
+
     def repeat_epochs(self, num_epochs: int):
         self.num_epochs = num_epochs
         return self
 
     def with_batch_size(self, batch_size: int):
         self._batch_size = batch_size
+        self._language_batch_size_explicit = True
         return self
 
     def with_tensorboard(self):
@@ -509,6 +537,9 @@ class TrainingPlan(object):
 
     def start_now(self, collect_data_inteval=None, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
+        if any(getattr(item, 'uses_objective_runner', False) for item in self.training_items.values()):
+            from trident.optims.language.runner import run_language_plan
+            return run_language_plan(self, only_steps=only_steps, max_batches=max_batches)
         data_provider = self._dataloaders.value_list[-1]
         data_provider.batch_size = self.batch_size
         data_provider.mode = 'dict'

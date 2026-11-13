@@ -29,7 +29,7 @@ with pathlib.Path('requirements.txt').open() as requirements_txt:
 
 
 setup(name=NAME,
-      version='0.7.9',
+      version='0.7.12',
       description='Make pytorch and tensorflow two become one.',
       # long_description=long_description,
       # long_description_content_type="text/markdown",
@@ -41,6 +41,10 @@ setup(name=NAME,
       license='MIT',
       install_requires=install_requires,
       extras_require={
+          'llm': ['torch>=2.3', 'tokenizers>=0.20'],
+          'llm-hf': ['torch>=2.3', 'transformers>=4.51,<5', 'safetensors>=0.4'],
+          'llm-serve': ['fastapi>=0.110', 'uvicorn>=0.27'],
+          'llm-loggers': ['wandb>=0.17', 'swanlab>=0.6'],
           'visualize': ['pydot>=1.2.4',],
           'tests': ['pytest',
                     'pytest-pep8',
