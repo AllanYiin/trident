@@ -5,7 +5,7 @@ scikit-image>=0.19.0
 scipy
 beautifulsoup4
 scikit-learn
-matplotlib>=3.0.2
+matplotlib==3.9.4
 ipython>=7.10.2
 pillow>= 4.1.1
 setuptools>=42.0.1
