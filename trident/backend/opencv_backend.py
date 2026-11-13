@@ -284,9 +284,14 @@ def file2array(img_path,flag = cv2.IMREAD_COLOR):
     with open(img_path, "rb") as f:
         img_np = np.frombuffer(f.read(), np.uint8)
 
-        img = cv2.imdecode(img_np, flag)
-        cv2.cvtColor(img, cv2.COLOR_BGR2RGB,dst= img)
-        return img.astype(np.float32)
+    img = cv2.imdecode(img_np, flag)
+    if img is None:
+        raise ValueError("Cannot decode image: {0}".format(img_path))
+    if img.ndim == 3 and img.shape[2] >= 3:
+        # Preserve the requested grayscale/unchanged modes for masks.
+        conversion = cv2.COLOR_BGRA2RGBA if img.shape[2] == 4 else cv2.COLOR_BGR2RGB
+        img = cv2.cvtColor(img, conversion)
+    return img.astype(np.float32)
 
 def file2array1(img_path):
     """

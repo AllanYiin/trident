@@ -404,8 +404,7 @@ class ImageDataset(Dataset):
                 img = img.astype(np.float32)
             return img
         except Exception as e:
-            print(e)
-            PrintException()
+            raise ValueError("Failed to load image at index {0}: {1}".format(index, self.items[index])) from e
 
     def data_transform(self, img_data):
         if self.object_type == ObjectType.image_path:
