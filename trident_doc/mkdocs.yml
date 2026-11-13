@@ -1,0 +1,15 @@
+site_name: Trident Doc
+
+plugins:
+  - mkdocstrings
+
+pages:
+- Home: index.md
+- Layers: layers.md
+
+
+theme:
+    name: mkdocs
+    locale: en
+    highlightjs: true
+    nav_style: dark
