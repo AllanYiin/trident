@@ -4531,15 +4531,12 @@ def binary_cross_entropy(output, target, from_logits=False):
       Returns:
           A tensor.
       """
+    output = tf.convert_to_tensor(output)
+    target = tf.broadcast_to(tf.cast(target, output.dtype), tf.shape(output))
     if from_logits:
-        pass
-    else:
-        output = sigmoid(output)
-    if isinstance(target,(_float,_int )):
-        target=(ones_like(output)*float(target)).to(output.dtype).to(output.device)
-    bce = target *  tf.math.log(tf.clip_by_value(output,1e-7,1))
-    bce =bce+ (1 - target) * tf.math.log(tf.clip_by_value(1 - output,1e-7,1))
-    return -bce
+        return tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=output)
+    probability = tf.clip_by_value(output, 1e-7, 1.0 - 1e-7)
+    return -(target * tf.math.log(probability) + (1 - target) * tf.math.log1p(-probability))
 
 
 def cross_entropy(output, target, from_logits=False):

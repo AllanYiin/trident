@@ -8,6 +8,8 @@ import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from contextvars import ContextVar
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -152,6 +154,10 @@ class SwiGLU(nn.Module):
         return self.down_proj(F.silu(self.gate_proj(value)) * self.up_proj(value))
 
 
+# A training window may collect routing statistics without changing inference.
+routing_statistics = ContextVar("trident_routing_statistics", default=None)
+
+
 class SparseMoE(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -173,10 +179,16 @@ class SparseMoE(nn.Module):
                 # Keep all expert parameters in the DDP autograd graph.
                 result = result + sum(parameter.sum() * 0 for parameter in expert.parameters())
         valid = valid.reshape(-1).float()
-        count = valid.sum().clamp_min(1)
+        count = valid.sum()
         loads = (F.one_hot(indices, self.config.num_experts).float().sum(1) * valid[:, None]).sum(0)
+        probability_sum = (probabilities * valid[:, None]).sum(0)
+        statistics = routing_statistics.get()
+        if statistics is not None and self in statistics:
+            statistics[self].append((loads, probability_sum, count))
+            return result.view_as(value), value.new_zeros(())
+        count = count.clamp_min(1)
         loads = loads / (count * self.config.num_experts_per_tok)
-        mean_prob = (probabilities * valid[:, None]).sum(0) / count
+        mean_prob = probability_sum / count
         auxiliary = self.config.num_experts * (loads * mean_prob).sum() * self.config.router_aux_loss_coef
         return result.view_as(value), auxiliary
 

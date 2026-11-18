@@ -22,6 +22,7 @@ from trident.backend import dtype as Dtype
 from trident.backend.common import *
 from trident.backend.model import ModelBase
 from trident.backend.pytorch_backend import *
+from trident.backend.pytorch_backend import Parameter as LayerParameter
 from trident.backend.pytorch_ops import *
 import trident.backend.pytorch_ops as ops
 from trident.backend.tensorspec import ObjectType, object_type_inference
@@ -391,10 +392,7 @@ class _ClassificationLoss(Loss):
 
     def _handel_abnormal(self, loss):
         if any_abnormal_number(loss):
-            sys.stderr.write(
-                '{0} has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(
-                    self.name))
-            loss = where(is_abnormal_number(loss), zeros_like(loss), loss)
+            raise FloatingPointError("{} produced nonfinite loss".format(self.name))
         return loss
 
     def forward(self, output: Tensor, target: Tensor, **kwargs) -> 'loss':
@@ -657,7 +655,7 @@ class CrossEntropyLoss(_ClassificationLoss):
 
     """
 
-    def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
+    def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=None, ignore_index=-100,
                  cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
                  ohem_thresh=0.7, input_names=None, output_names=None, name='CrossEntropyLoss'):
         """
@@ -679,70 +677,76 @@ class CrossEntropyLoss(_ClassificationLoss):
 
         self.need_target_onehot = False
 
-    def calculate_loss(self, output, target, **kwargs):
-        """
+    def build(self, output, target, **kwargs):
+        self.num_classes = output.shape[self.axis]
+        super().build(output, target, **kwargs)
 
-        Args:
-            output ():
-            target ():
-            **kwargs ():
-
-        Returns:
-
-        Examples:
-        >>> output =  to_tensor([[0.3, 0.3, 0.2], [0, 1, 0.5], [1, 1, 0]],dtype=torch.float32)
-        >>> target = to_tensor([[0, 1, 0], [0, 1, 0], [1, 0, 0]],dtype=torch.float32)
-        >>> CrossEntropyLoss(reduction='mean')(output,target).cpu()
-        tensor(0.8695)
-        >>> CrossEntropyLoss(reduction='mean')(output,argmax(target,-1)).cpu()
-        tensor(0.8695)
-        >>> CrossEntropyLoss(reduction='mean')(log_softmax(output),target).cpu()
-        tensor(0.8695)
-        >>> CrossEntropyLoss(reduction='mean')(log_softmax(output),argmax(target,-1)).cpu()
-        tensor(0.8695)
-        >>> CrossEntropyLoss(reduction='mean', sample_weight=to_tensor([1,2,3]))(output,target).cpu()
-        tensor(1.4518)
-        """
-
-
-
-        if not self.need_target_onehot:
-            if self.is_target_onehot and target.dtype != Dtype.long:
-                target = argmax(target, self.axis)
-
-            sample_weight =self.sample_weight.copy()
-
-            target_shape = target.shape
-
-            # gather_unbalance_weight=unbalance_weight.gather(1,target.unsqueeze(-1))
-            # gather_unbalance_weight=torch.index_select(sample_weight, -1, target.reshape((-1))).reshape(target_shape).unsqueeze(1).detach(
-
-            if not self.is_logsoftmax :
-                if _check_softmax(output):
-                    output=log(output+1e-12)
-                else:
-                    output = log_softmax(output, axis=self.axis)
-            target = target.detach()
-            sample_weight = (cast(sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)).detach()
-
-            return nn.functional.nll_loss(output, target.long(), weight=sample_weight, reduction='none')
-
+    def _loss_and_weight(self, output, target):
+        if not self.built:
+            self.build(output, target)
+        axis = self.axis % output.ndim
+        work_dtype = torch.float32 if output.dtype in (torch.float16, torch.bfloat16) else output.dtype
+        values = output.to(work_dtype)
+        if self.from_logits is True:
+            log_probs = F.log_softmax(values, dim=axis)
+        elif self.from_logits is False:
+            log_probs = values.clamp_min(torch.finfo(work_dtype).tiny).log()
+        elif _check_logsoftmax_logit(values.detach(), axis):
+            log_probs = values
+        elif _check_softmax(values.detach(), axis):
+            log_probs = values.clamp_min(torch.finfo(work_dtype).tiny).log()
         else:
-            sample_weight =self.sample_weight.copy()
+            log_probs = F.log_softmax(values, dim=axis)
 
-            if not self.is_logsoftmax :
-                if _check_softmax(output):
-                    output = log(output + 1e-12)
-                else:
-                    output = log_softmax(output, axis=self.axis)
+        weights = (self.sample_weight.to(values) * self.ignore_index_weight.to(values)).detach()
+        target = target.detach().to(values.device)
+        shape = [1] * values.ndim
+        shape[axis] = weights.numel()
+        class_weights = weights.reshape(shape)
+        smooth = 0.1 if self.label_smooth is True else float(self.label_smooth or 0)
+        if not 0 <= smooth <= 1:
+            raise ValueError("label_smooth must be in [0, 1]")
+        if target.shape == output.shape:
+            distribution = target.to(work_dtype)
+            distribution = distribution * (1 - smooth) + smooth / weights.numel()
+            active = (target * (class_weights != 0)).sum(dim=axis) != 0
+            distribution_weights = distribution * class_weights
+            active_weights = distribution_weights != 0
+            safe_log_probs = log_probs.masked_fill(~active_weights, 0)
+            raw = -(safe_log_probs * distribution_weights).sum(dim=axis)
+            return raw.masked_fill(~active, 0), active.to(work_dtype)
 
+        labels = target.long()
+        valid = torch.ones_like(labels, dtype=torch.bool)
+        for ignore in self.ignore_index:
+            if ignore is not None:
+                valid &= labels != ignore
+        safe_labels = labels.masked_fill(~valid, 0)
+        nll = -log_probs.gather(axis, safe_labels.unsqueeze(axis)).squeeze(axis)
+        label_weights = weights[safe_labels].masked_fill(~valid, 0)
+        nll = nll.masked_fill(label_weights == 0, 0) * label_weights
+        if smooth:
+            smooth_loss = -(log_probs.masked_fill(class_weights == 0, 0) * class_weights).mean(dim=axis)
+            nll = (1 - smooth) * nll + smooth * smooth_loss.masked_fill(~valid, 0)
+        return nll, label_weights
 
-            new_shape = [1] * ndim(output)
-            new_shape[1] = int_shape(output)[1]
-            sample_weight = ( cast(sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)).detach()
-            sample_weight = reshape(sample_weight, new_shape)
-            target = target.detach()
-            return -reduce_sum(target * output * sample_weight, axis=self.axis)
+    def calculate_loss(self, output, target, **kwargs):
+        return self._loss_and_weight(output, target)[0]
+
+    def forward(self, output, target, **kwargs):
+        self.gradient_denominator = None
+        loss, weight = self._loss_and_weight(output, target)
+        self._handel_abnormal(loss)
+        if self.enable_ohem:
+            count = max(1, int(loss.numel() * self.ohem_thresh))
+            active = weight.flatten() != 0
+            indices = loss.flatten().masked_fill(~active, -torch.inf).topk(count).indices
+            loss, weight = loss.flatten()[indices], weight.flatten()[indices]
+        if self.reduction in ('mean', 'batch_mean'):
+            denominator = weight.sum()
+            self.gradient_denominator = denominator.detach()
+            return loss.sum() / torch.where(denominator > 0, denominator, torch.ones_like(denominator))
+        return self._get_reduction(loss)
 
 
 class NLLLoss(_ClassificationLoss):
@@ -1071,7 +1075,7 @@ class FocalLoss(_ClassificationLoss):
 
 
 class BCELoss(_ClassificationLoss):
-    def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
+    def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=None, ignore_index=-100,
                  cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
                  ohem_thresh=0.7, input_names=None, output_names=None, name='BCELoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits,
@@ -1081,6 +1085,7 @@ class BCELoss(_ClassificationLoss):
 
         self.num_classes = None
         self.is_logsoftmax = None
+        self._input_from_logits = from_logits
         self.need_target_onehot = True
         self.is_target_onehot = False
 
@@ -1104,13 +1109,14 @@ class BCELoss(_ClassificationLoss):
                     np.reshape(self.label_statistics.copy(), tuple([1] * (ndim(output) - 1) + [self.num_classes]))),
                                         min=1).to(_float_dtype).detach()
 
-        if self.is_logsoftmax and reduce_max(output) <= 0:
-            output = exp(output)
-        elif _check_logit(output, axis=self.axis) or _check_softmax(output, axis=self.axis):
-            pass
-        else:
-            output = torch.sigmoid(output)
-        loss = binary_cross_entropy(output, target, from_logits=True)
+        from_logits = self._input_from_logits
+        if from_logits is None:
+            if self.is_logsoftmax:
+                output = output.exp()
+                from_logits = False
+            else:
+                from_logits = bool(((output < 0) | (output > 1)).any())
+        loss = binary_cross_entropy(output, target, from_logits=from_logits)
 
         sample_weight = expand_as(sample_weight, loss)
         unbalance_weight = expand_as(unbalance_weight, loss)
@@ -2411,7 +2417,7 @@ class CenterLoss(Layer):
         self.reduced = reduced
         self.num_classes = num_classes
         self.feat_dim = feat_dim
-        self.centers = nn.Parameter(torch.randn(self.num_classes, self.feat_dim))
+        self.centers = LayerParameter(torch.randn(self.num_classes, self.feat_dim))
         init.kaiming_uniform_(self.centers, a=sqrt(5))
         self.to(_device)
 
@@ -2424,12 +2430,12 @@ class CenterLoss(Layer):
         """
 
         batch_size = features.size(0)
-        self.centers.to(features.dtype).to(features.device)
+        centers = self.centers.to(features)
         distmat = torch.pow(features, 2).sum(dim=1, keepdim=True).expand(batch_size, self.num_classes) + torch.pow(
-            self.centers.to(features.dtype).to(features.device), 2).sum(dim=1, keepdim=True).expand(self.num_classes,
+            centers, 2).sum(dim=1, keepdim=True).expand(self.num_classes,
                                                                                                     batch_size).t()
-        distmat.addmm_(1, -2, features, self.centers.t())
-        classes = torch.arange(self.num_classes).long().to(_device)
+        distmat.addmm_(features, centers.t(), beta=1, alpha=-2)
+        classes = torch.arange(self.num_classes, device=features.device)
 
         target = target.unsqueeze(1).expand(batch_size, self.num_classes)
         mask = target.eq(classes.expand(batch_size, self.num_classes))
@@ -2451,7 +2457,7 @@ class StyleLoss(nn.Module):
         self.to(_device)
 
     def forward(self, output, target) -> 'loss':
-        target.detach()
+        target = target.detach()
         img_size = list(output.size())
         G = gram_matrix(output)
         Gt = gram_matrix(target)
@@ -2466,7 +2472,7 @@ class PerceptionLoss(_PairwiseLoss):
             net = net.model
         self.ref_model = net
         self.ref_model.eval()
-        self.ref_model.trainable = False
+        self.ref_model.requires_grad_(False)
 
         self.layer_name_mapping = ['block1_relu2', 'block2_relu2', 'block3_relu3', 'block4_relu3']
         for name, module in self.ref_model.named_modules():
@@ -2593,7 +2599,7 @@ class GPLoss(nn.Module):
         alpha = alpha.expand_as(real_data)
         interpolates = alpha * real_data + ((1 - alpha) * fake_data)
 
-        interpolates = torch.tensor(interpolates, requires_grad=True)
+        interpolates = interpolates.detach().requires_grad_(True)
         disc_interpolates = self.discriminator(interpolates)
         gradients = torch.autograd.grad(outputs=disc_interpolates, inputs=interpolates,
                                         grad_outputs=real_data.new_ones(disc_interpolates.size()), create_graph=True,

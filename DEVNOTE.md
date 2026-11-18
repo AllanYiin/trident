@@ -2,48 +2,46 @@
 
 ## SNAPSHOT — 當前狀態
 
-最後更新：2026-11-18T21:33+08:00
+最後更新：2026-11-19T01:34+08:00
 交接狀態：verified
 
 ### 目標與授權範圍
 
-依上次審查修正前五項，驗證舊版訓練、資料切分、PyTorch checkpoint 與梯度累積，將重現案例加入 CI。
+修正 73e08be3 梯度審查列出的斷圖、正規化、optimizer 狀態及分散式更新問題。
 
 ### 目前進度
 
-已在工作樹修正五項。訓練失敗會傳回呼叫端並保留先前的 checkpoint，fit 使用獨立驗證資料，原生 nn.Module 可載入權重，每輪涵蓋尾批，FP32 與 AMP 的累積更新以實際批次權重計算。
+已修改 PyTorch／TensorFlow 的 loss、trainer、optimizer、GAN 梯度窗口、TensorFlow LSTM、舊 PPO 及原生語言模型路徑。測試和 CI 變更位於工作樹。
 
 ### 下一步
 
-本機修正已驗收。遠端 GitHub Actions 結果待這批變更推送後確認。
+提交後可在 CI 另驗 Linux。完整 CycleGAN 舊入口及多機硬體組態仍需獨立整合驗證。
 
 ### DECISIONS
 
-- PyTorch 新 .pth 與 .pth.tar 預設使用受限制的權重載入。載入可信舊序列化物件須顯式 trusted_legacy=True，需要匯出舊整模可用 save_full_model=True。
-- 訓練以有限 epoch 迭代，保留舊 Iterator.next() 跨 epoch 補滿批次的契約。
-- 以實際樣本 ID、儲存失敗前後檔案內容與數值更新檢查迴歸。
+- 加權分類 loss 以有效權重正規化，其他自訂 mean loss 可透過 callback 設 accumulation_weight。零有效權重不建立空的 optimizer 更新。
+- DDP 先執行 rank-local 計算，再共同確認是否成功並交換梯度。MoE 使用更新窗口的整體路由統計。
+- rollout 從抽樣當下取得實際 log probability，GRPO／PPO 可對既有未重整的訓練策略做 importance weighting。
 
 ### LANDMINES
 
-- GitHub Actions 的 Linux 執行待推送驗證。本機 TensorFlow 驗證環境為 CPU。
-- 先前審查的串流續訓偏移、稀疏 token 的分散式正規化、視覺標註、ResNet50 凍結、TensorFlow ResNet 匯入與隔離建置仍待個別處理。
+- MoE 的精確窗口正規化保留活躍 microbatch 的 forward graph，峰值記憶體可能上升。
+- CycleGAN 的批尾結算已調整，完整 legacy CycleGAN 入口仍含既有初始化缺口。JAX、TPU、多機 NCCL 與遠端 CI 尚未執行。
 
 ### 證據索引
 
-- trident/optims/trainers.py、trident/backend/model.py、trident/data/samplers.py
-- trident/backend/pytorch_checkpoint.py、trident/backend/checkpoint.py、trident/optims/pytorch_trainer.py
-- tests/test_legacy_training.py、tests/test_legacy_fit.py、tests/test_training_save_guardrails.py
-- .github/workflows/legacy-training.yml、README.md 與本機測試輸出
+- trident/backend/model.py、trident/backend/pytorch_ops.py、trident/optims/pytorch_losses.py
+- trident/optims/pytorch_trainer.py、trident/optims/tensorflow_trainer.py、trident/optims/trainers.py、trident/optims/*_optimizers.py
+- trident/optims/language/runner.py、trident/optims/language/generation.py、trident/models/pytorch_causal_lm.py
+- tests/test_legacy_gradients.py、tests/test_legacy_tf_gradients.py、tests/test_language_core.py、tests/test_language_runtime.py
 
 ### VALIDATION
 
-- Windows、Python 3.10.10，完整 python -m pytest tests -q — PASS：最終工作樹在專案相依環境 E:/trident-training-tests/deps 與可寫的 Numba 快取下，128 passed、26 warnings，耗時 163 秒。包含 PyTorch 2.7.1 CUDA AMP 梯度累積。
-- CI 對應的 PyTorch CPU 回歸檔 — PASS：21 passed、1 skipped；CPU 模式只跳過 CUDA AMP，該案例另外在實體 CUDA 上通過。
-- TensorFlow 2.20.0 CPU 的 fit() 與失敗保存測試 — PASS：4 passed。涵蓋分割驗證集、外部驗證集、無驗證集與失敗時保留 checkpoint。
-- 數值及跨程序的獨立重現 — PASS：相同兩筆資料，大 batch 與累積後權重皆為 0.8。原生 nn.Linear 載入權重 9 後推論為 9。可信舊式全模檔在新程序可還原原生及 Trident 模型。
-- 程式與 CI 結構檢查 — PASS：15 個變更或新增 Python 檔通過 AST 解析，CI YAML 與列出的測試檔均已核對，git diff --check 通過。
-- 本機 wheel 的權重還原 — PASS：使用 --no-build-isolation 建置，wheel 包含兩個新 checkpoint 模組和 filelock 依賴。在工作樹以外載入該 wheel 的模組後，還原並推論得到 9。
-- 遠端 GitHub Actions — NOT_RUN：變更在本機工作樹。本次未要求推送。
+- 完整 pytest 測試，PyTorch 主環境 — PASS：Windows Python 3.10.10，150 passed、1 skipped、27 warnings，耗時 187 秒。包含 CUDA AMP、雙 rank Gloo 單 token 與 MoE 一致性及 rank-local callback 例外。唯一 skip 為獨立 TensorFlow 測試模組，已另跑。
+- PyTorch CPU 梯度回歸 — PASS：18 passed、1 skipped，CPU 模式跳過了 CUDA AMP。
+- PyTorch 梯度回歸，CUDA 可用 — PASS：19 passed，包括 overflow 事件、中心參數更新及 WGAN penalty 的解析梯度。
+- TensorFlow CPU 訓練與梯度回歸 — PASS：12 passed，包括不等長尾批、全域裁剪、六款 optimizer 的 momentum 和無效梯度處理，以及 LSTM 跨步梯度。
+- 語法與 diff — PASS：27 個變更或新增 Python 檔經 AST 解析，git diff --check 通過。
 
 # HISTORY
 
@@ -86,3 +84,17 @@
 <!-- devnote-review:4d91025f23a43f412d6470c0 -->
 
 已核對上一輪審查的重現條件。本輪修正例外與存檔、驗證切分、原生模型權重載入、epoch 尾批與梯度累積。新增 PyTorch 與 TensorFlow 的行為測試及 CI，保留既有歷史。
+
+
+## [2026-11-19T00:51+08:00] 梯度傳遞及更新正確性審查
+
+<!-- devnote-review:92d8f0317c89331fc4ed1651 -->
+
+核對前五項修正已提交於 73e08be3。本輪審查重現梯度斷圖、累積比例、optimizer 狀態與分散式正規化等問題，並確認 GAN 與 CycleGAN 每批提早結算的程式路徑。
+
+
+## [2026-11-19T01:34+08:00] 修正梯度斷圖、累積與 optimizer 更新
+
+<!-- devnote-review:49d90948c522d3727a66d45d -->
+
+修正上一輪梯度審查的主要缺陷，新增參數與實際梯度的回歸，包括少量有效 token 的 Gloo、MoE 窗口、rank-local 失敗與行為策略機率。

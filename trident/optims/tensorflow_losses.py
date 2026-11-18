@@ -410,10 +410,7 @@ class _ClassificationLoss(Loss, AutoTrackable):
 
     def _handel_abnormal(self, loss):
         if any_abnormal_number(loss):
-            sys.stderr.write(
-                '{0} has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(
-                    self.name))
-            loss = where(is_abnormal_number(loss), ones_like(loss) * 1e-7, loss)
+            raise FloatingPointError("{} produced nonfinite loss".format(self.name))
         return loss
 
     def forward(self, output: Tensor, target: Tensor, **kwargs) -> 'loss':
@@ -533,7 +530,7 @@ class _PairwiseLoss(Loss, AutoTrackable):
                 return math_ops.div_no_nan(total_loss, math_ops.div_no_nan(num_present, batch_size), name='value')
             elif self.reduction in ('mean', 'batch_mean'):
                 return tf.reduce_mean(loss)
-            elif self.reduction == ('sum', 'batch_sum'):
+            elif self.reduction in ('sum', 'batch_sum'):
                 return math_ops.reduce_sum(loss)
             else:
                 total_loss = math_ops.reduce_sum(loss)
@@ -977,7 +974,7 @@ class FocalLoss(_ClassificationLoss):
 
 
 class BCELoss(_ClassificationLoss):
-    def __init__(self, axis=-1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
+    def __init__(self, axis=-1, sample_weight=None, auto_balance=False, from_logits=None, ignore_index=-100,
                  cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
                  ohem_thresh=0.1, input_names=None, output_names=None, name='BCELoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits,
@@ -985,6 +982,7 @@ class BCELoss(_ClassificationLoss):
                          label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
                          input_names=input_names, output_names=output_names, name=name)
 
+        self._input_from_logits = from_logits
         self.num_classes = None
         self.is_logsoftmax = False
         self.need_target_onehot = True
@@ -1009,10 +1007,17 @@ class BCELoss(_ClassificationLoss):
                 cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype),
                 name="sample_weight")
 
-            if self.is_logsoftmax:
-                output = exp(clip(output, max=0))
-            loss = binary_cross_entropy(output, target, from_logits=self.from_logits)
-            return loss
+            from_logits = self._input_from_logits
+            if from_logits is None:
+                if self.is_logsoftmax:
+                    output = tf.exp(output)
+                    from_logits = False
+                else:
+                    from_logits = bool(tf.reduce_any((output < 0) | (output > 1)))
+            loss = binary_cross_entropy(output, target, from_logits=from_logits)
+            shape = [1] * len(output.shape)
+            shape[self.axis] = self.num_classes
+            return loss * tf.reshape(sample_weight, shape)
 
 
 class DiceLoss(_ClassificationLoss):

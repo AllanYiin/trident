@@ -809,11 +809,51 @@ class ModelBase(object):
         for callback in self.callbacks:
             callback.on_loss_calculation_end(self.training_context)
 
-    def _add_loss_term(self, value, reduction):
+    def _should_update_gradients(self):
+        if self.training_context.get('waiting_to_start', False):
+            return False
+        stop = self.training_context['stop_update']
+        if stop > 1:
+            self.training_context['stop_update'] -= 1
+        if 0 < stop < 1:
+            import random
+            return random.random() <= stop
+        return stop == 0
+
+    def _gradient_batch_weight(self):
+        """Callbacks may set accumulation_weight for a custom weighted mean."""
+        context = self.training_context
+        if context.get('accumulation_weight') is not None:
+            weight = float(context['accumulation_weight'])
+            if not np.isfinite(weight) or weight < 0:
+                raise ValueError("accumulation_weight must be finite and nonnegative")
+            return weight
+        data = context['train_data']
+        feed = context.get('data_feed') or {}
+        signature = getattr(self, 'signature', None)
+        names = signature.inputs if signature is not None else ()
+        inputs = (data.get(feed.get(name, name)) for name in names)
+        for value in itertools.chain(inputs, data.values()):
+            if getattr(value, 'ndim', 0) > 0 or isinstance(value, (list, tuple)):
+                return len(value)
+        return 1
+
+    def _add_loss_term(self, value, reduction, name=None, denominator=None):
+        if denominator is not None and float(denominator) == 0:
+            # An entirely ignored term must not create a zero gradient that advances momentum.
+            value = value.detach()
         self.training_context['current_loss'] = self.training_context['current_loss'] + value
-        if self.accumulation_steps > 1 and reduction == 'sum':
-            prior = self.training_context.get('sum_reduced_loss')
-            self.training_context['sum_reduced_loss'] = value if prior is None else prior + value
+        if self.accumulation_steps > 1:
+            if reduction in ('sum', 'batch_sum'):
+                prior = self.training_context.get('sum_reduced_loss')
+                self.training_context['sum_reduced_loss'] = value if prior is None else prior + value
+            elif denominator is not None:
+                self.training_context.setdefault('normalized_losses', {})[name] = (value, denominator)
+
+    def _reset_loss_terms(self):
+        self.training_context['sum_reduced_loss'] = None
+        self.training_context['normalized_losses'] = {}
+        self.training_context['accumulation_weight'] = None
 
     @measure_perf
     def do_calculate_losses(self):
@@ -830,9 +870,8 @@ class ModelBase(object):
                 loss_weight = to_tensor(loss_weight, ctx.float_dtype)
                 # print(-1, 'train_data', self.train_data.value_list[-1].shape, 'abnormal:', any_abnormal_number( self.train_data.value_list[-1]))
                 # print(self.train_data.value_list[-1])
-                this_loss = loss_weight * try_map_args_and_call(v, self.train_data,
-                                                                self.training_context['data_feed'],
-                                                                self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
+                this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
+                                                  self.is_autocast_enabled)
 
                 if isinstance(this_loss, tuple):
                     overall_loss = to_tensor(0.0, requires_grad=True)
@@ -841,8 +880,9 @@ class ModelBase(object):
                             raise FloatingPointError("Nonfinite loss: {0}".format(k))
                         else:
                             # a leaf Variable that requires grad connotused in an in-place operation.
-                            overall_loss = overall_loss + this_loss[i]
-                    self._add_loss_term(overall_loss, getattr(v, 'reduction', 'mean'))
+                            overall_loss = overall_loss + loss_weight * this_loss[i]
+                    self._add_loss_term(overall_loss, getattr(v, 'reduction', 'mean'), k,
+                                        getattr(v, 'gradient_denominator', None))
 
                     if hasattr(v, 'as_metric') and v.as_metric == True:
                         self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],
@@ -851,11 +891,13 @@ class ModelBase(object):
                     self.training_context['tmp_losses'].collect(k, self.training_context['steps'], overall_loss)
 
                 else:
+                    this_loss = loss_weight * this_loss
                     if any_abnormal_number(this_loss):
                         raise FloatingPointError("Nonfinite loss: {0}".format(k))
                     else:
                         # a leaf Variable that requires grad connotused in an in-place operation.
-                        self._add_loss_term(this_loss, getattr(v, 'reduction', 'mean'))
+                        self._add_loss_term(this_loss, getattr(v, 'reduction', 'mean'), k,
+                                            getattr(v, 'gradient_denominator', None))
 
                     if hasattr(v, 'as_metric') and v.as_metric == True:
                         self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],
@@ -886,11 +928,9 @@ class ModelBase(object):
                                                   self.is_autocast_enabled) if self.training_context[
                                                                                    'stop_update'] < 1 else to_tensor(
                     0.0)
-            if not any_abnormal_number(this_loss):
-                # a leaf Variable that requires grad connotused in an in-place operation.
-                self.training_context['current_loss'] = self.training_context[
-                                                            'current_loss'] + this_loss  # self.training_context[
-            # 'current_loss'] + this_loss
+            if any_abnormal_number(this_loss):
+                raise FloatingPointError('Nonfinite regularizer: {}'.format(k))
+            self._add_loss_term(this_loss, 'mean')
 
             self.training_context['tmp_losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
@@ -1128,13 +1168,13 @@ class ModelBase(object):
         train_data, test_data = self.do_on_data_received(train_data, test_data)
         # if any_abnormal_number(train_data.value_list[0]):
         #     print('{0} after data_received'.format(''))
+        self._reset_loss_terms()
         for callback in self.callbacks:
             callback.on_data_received(self.training_context)
 
         if (not self.training_context[
             'skip_reset_total_loss']):  # and (not (self.training_context['steps'] + 1) % self.accumulation_steps != 0):
-            self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
-            self.training_context['sum_reduced_loss'] = None
+            self.training_context['current_loss'] = to_tensor(0.0)
 
         if 'skip_generate_output' not in self.training_context or self.training_context[
             'skip_generate_output'] == False:
@@ -1157,7 +1197,6 @@ class ModelBase(object):
 
         if (hasattr(self._model, 'parameters') or is_tensor(self._model)) and any_abnormal_number(self._model):
             raise FloatingPointError("Nonfinite model parameters after optimizer update")
-        self.do_calculate_constraints()
         if log_weights and is_collect_data:
             if isinstance(self._model, Layer):
                 self.log_weight(weghts=self._model.weights)

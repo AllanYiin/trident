@@ -6,7 +6,6 @@ import gc
 import sys
 from functools import reduce
 import collections
-import copy
 import math
 import re
 import numpy as np
@@ -113,6 +112,16 @@ class Optimizer(Trackable):
                     format_string += '    {0}: {1}\n'.format(key, group[key])
         format_string += ')'
         return format_string
+
+    @staticmethod
+    def _finite_gradients(grads_and_vars):
+        pairs = tuple((grad, var) for grad, var in grads_and_vars if grad is not None and var.trainable)
+        for grad, _ in pairs:
+            tf.debugging.assert_all_finite(
+                grad.values if isinstance(grad, tf.IndexedSlices) else grad,
+                "Nonfinite gradients; optimizer was not updated",
+            )
+        return pairs
 
     def _filter_grads(self, grads_and_vars):
         """Filter out iterable with grad equal to None or abnormal grad and do the gradient centralization."""
@@ -440,7 +449,7 @@ class Adam(Optimizer):
 
         group=self.param_groups[0]
 
-        for grad,p in grads_and_vars:
+        for grad,p in self._finite_gradients(grads_and_vars):
             # np_grad=to_numpy(grad)
             # print(p.name,np_grad.shape,np_grad.mean(),np.abs(np_grad).mean())
             if grad is None or not p.trainable:
@@ -448,8 +457,6 @@ class Adam(Optimizer):
 
             if is_sparse(grad):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-            if any_abnormal_number(grad):
-                grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
             amsgrad = group['amsgrad']
             p_data=p.value()#.detach()
@@ -509,9 +516,9 @@ class Adam(Optimizer):
                 G_grad = where(is_abnormal_number(G_grad),grad, G_grad)
 
             p.assign_add(-step_size*G_grad)
-            # state['exp_avg'] = exp_avg
-            # state['exp_avg_sq'] = exp_avg_sq
-            # state['max_exp_avg_sq'] = exp_avg_sq
+            state['exp_avg'] = exp_avg
+            state['exp_avg_sq'] = exp_avg_sq
+            state['max_exp_avg_sq'] = max_exp_avg_sq
         return True
 
 
@@ -581,7 +588,7 @@ class RMSprop(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
 
         group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
@@ -714,7 +721,7 @@ class SGD(Optimizer):
         group = self.param_groups[0]
         dampening = group['dampening']
         nesterov = group['nesterov']
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
@@ -744,11 +751,11 @@ class SGD(Optimizer):
             if group['momentum'] != 0:
 
                 if 'momentum_buffer' not in state:
-                    buf = state['momentum_buffer'] = copy.deepcopy(grad)
+                    buf = state['momentum_buffer'] = deepcopy(grad)
                 else:
                     buf = state['momentum_buffer']
-                    buf_t = buf * group['momentum'] + grad * (1 - dampening)
-                    state['momentum_buffer'] = buf_t
+                    buf = buf * group['momentum'] + grad * (1 - dampening)
+                    state['momentum_buffer'] = buf
                 if nesterov:
                     grad = grad + buf * group['momentum']
                 else:
@@ -1281,7 +1288,7 @@ class RAdam(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
 
         group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
@@ -1317,8 +1324,8 @@ class RAdam(Optimizer):
             # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
             exp_avg_sq = beta2 * exp_avg_sq + (1 - beta2) * (grad * grad)
 
-            # state['exp_avg_sq'] = exp_avg_sq
-            # state['exp_avg'] = exp_avg
+            state['exp_avg_sq'] = exp_avg_sq
+            state['exp_avg'] = exp_avg
             state['step'] += 1
             #grad = gc_grads(grad, self.gradient_centralization)
 
@@ -1388,7 +1395,7 @@ class PlainRAdam(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
 
         group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
@@ -1422,6 +1429,7 @@ class PlainRAdam(Optimizer):
             # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
             v_t = beta2 * v + (1 - beta2) * (grad * grad)
 
+            state['m'], state['v'] = m_t, v_t
             state['step'] += 1
 
             beta2_t = beta2 ** state['step']
@@ -1431,18 +1439,18 @@ class PlainRAdam(Optimizer):
             # more conservative since it's an approximated value
             if N_sma >= 5:
                 if group['weight_decay'] != 0:
-                    p_data = p_data + group['weight_decay'] * group['lr'] * p_data
+                    p_data = p_data - group['weight_decay'] * group['lr'] * p_data
 
                 step_size = group['lr'] * math.sqrt(
                     (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
                             N_sma_max - 2)) / (1 - beta1 ** state['step'])
                 denom = sqrt(v_t) + group['eps']
-                p_t = p_data - group['lr'] * step_size * m_t / (sqrt(v_t) + group['eps'])
+                p_t = p_data - step_size * m_t / denom
                 p.assign(p_t)
             elif self.degenerated_to_sgd:
 
                 if group['weight_decay'] != 0:
-                    p_data = p_data + group['weight_decay'] * group['lr'] * p_data
+                    p_data = p_data - group['weight_decay'] * group['lr'] * p_data
                 step_size = group['lr'] / (1 - beta1 ** state['step'])
                 p_t = p_data - step_size * m_t
                 p.assign(p_t)
@@ -1496,7 +1504,7 @@ class AdamW(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
         #grads_and_vars = self._filter_grads(grads_and_vars)
         group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
@@ -1530,6 +1538,7 @@ class AdamW(Optimizer):
             # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
             v_t = beta2 * v + (1 - beta2) * (grad * grad)
 
+            state['m'], state['v'] = m_t, v_t
             state['step'] += 1
 
             denom = sqrt(v_t) + group['eps']
@@ -1544,7 +1553,7 @@ class AdamW(Optimizer):
             step_size = scheduled_lr * math.sqrt(bias_correction2) / bias_correction1
 
             if group['weight_decay'] != 0:
-                p_data = p_data + group['weight_decay'] * scheduled_lr * p_data
+                p_data = p_data - group['weight_decay'] * scheduled_lr * p_data
             p_data=p_data - step_size * m_t / denom
             p.assign(p_data)
 
@@ -1749,14 +1758,12 @@ class Ranger(Optimizer):
         """
        # grads_and_vars = self._filter_grads(grads_and_vars)
         group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None or not p.trainable:
                 continue
 
             if is_sparse(grad):
                 raise RuntimeError('Ranger does not support sparse gradients, please consider SparseAdam instead')
-            if any_abnormal_number(grad):
-                grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
             p_data_fp32 =p.value()#.detach()
             state = self.state[p.ref()]
@@ -1945,7 +1952,7 @@ class LARS(Optimizer):
         eeta = group["eeta"]
         lr = group["lr"]
 
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
@@ -1967,15 +1974,11 @@ class LARS(Optimizer):
                 w_norm = norm(param)
                 g_norm =norm(grad)
 
-                device = g_norm.get_device()
                 trust_ratio = tf.where(
-                    greater_equal(w_norm,0),
-                    tf.where(
-                        greater_equal(g_norm, 0),
-                        (self.eeta * true_divide(w_norm ,g_norm)),
-                        to_tensor([1.0]),
-                    ), to_tensor([1.0]),
-                ).numpy()[0]
+                    (w_norm > 0) & (g_norm > 0),
+                    tf.math.divide_no_nan(eeta * w_norm, g_norm),
+                    tf.ones_like(g_norm),
+                )
 
                 scaled_lr = lr * trust_ratio
                 if "momentum_buffer" not in param_state:
@@ -1985,7 +1988,8 @@ class LARS(Optimizer):
                 else:
                     next_v = param_state["momentum_buffer"]
 
-                next_v=next_v*momentum+scaled_lr*grad
+                next_v = next_v * momentum + scaled_lr * grad
+                param_state["momentum_buffer"] = next_v
                 if self.use_nesterov:
                     update = (self.momentum * next_v) + (scaled_lr * grad)
                 else:
@@ -2074,14 +2078,12 @@ class RangerLars(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
         #grads_and_vars = self._filter_grads(grads_and_vars)
         group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None  or not p.trainable:
                 continue
 
             if is_sparse(grad):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-            if any_abnormal_number(grad):
-                grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
             p_data = p.value()
             state = self.state[p.ref()]
@@ -2253,14 +2255,12 @@ class AdaBelief(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
         #grads_and_vars = self._filter_grads(grads_and_vars)
         group = self.param_groups[0]
-        for grad,p in grads_and_vars:
+        for grad,p in self._finite_gradients(grads_and_vars):
             if grad is None or not p.trainable:
                 continue
 
             if is_sparse(grad):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-            if any_abnormal_number(grad):
-                grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
             amsgrad = group['amsgrad']
             p_data=p.value()#.detach()
@@ -2470,14 +2470,12 @@ class RangerBelief(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
         #grads_and_vars = self._filter_grads(grads_and_vars)
         group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None  or not p.trainable:
                 continue
 
             if is_sparse(grad):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-            if any_abnormal_number(grad):
-                grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
             p_data = p.value()
             state = self.state[p.ref()]
@@ -2630,14 +2628,12 @@ class DiffGrad(Optimizer):
 
         """
         group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+        for grad, p in self._finite_gradients(grads_and_vars):
             if grad is None or not p.trainable:
                 continue
 
             if is_sparse(grad):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-            if any_abnormal_number(grad):
-                grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
             p_data = p.value()
             state = self.state[p.ref()]

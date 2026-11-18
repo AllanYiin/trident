@@ -92,8 +92,9 @@ def test_external_kwargs_model_cannot_silently_ignore_packing():
         forward_model(ExternalModel(), batch)
 
 
-def test_accumulation_equals_large_batch_including_short_tail():
-    large = tiny()
+@pytest.mark.parametrize("experts", [0, 3])
+def test_accumulation_equals_large_batch_including_short_tail(experts):
+    large = tiny(num_experts=experts)
     micro = copy.deepcopy(large)
     full_plan, full = plan_for(large, batches(batch_size=2))
     micro_plan, small = plan_for(micro, batches(), accumulation=2)
@@ -207,3 +208,21 @@ def test_stage_factories_receive_completed_artifacts(tmp_path):
     assert calls == ["pretrain", "sft"]
     pipeline.start_now(resume=True)
     assert calls == ["pretrain", "sft"]
+
+
+
+def test_masked_log_probs_and_rollout_behavior_distribution():
+    from trident.optims.language.objectives import token_log_probs
+    from trident.optims.language.rollout import TorchRolloutEngine
+
+    logits = torch.tensor([[[-torch.inf, -torch.inf], [0., 1.]]], requires_grad=True)
+    result, valid = token_log_probs(logits, torch.tensor([[1, -100]]))
+    assert not valid.any() and result.item() == 0
+    (gradient,) = torch.autograd.grad(result.sum(), logits)
+    assert torch.equal(gradient, torch.zeros_like(gradient))
+
+    engine = TorchRolloutEngine(ByteTokenizer())
+    engine.update_policy(tiny(), 0)
+    rollout = engine.rollout(["Q"], num_generations=1, max_new_tokens=1, top_k=1)
+    labels = rollout.tensors["labels"][:, 1:]
+    assert rollout.tensors["old_log_probs"][labels != -100].tolist() == [0.0]

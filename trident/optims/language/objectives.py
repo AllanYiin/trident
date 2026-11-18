@@ -51,9 +51,10 @@ class ObjectiveResult:
 def token_log_probs(logits, labels):
     targets = labels[:, 1:]
     valid = targets != -100
-    log_probs = F.log_softmax(logits[:, :-1].float(), dim=-1)
+    scores = logits[:, :-1].float().masked_fill(~valid.unsqueeze(-1), 0)
+    log_probs = F.log_softmax(scores, dim=-1)
     selected = log_probs.gather(-1, targets.masked_fill(~valid, 0).unsqueeze(-1)).squeeze(-1)
-    return selected * valid, valid
+    return selected.masked_fill(~valid, 0), valid
 
 
 def _assert_independent(model, policy):
@@ -180,8 +181,8 @@ class Distillation(CausalLMObjective):
             raise ValueError("logit distillation requires aligned sequence positions and vocabulary")
         logps, valid = token_log_probs(logits, batch["labels"])
         temperature = self.temperature
-        kl = F.kl_div(F.log_softmax(logits[:, :-1].float() / temperature, -1),
-                      F.softmax(teacher[:, :-1].float() / temperature, -1), reduction="none").sum(-1)
+        kl = F.kl_div(F.log_softmax(logits[:, :-1].float().masked_fill(~valid.unsqueeze(-1), 0) / temperature, -1),
+                      F.softmax(teacher[:, :-1].float().masked_fill(~valid.unsqueeze(-1), 0) / temperature, -1), reduction="none").sum(-1)
         count = int(valid.sum())
         kl_sum = (kl * valid).sum() * temperature ** 2
         loss = (1 - self.alpha) * -logps.sum() + self.alpha * kl_sum

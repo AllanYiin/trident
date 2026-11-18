@@ -217,7 +217,7 @@ def ResNet18(include_top=True,
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet18.model = recovery_model
     else:
-        resnet18.model = _make_recovery_model_include_top(resnet18.model, include_top=include_top, classes=classes, freeze_features=True)
+        resnet18.model = _make_recovery_model_include_top(resnet18.model, include_top=include_top, classes=classes, freeze_features=freeze_features)
 
     resnet18.model.input_shape = input_shape
     resnet18.model.to(get_device())
@@ -243,7 +243,7 @@ def ResNet50(include_top=True,
         resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes,freeze_features=freeze_features)
         #resnet50.model = recovery_model
     else:
-        resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=True)
+        resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=freeze_features)
 
     resnet50.model.input_shape = input_shape
     resnet50.model.to(_device)
@@ -271,7 +271,7 @@ def ResNet101(include_top=True,
                                                           freeze_features=freeze_features)
         # resnet50.model = recovery_model
     else:
-        resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes, freeze_features=True)
+        resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes, freeze_features=freeze_features)
 
     resnet101.model.input_shape = input_shape
     resnet101.model.to(_device)
@@ -298,7 +298,7 @@ def ResNet152(include_top=True,
         resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes,
                                                            freeze_features=freeze_features)
     else:
-        resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes, freeze_features=True)
+        resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes, freeze_features=freeze_features)
 
     resnet152.model.input_shape = input_shape
     resnet152.model.to(_device)

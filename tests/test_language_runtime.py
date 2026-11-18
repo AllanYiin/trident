@@ -15,10 +15,10 @@ from trident.optims.language import (CausalLM, CausalLMConfig, CausalLanguageMod
 from trident.optims.trainers import TrainingPlan
 
 
-def tiny():
+def tiny(experts=0):
     return CausalLM(CausalLMConfig(vocab_size=272, hidden_size=16, num_hidden_layers=1,
                                    num_attention_heads=2, num_key_value_heads=1,
-                                   intermediate_size=32, max_position_embeddings=64))
+                                   intermediate_size=32, max_position_embeddings=64, num_experts=experts))
 
 
 def data(batch_size=1):
@@ -26,7 +26,17 @@ def data(batch_size=1):
                     batch_size=batch_size, collate=CausalLMCollator(ByteTokenizer(), max_length=32))
 
 
-def _ddp_worker(rank, directory):
+def sparse_data(batch_size):
+    import numpy as np
+
+    return Iterator(Dataset([
+        {"input_ids": np.array([5, 6]), "labels": np.array([-100, label]),
+         "attention_mask": np.array([1, 1])}
+        for label in (6, -100)
+    ]), batch_size=batch_size)
+
+
+def _ddp_worker(rank, directory, sparse=False):
     torch.set_num_threads(1)
     torch.manual_seed(51)
     directory = Path(directory)
@@ -34,12 +44,28 @@ def _ddp_worker(rank, directory):
                             init_method=(directory / "rendezvous").as_uri(),
                             timeout=datetime.timedelta(seconds=60))
     try:
-        item = (CausalLanguageModel(tiny(), ByteTokenizer()).with_optimizer(torch.optim.SGD, lr=0.01)
+        item = (CausalLanguageModel(tiny(3 if sparse else 0), ByteTokenizer()).with_optimizer(torch.optim.SGD, lr=0.01)
                 .with_accumulate_grads(2))
-        plan = (TrainingPlan().add_training_item(item).with_data_loader(data())
+        plan = (TrainingPlan().add_training_item(item).with_data_loader(sparse_data(1) if sparse else data())
                 .with_distributed(backend="gloo").with_checkpointing(directory / "checkpoint", every_updates=1))
         plan.start_now()
         torch.save(item.model.module.state_dict(), directory / ("rank{}.pt".format(rank)))
+        if sparse:
+            from trident.optims.language import runner
+
+            notify = runner._notify
+
+            def failing_callback(plan, item, event):
+                if rank == 0 and event == "on_batch_start":
+                    raise RuntimeError("injected rank-local callback failure")
+                notify(plan, item, event)
+
+            runner._notify = failing_callback
+            try:
+                with pytest.raises(RuntimeError, match="injected|another rank"):
+                    plan.start_now()
+            finally:
+                runner._notify = notify
     finally:
         dist.destroy_process_group()
 
@@ -72,12 +98,14 @@ def _ddp_rl_worker(rank, directory, algorithm):
 
 
 @pytest.mark.skipif(not dist.is_available() or not dist.is_gloo_available(), reason="Gloo required")
-def test_two_process_ddp_matches_global_token_mean(tmp_path):
+@pytest.mark.parametrize("sparse", [False, True])
+def test_two_process_ddp_matches_global_token_mean(tmp_path, sparse):
     torch.set_num_threads(1)
     torch.manual_seed(51)
-    item = CausalLanguageModel(tiny(), ByteTokenizer()).with_optimizer(torch.optim.SGD, lr=0.01)
-    TrainingPlan().add_training_item(item).with_data_loader(data(batch_size=4)).start_now()
-    torch.multiprocessing.spawn(_ddp_worker, args=(str(tmp_path),), nprocs=2, join=True)
+    item = CausalLanguageModel(tiny(3 if sparse else 0), ByteTokenizer()).with_optimizer(torch.optim.SGD, lr=0.01)
+    loader = sparse_data(2) if sparse else data(batch_size=4)
+    TrainingPlan().add_training_item(item).with_data_loader(loader).start_now()
+    torch.multiprocessing.spawn(_ddp_worker, args=(str(tmp_path), sparse), nprocs=2, join=True)
     rank0 = torch.load(tmp_path / "rank0.pt", weights_only=True)
     rank1 = torch.load(tmp_path / "rank1.pt", weights_only=True)
     for key, value in item.model.state_dict().items():

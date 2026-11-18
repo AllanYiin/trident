@@ -185,7 +185,9 @@ def test_agentic_observations_never_receive_labels(monkeypatch):
     monkeypatch.setattr(registry, "execute", lambda call: {"ok": True, "result": "OBSERVATION"})
     turns = iter(['<tool_call>{"name":"add","arguments":{"a":2,"b":3}}</tool_call><|im_end|>', '5<|im_end|>'])
     def fake_generate(policy, ids, **kwargs):
-        return torch.cat((ids, torch.tensor([tokenizer.encode(next(turns))])), dim=-1)
+        tokens = torch.tensor([tokenizer.encode(next(turns))], device=ids.device)
+        assert kwargs['return_log_probs']
+        return torch.cat((ids, tokens), dim=-1), tokens.new_zeros(tokens.shape, dtype=torch.float32)
     monkeypatch.setattr(agent_module, "generate_tokens", fake_generate)
     engine = AgenticRolloutEngine(tokenizer, registry)
     engine.update_policy(tiny(max_position_embeddings=1024), 0)

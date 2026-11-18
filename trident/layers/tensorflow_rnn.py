@@ -315,10 +315,10 @@ def standard_lstm(inputs, init_h, init_c, kernel, recurrent_kernel, bias,
             cell_inputs=all_cell_inputs[direction]
             layer_idx=layer*(2 if go_backwards else 1)+direction
 
-            h_tm1 =hidden_list[layer_idx][0].detach()  # previous memory state
-            c_tm1 = cell_list[layer_idx][0].detach()   # previous carry state
+            h_tm1 =hidden_list[layer_idx][0]  # previous memory state
+            c_tm1 = cell_list[layer_idx][0]   # previous carry state
             z = tf.matmul(cell_inputs, kernel[layer_idx],transpose_b=True)
-            z=z+tf.matmul(h_tm1, recurrent_kernel[layer],transpose_b=True)
+            z=z+tf.matmul(h_tm1, recurrent_kernel[layer_idx],transpose_b=True)
             # if self.use_bias:
             #     z +=bias
 

@@ -150,12 +150,10 @@ def numpy_compatible(func):
 
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if func.__name__ in ('max', 'min', 'abs', 'round', 'pow') and isinstance(args[0], tuple):
+        if func.__name__ in ('max', 'min', 'abs', 'round', 'pow') and args and isinstance(args[0], tuple):
             args = unpack_singleton(args)
 
-        x = args[0] if hasattr(args, '__len__') else args
-        new_args = []
-        new_kwargs = OrderedDict()
+        x = args[0] if args else next(iter(kwargs.values()), None)
 
         if all([isinstance(arg, numbers.Number) for arg in args]) and (len(kwargs) == 0 or all(
                 [isinstance(kv[1], numbers.Number) for kv in kwargs.items()])) and func.__name__ in (
@@ -178,47 +176,20 @@ def numpy_compatible(func):
         #     y = tensor_func(*args, **kwargs)
         #     return y
         #
-        elif isinstance(x, np.ndarray):
+        tensor = next((item for item in (*args, *kwargs.values()) if torch.is_tensor(item)), None)
+        if tensor is None and isinstance(x, np.ndarray):
             numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops', 'numpy'])
             if numpy_func is not None:
-                for arg in args:
-                    if is_tensor(arg):
-                        new_args.append(to_numpy(arg))
-                    else:
-                        new_args.append(arg)
-                for k, v in kwargs.items():
-                    if is_tensor(v):
-                        new_kwargs[k] = to_numpy(v)
-                    else:
-                        new_kwargs[k] = v
-                y = numpy_func(*new_args, **new_kwargs)
-                return y
-            else:
-                for arg in args:
-                    if isinstance(arg, np.ndarray):
-                        new_args.append(to_tensor(arg))
-                    else:
-                        new_args.append(arg)
-                for k, v in kwargs.items():
-                    if isinstance(v, np.ndarray):
-                        new_kwargs[k] = to_tensor(v)
-                    else:
-                        new_kwargs[k] = v
-                y = func(*new_args, **new_kwargs)
-                return y
-        else:
-            for arg in args:
-                if isinstance(arg, np.ndarray):
-                    new_args.append(to_tensor(arg))
-                else:
-                    new_args.append(arg)
-            for k, v in kwargs.items():
-                if isinstance(v, np.ndarray):
-                    new_kwargs[k] = to_tensor(v)
-                else:
-                    new_kwargs[k] = v
-            y = func(*new_args, **new_kwargs)
-            return y
+                return numpy_func(*args, **kwargs)
+
+        def convert(item):
+            if not isinstance(item, np.ndarray):
+                return item
+            device = tensor.device if tensor is not None else None
+            return to_tensor(item, device=device)
+
+        return func(*(convert(item) for item in args),
+                    **{key: convert(item) for key, item in kwargs.items()})
 
     return wrapper
 
@@ -353,10 +324,10 @@ def to_tensor(x: Any, dtype: Optional[_dtype] = None, device: Device = None, req
         dtype = Dtype.int64
     # string data to tensor
 
-    elif isinstance(x, np.ndarray):
+    elif dtype is None and isinstance(x, np.ndarray):
         dtype = str2dtype(str(x.dtype).replace('numpy', 'Dtype'))
 
-    elif isinstance(x, Tensor) :
+    elif dtype is None and isinstance(x, Tensor):
         dtype = x.dtype
     elif dtype is None and not is_tensor(x) and isinstance(x, Iterable) and all(
             [isinstance(item, numbers.Integral) for item in x]):
@@ -369,20 +340,12 @@ def to_tensor(x: Any, dtype: Optional[_dtype] = None, device: Device = None, req
         device = _get_device()
 
     if isinstance(x, Tensor):
-        if x is not None:
-            # dtype =None
-            if dtype is None:
-                dtype = x.dtype
-            else:
-                if dtype == Dtype.int32:
-                    dtype = Dtype.int64
-                if x.dtype != dtype:
-                    x = x.to(dtype)
-            x = x.to(device)
-            if isinstance(requires_grad, bool) and requires_grad != x.requires_grad:
-                x.requires_grad = requires_grad
-            return x
-        return None
+        if requires_grad is False and x.requires_grad:
+            x = x.detach()
+        x = x.to(device=device, dtype=dtype)
+        if requires_grad is True and not x.requires_grad:
+            x = x.detach().requires_grad_(True)
+        return x
     else:
         if x is None:
             return None
@@ -3242,10 +3205,9 @@ def moments(x: Tensor, axis, keepdims=True):
 
 
     """
-    _axes = list(axis)
-    norm_mean = reduce_mean(x, axis=_axes, keepdims=keepdims).detach()
-    norm_variance = reduce_mean(square(x - norm_mean), axis=_axes, keepdims=keepdims)
-    return norm_mean, norm_variance
+    axes = (axis,) if isinstance(axis, int) else tuple(axis)
+    variance, mean = torch.var_mean(x, dim=axes, unbiased=False, keepdim=keepdims)
+    return mean, variance
 
 
 def norm(x: Tensor, order=None, axis=1, keepdims=False):
@@ -4500,15 +4462,14 @@ def binary_cross_entropy(output, target, from_logits=False):
       Returns:
           A tensor.
       """
+    target = torch.as_tensor(target, dtype=output.dtype, device=output.device)
+    target = torch.broadcast_to(target, output.shape)
     if from_logits:
-        output = output
-    else:
-        output = sigmoid(output)
-    if isinstance(target,(_float,_int )):
-        target=(ones_like(output)*float(target)).to(output.dtype).to(output.device)
-    bce = target * torch.log(clip(output,min=1e-7))
-    bce =bce+ (1 - target) * torch.log(clip(1 - output,min=1e-7))
-    return -bce
+        return F.binary_cross_entropy_with_logits(output, target, reduction='none')
+    with torch.autocast(device_type=output.device.type, enabled=False):
+        if output.dtype in (torch.float16, torch.bfloat16):
+            output, target = output.float(), target.float()
+        return F.binary_cross_entropy(output, target, reduction='none')
 
 
 def cross_entropy(output, target, from_logits=False):

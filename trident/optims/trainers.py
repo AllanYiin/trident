@@ -688,8 +688,7 @@ class TrainingPlan(object):
                         trainitem.training_context['collect_data_inteval'] = collect_data_inteval
                         trainitem.training_context['model_name'] = trainitem_name
                         start_epoch = 0 if not hasattr(trainitem, 'start_epoch') else trainitem.start_epoch
-                        if epoch < start_epoch:
-                            trainitem.training_context['stop_update'] = 1
+                        trainitem.training_context['waiting_to_start'] = epoch < start_epoch
 
                         if current_batch == 0:
                             trainitem.do_on_epoch_start()
@@ -901,7 +900,7 @@ class GanTrainingPlan(TrainingPlan):
 
             if get_backend() == 'pytorch':
                 from torch import autograd
-                interpolated.requires_grad = True
+                interpolated = interpolated.detach().requires_grad_(True)
 
                 # calculate probability of interpolated examples
                 prob_interpolated = self.discriminator(interpolated)
@@ -911,13 +910,13 @@ class GanTrainingPlan(TrainingPlan):
                                           grad_outputs=ones_like(prob_interpolated, requires_grad=False).to(
                                               get_device()),
                                           create_graph=True, retain_graph=True, only_inputs=True)[0]
-                return ((sqrt(reduce_sum(gradients ** 2, axis=[2, 3])) - 1.0) ** 2).mean()
+                return ((sqrt(reduce_sum(gradients.reshape(gradients.shape[0], -1) ** 2, axis=1) + 1e-12) - 1.0) ** 2).mean()
             elif get_backend() == 'tensorflow':
                 with tf.GradientTape() as t:
                     t.watch(interpolated)
-                    prob_interpolated = self.discriminate(interpolated)
+                    prob_interpolated = self.discriminator(interpolated)
                 gradients = t.gradient(prob_interpolated, interpolated)
-                return ((sqrt(reduce_sum(gradients ** 2, axis=[1, 2])) - 1.0) ** 2).mean()
+                return ((tf.sqrt(tf.reduce_sum(tf.square(tf.reshape(gradients, (tf.shape(gradients)[0], -1))), axis=1) + 1e-12) - 1.0) ** 2).mean()
 
         for modual in self.discriminator.model.children():
             if 'BatchNorm' in modual.__class__.__name__:
@@ -1090,17 +1089,17 @@ class GanTrainingPlan(TrainingPlan):
                 self.discriminator.model.remove_at(-1)
 
             def g_loss(d_fake, d_real, real_label, fake_label):
-                d_fake_logit = sigmoid(d_fake - d_real.mean().detach())
-                d_real_logit = sigmoid(d_real - d_fake.mean().detach())
+                d_fake_logit = d_fake - d_real.mean()
+                d_real_logit = d_real - d_fake.mean()
                 return (binary_cross_entropy(d_real_logit,fake_label.detach(),from_logits=True).mean()+binary_cross_entropy(d_fake_logit,real_label.detach(),from_logits=True).mean())
 
             self.generator.with_loss(g_loss, loss_weight=1)
             def real_loss(d_real, d_fake, real_label):
-                d_real_logit = sigmoid(d_real - d_fake.mean().detach())
+                d_real_logit = d_real - d_fake.mean()
                 return binary_cross_entropy(d_real_logit,real_label.detach(),from_logits=True).mean()
 
             def fake_loss(d_fake, d_real, fake_label):
-                d_fake_logit = sigmoid(d_fake - d_real.mean().detach())
+                d_fake_logit = d_fake - d_real.mean()
                 return binary_cross_entropy(d_fake_logit,fake_label.detach(),from_logits=True).mean()
 
             self.discriminator.with_loss(real_loss)
@@ -1383,8 +1382,7 @@ class GanTrainingPlan(TrainingPlan):
                             trainitem.training_context['data_template'] = data_provider.traindata.data_template
                             trainitem.training_context['collect_data_inteval'] = collect_data_inteval
                             trainitem.training_context['model_name'] = trainitem_name
-                            if epoch < int(trainitem.start_epoch):
-                                trainitem.training_context['stop_update'] = 1
+                            trainitem.training_context['waiting_to_start'] = epoch < int(trainitem.start_epoch)
 
 
                             # if self.is_generator_first:
@@ -1452,9 +1450,6 @@ class GanTrainingPlan(TrainingPlan):
                                 ctx.print(' \n', flush=True)
 
                         for k, trainitem in self.training_items.items():
-                            finish = getattr(trainitem, '_finish_gradient_window', None)
-                            if callable(finish):
-                                finish()
                             for callback in trainitem.training_context['callbacks']:
                                 if not callback.is_shared:
                                     callback.on_overall_batch_end(trainitem.training_context)
@@ -1472,8 +1467,12 @@ class GanTrainingPlan(TrainingPlan):
                                     ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
                                     trainitem.training_context['upload_onnx'] = True
                         if only_steps and self.steps - first_step >= max_batches:
+                            for item in self.training_items.values():
+                                item.do_on_epoch_end()
                             return True
 
+                for item in self.training_items.values():
+                    item.do_on_epoch_end()
                 if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (
                         epoch + 1) % self.save_model_frequency == 0:
                     for k, trainitem in self.training_items.items():
@@ -1603,7 +1602,7 @@ class CycleGanTrainingPlan(TrainingPlan):
             gradients = None
             if get_backend() == 'pytorch':
                 from torch import autograd
-                interpolated.requires_grad = True
+                interpolated = interpolated.detach().requires_grad_(True)
 
                 # calculate probability of interpolated examples
                 prob_interpolated = self.discriminator(interpolated)
@@ -1613,13 +1612,13 @@ class CycleGanTrainingPlan(TrainingPlan):
                                           grad_outputs=ones_like(prob_interpolated, requires_grad=False).to(
                                               get_device()),
                                           create_graph=True, retain_graph=True, only_inputs=True)[0]
-                return ((sqrt(reduce_sum(gradients ** 2, axis=[2, 3])) - 1.0) ** 2).mean()
+                return ((sqrt(reduce_sum(gradients.reshape(gradients.shape[0], -1) ** 2, axis=1) + 1e-12) - 1.0) ** 2).mean()
             elif get_backend() == 'tensorflow':
                 with tf.GradientTape() as t:
                     t.watch(interpolated)
-                    prob_interpolated = self.discriminate(interpolated)
+                    prob_interpolated = self.discriminator(interpolated)
                 gradients = t.gradient(prob_interpolated, interpolated)
-                return ((sqrt(reduce_sum(gradients ** 2, axis=[1, 2])) - 1.0) ** 2).mean()
+                return ((tf.sqrt(tf.reduce_sum(tf.square(tf.reshape(gradients, (tf.shape(gradients)[0], -1))), axis=1) + 1e-12) - 1.0) ** 2).mean()
 
         for modual in self.discriminator.model.children():
             if 'BatchNorm' in modual.__class__.__name__:
@@ -1787,20 +1786,19 @@ class CycleGanTrainingPlan(TrainingPlan):
                 # self.discriminator.model.add_module('tanh',Tanh())
 
             def g_loss(d_fake, d_real, real_label, fake_label):
-                d_fake_logit = sigmoid(d_fake - d_real.mean().detach())
-                d_real_logit = sigmoid(d_real - d_fake.mean())
-                return (binary_cross_entropy(d_real_logit, fake_label).mean() + binary_cross_entropy(d_fake_logit,
-                                                                                                     real_label).mean()) / 2
+                d_fake_logit = d_fake - d_real.mean()
+                d_real_logit = d_real - d_fake.mean()
+                return (binary_cross_entropy(d_real_logit, fake_label, from_logits=True).mean() + binary_cross_entropy(d_fake_logit, real_label, from_logits=True).mean()) / 2
 
             self.generator.with_loss(g_loss, loss_weight=1)
 
             def real_loss(d_real, d_fake, real_label):
-                d_real_logit = sigmoid(d_real - d_fake.mean())
-                return binary_cross_entropy(d_real_logit, real_label).mean()
+                d_real_logit = d_real - d_fake.mean()
+                return binary_cross_entropy(d_real_logit, real_label, from_logits=True).mean()
 
             def fake_loss(d_fake, d_real, fake_label):
-                d_fake_logit = sigmoid(d_fake - d_real.mean())
-                return binary_cross_entropy(d_fake_logit, fake_label).mean()
+                d_fake_logit = d_fake - d_real.mean()
+                return binary_cross_entropy(d_fake_logit, fake_label, from_logits=True).mean()
 
             self.discriminator.with_loss(real_loss, loss_weight=0.5)
             self.discriminator.with_loss(fake_loss, loss_weight=0.5)
@@ -2077,8 +2075,7 @@ class CycleGanTrainingPlan(TrainingPlan):
                             trainitem.training_context['data_template'] = data_provider.traindata.data_template
                             trainitem.training_context['collect_data_inteval'] = collect_data_inteval
                             trainitem.training_context['model_name'] = trainitem_name
-                            if epoch < int(trainitem.start_epoch):
-                                trainitem.training_context['stop_update'] = 1
+                            trainitem.training_context['waiting_to_start'] = epoch < int(trainitem.start_epoch)
                             if self.max_noise_intensity > 0 and trainitem.training_context[
                                 'gan_role'] == 'discriminator':
                                 current_intensity = self.min_noise_intensity + (
@@ -2155,9 +2152,6 @@ class CycleGanTrainingPlan(TrainingPlan):
                                 ctx.print(' \n', flush=True)
 
                         for k, trainitem in self.training_items.items():
-                            finish = getattr(trainitem, '_finish_gradient_window', None)
-                            if callable(finish):
-                                finish()
                             for callback in trainitem.training_context['callbacks']:
                                 if not callback.is_shared:
                                     callback.on_overall_batch_end(trainitem.training_context)
@@ -2175,8 +2169,12 @@ class CycleGanTrainingPlan(TrainingPlan):
                                     ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
                                     trainitem.training_context['upload_onnx'] = True
                         if only_steps and self.steps - first_step >= max_batches:
+                            for item in self.training_items.values():
+                                item.do_on_epoch_end()
                             return True
 
+                for item in self.training_items.values():
+                    item.do_on_epoch_end()
                 if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (
                         epoch + 1) % self.save_model_frequency == 0:
                     for k, trainitem in self.training_items.items():

@@ -4,12 +4,13 @@ import torch
 from .objectives import forward_model, unwrap_model
 
 
-def sample_token(logits, temperature=0.0, top_k=0, top_p=1.0, generator=None):
+def sample_token(logits, temperature=0.0, top_k=0, top_p=1.0, generator=None, *, return_log_probs=False):
     if temperature < 0 or top_k < 0 or not 0 < top_p <= 1:
         raise ValueError("invalid sampling parameters")
     logits = logits.float()
     if temperature == 0:
-        return logits.argmax(-1)
+        tokens = logits.argmax(-1)
+        return (tokens, torch.zeros_like(tokens, dtype=logits.dtype)) if return_log_probs else tokens
     logits = logits / temperature
     if top_k:
         threshold = logits.topk(min(top_k, logits.shape[-1]), dim=-1).values[:, -1:]
@@ -20,13 +21,17 @@ def sample_token(logits, temperature=0.0, top_k=0, top_p=1.0, generator=None):
         remove[:, 1:] = remove[:, :-1].clone()
         remove[:, 0] = False
         logits = logits.scatter(1, order, sorted_logits.masked_fill(remove, float("-inf")))
-    return torch.multinomial(logits.softmax(-1), 1, generator=generator).squeeze(-1)
+    log_probs = logits.log_softmax(-1)
+    tokens = torch.multinomial(log_probs.exp(), 1, generator=generator)
+    if return_log_probs:
+        return tokens.squeeze(-1), log_probs.gather(-1, tokens).squeeze(-1)
+    return tokens.squeeze(-1)
 
 
 @torch.no_grad()
 def generate_tokens(model, input_ids, attention_mask=None, max_new_tokens=32,
                     temperature=0.0, top_k=0, top_p=1.0, eos_token_id=None,
-                    pad_token_id=None, generator=None):
+                    pad_token_id=None, generator=None, *, return_log_probs=False):
     if max_new_tokens < 0:
         raise ValueError("max_new_tokens must be nonnegative")
     config = getattr(unwrap_model(model), "config", None)
@@ -52,6 +57,7 @@ def generate_tokens(model, input_ids, attention_mask=None, max_new_tokens=32,
     was_training = model.training
     model.eval()
     cache = None
+    sampled_log_probs = []
     try:
         for _ in range(max_new_tokens):
             data = {"input_ids": output if cache is None else output[:, -1:], "attention_mask": mask}
@@ -59,7 +65,13 @@ def generate_tokens(model, input_ids, attention_mask=None, max_new_tokens=32,
             if cache is not None:
                 extra["past_key_values"] = cache
             result = forward_model(model, data, **extra)
-            token = sample_token(result["logits"][:, -1], temperature, top_k, top_p, generator)
+            sample = sample_token(result["logits"][:, -1], temperature, top_k, top_p,
+                                  generator, return_log_probs=return_log_probs)
+            if return_log_probs:
+                token, log_prob = sample
+                sampled_log_probs.append(log_prob.masked_fill(~active, 0))
+            else:
+                token = sample
             token = torch.where(active, token, torch.full_like(token, pad_token_id))
             output = torch.cat((output, token[:, None]), dim=-1)
             mask = torch.cat((mask, active.long()[:, None]), dim=-1)
@@ -70,4 +82,8 @@ def generate_tokens(model, input_ids, attention_mask=None, max_new_tokens=32,
                 break
     finally:
         model.train(was_training)
+    if return_log_probs:
+        log_probs = torch.stack(sampled_log_probs, dim=1) if sampled_log_probs else output.new_empty(
+            (output.shape[0], 0), dtype=torch.float32)
+        return output, log_probs
     return output

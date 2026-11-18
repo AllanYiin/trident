@@ -736,9 +736,9 @@ class ActorCriticPolicy(MuiltiNetwork):
             #     gae = delta[i] + m[i] * gae
             #     R[i] = gae+values[i]
             for value, next_value, reward, done in list(zip(values, next_values, rewards, dones))[::-1]:
-                gae = gae * gamma * gae_lambda
+                gae = gae * gamma * gae_lambda * (1 - done)
                 gae = gae + reward + gamma * next_value.detach() * (1 - done) - value.detach()
-                R.insert(0, gae + value)
+                R.insert(0, gae + value.detach())
 
             R = stack(R, axis=0)
             return R
@@ -1826,8 +1826,9 @@ class PPOPolicy(ActorCriticPolicy):
                                 ratio2 = clip(ratio, 1.0 - 0.2, 1.0 + 0.2)
                                 # surr1 = ratio * (batch_advantages[j].detach())
                                 # surr2 = clip(ratio, 1.0 - 0.2, 1.0 + 0.2) * (batch_advantages[j].detach())
-                                batch_actor_loss = batch_actor_loss - (
-                                            torch.min(ratio, ratio2) * batch_advantages[j]).mean()
+                                advantage = batch_advantages[j].detach()
+                                batch_actor_loss = batch_actor_loss - torch.minimum(
+                                    ratio * advantage, ratio2 * advantage).mean()
 
                             self.actor.training_context['current_loss'] = self.actor.training_context[
                                                                               'current_loss'] + batch_actor_loss / len(

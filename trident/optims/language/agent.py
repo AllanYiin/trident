@@ -8,7 +8,6 @@ from dataclasses import dataclass
 import torch
 
 from .generation import generate_tokens
-from .objectives import forward_model, token_log_probs
 from .rollout import RolloutBatch, TorchRolloutEngine, prompt_text
 
 
@@ -128,7 +127,7 @@ class AgenticRolloutEngine(TorchRolloutEngine):
         if self.policy is None:
             raise RuntimeError("synchronize the policy before rollout")
         device = next(self.policy.parameters()).device
-        rows, label_rows, prompts, completions, trajectories = [], [], [], [], []
+        rows, label_rows, probability_rows, prompts, completions, trajectories = [], [], [], [], [], []
         for sample in samples:
             if isinstance(sample, dict):
                 sample = dict(sample, tools=sample.get("tools", self.tools.schemas))
@@ -136,6 +135,7 @@ class AgenticRolloutEngine(TorchRolloutEngine):
             for _ in range(num_generations):
                 tokens = self.tokenizer.encode(prompt, add_special_tokens=False)
                 labels = [-100] * len(tokens)
+                probabilities = [0.] * len(tokens)
                 events, used_calls, completion = [], 0, ""
                 for turn in range(self.max_turns):
                     capacity = getattr(self.policy.config, "max_position_embeddings", 32768) - len(tokens)
@@ -143,12 +143,14 @@ class AgenticRolloutEngine(TorchRolloutEngine):
                         events.append({"stop": "context_limit"})
                         break
                     inputs = torch.tensor([tokens], dtype=torch.long, device=device)
-                    result = generate_tokens(self.policy, inputs, max_new_tokens=min(max_new_tokens, capacity),
+                    result, sampled = generate_tokens(self.policy, inputs, max_new_tokens=min(max_new_tokens, capacity),
                                              temperature=temperature, top_k=top_k, top_p=top_p,
-                                             eos_token_id=self.tokenizer.eos_token_id, pad_token_id=self.tokenizer.pad_token_id)
+                                             eos_token_id=self.tokenizer.eos_token_id, pad_token_id=self.tokenizer.pad_token_id,
+                                                      return_log_probs=True)
                     action = result[0, len(tokens):].tolist()
                     tokens.extend(action)
                     labels.extend(action)
+                    probabilities.extend(sampled[0].tolist())
                     text_ids = action[:-1] if action and action[-1] == self.tokenizer.eos_token_id else action
                     completion = self.tokenizer.decode(text_ids, skip_special_tokens=False)
                     try:
@@ -172,21 +174,25 @@ class AgenticRolloutEngine(TorchRolloutEngine):
                         observation_ids = self.tokenizer.encode(observation_text, add_special_tokens=False)
                         tokens.extend(observation_ids)
                         labels.extend([-100] * len(observation_ids))
+                        probabilities.extend([0.] * len(observation_ids))
                     if event.get("stop") == "tool_limit" or turn == self.max_turns - 1:
                         event.setdefault("stop", "turn_limit")
                         break
                     header = self.tokenizer.encode("<|im_start|>assistant\n", add_special_tokens=False)
                     tokens.extend(header)
                     labels.extend([-100] * len(header))
+                    probabilities.extend([0.] * len(header))
                 # Observations may exceed the context budget; remove only the
                 # unsupervised suffix so action labels are never re-positioned.
                 while labels and labels[-1] == -100:
                     tokens.pop()
                     labels.pop()
+                    probabilities.pop()
                 if not tokens or all(value == -100 for value in labels):
                     raise ValueError("trajectory has no trainable actions")
                 rows.append(tokens)
                 label_rows.append(labels)
+                probability_rows.append(probabilities)
                 prompts.append(prompt)
                 completions.append(completion)
                 trajectories.append(events)
@@ -194,13 +200,14 @@ class AgenticRolloutEngine(TorchRolloutEngine):
         ids = torch.full((len(rows), width), self.tokenizer.pad_token_id, device=device, dtype=torch.long)
         labels = torch.full_like(ids, -100)
         mask = torch.zeros_like(ids)
-        for index, (row, label) in enumerate(zip(rows, label_rows)):
+        old_log_probs = torch.zeros((len(rows), width - 1), device=device)
+        for index, (row, label, probability) in enumerate(zip(rows, label_rows, probability_rows)):
             ids[index, :len(row)] = torch.tensor(row, device=device)
             labels[index, :len(row)] = torch.tensor(label, device=device)
             mask[index, :len(row)] = 1
+            old_log_probs[index, :len(row) - 1] = torch.tensor(probability[1:], device=device)
         tensors = {"input_ids": ids, "labels": labels, "attention_mask": mask}
-        logits = forward_model(self.policy, tensors, use_cache=False)["logits"]
-        tensors["old_log_probs"] = token_log_probs(logits, labels)[0].detach()
+        tensors["old_log_probs"] = old_log_probs
         return RolloutBatch(tensors, prompts, completions,
                             torch.arange(len(samples), device=device).repeat_interleave(num_generations),
                             self.policy_version, trajectories).validate()

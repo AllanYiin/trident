@@ -10,8 +10,9 @@ from trident.optims.trainers import TrainingPlan
 from .objectives import (CausalLMObjective, ObjectiveResult, _assert_independent, _freeze_auxiliary,
                          forward_model, token_log_probs, unwrap_model)
 from .rollout import TorchRolloutEngine
-from .runner import (_configure_distributed, _distributed_scalar, _load_training_checkpoint,
-                     _loader, _notify, _rank, _update_window, _world, move_batch,
+from .runner import (_collective_stage, _configure_distributed, _distributed_scalar,
+                     _load_training_checkpoint, _loader, _local_ddp_backward, _next_window,
+                     _notify, _notify_ranks, _rank, _update_window, _world, move_batch,
                      save_training_checkpoint)
 
 
@@ -238,8 +239,8 @@ class RLTrainingPlan(TrainingPlan):
         engine.update_policy(item.model, item.optimizer_updates)
         checkpointing = getattr(self, "_language_checkpointing", None)
         limit, start_updates = getattr(self, "_language_max_updates", None), item.optimizer_updates
-        _notify(self, item, "on_training_start")
         try:
+            _notify_ranks(self, item, "on_training_start")
             for epoch in range(start_epoch, self.num_epochs):
                 self.epochs = epoch
                 item.training_context["current_epoch"] = epoch
@@ -253,11 +254,10 @@ class RLTrainingPlan(TrainingPlan):
                     restore_rng(resume_rng)
                     resume_rng = None
                 restored = False
-                _notify(self, item, "on_epoch_start")
-                for samples in iterator:
+                _notify_ranks(self, item, "on_epoch_start")
+                def collect_rollout(samples):
                     if not isinstance(samples, (list, tuple)):
                         raise TypeError("RL loader must yield lists of prompt records; use collate=list")
-                    before_rollout_updates = item.optimizer_updates
                     rollout = engine.rollout(samples, **self.sampling)
                     if rollout.policy_version != item.optimizer_updates:
                         raise ValueError("rollout policy version is stale")
@@ -272,15 +272,24 @@ class RLTrainingPlan(TrainingPlan):
                         raise FloatingPointError("reward function returned NaN/Inf")
                     rollout.tensors = move_batch(rollout.tensors, item.device)
                     rollout.group_ids = rollout.group_ids.to(item.device)
-                    rollout_metrics = item.objective.prepare_rollout(rollout, rewards)
+                    with _local_ddp_backward([getattr(item.objective, "critic", None)]):
+                        metrics = item.objective.prepare_rollout(rollout, rewards)
+                    return rollout, metrics
+
+                while (batches := _next_window(iterator, 1, item)):
+                    before_rollout_updates = item.optimizer_updates
+                    rollout, rollout_metrics = _collective_stage(
+                        item, "rollout and reward", lambda: collect_rollout(batches[0]))
                     size = len(rollout.tensors["input_ids"])
                     for _ in range(self.update_epochs):
                         minibatches = [{key: value[index:index + self.update_batch_size] for key, value in rollout.tensors.items()}
                                        for index in range(0, size, self.update_batch_size)]
-                        for index in range(0, len(minibatches), item.accumulation_steps):
-                            _update_window(self, item, minibatches[index:index + item.accumulation_steps])
+                        minibatches = iter(minibatches)
+                        while (window := _next_window(minibatches, item.accumulation_steps, item)):
+                            _update_window(self, item, window)
                             item.history[-1].update(rollout_metrics)
-                    engine.update_policy(item.model, item.optimizer_updates)
+                    _collective_stage(item, "rollout policy synchronization",
+                                      lambda: engine.update_policy(item.model, item.optimizer_updates))
                     count += 1
                     self.steps = item.microbatches
                     stop = limit is not None and item.optimizer_updates - start_updates >= limit
@@ -288,18 +297,22 @@ class RLTrainingPlan(TrainingPlan):
                     if checkpointing and (stop or item.optimizer_updates // checkpointing["every_updates"] >
                                           before_rollout_updates // checkpointing["every_updates"]):
                         save_training_checkpoint(self, item, loader, epoch, count, Path(checkpointing["directory"]) / "latest.pt")
-                    if stop or self.is_terminate:
+                    terminated = _distributed_scalar(self.is_terminate, item.device, torch.distributed.ReduceOp.MAX)
+                    if stop or terminated:
                         if checkpointing:
                             save_training_checkpoint(self, item, loader, epoch, count, Path(checkpointing["directory"]) / "latest.pt")
-                        _notify(self, item, "on_training_end")
+                        _notify_ranks(self, item, "on_training_end")
                         return item.history
-                _notify(self, item, "on_epoch_end")
+                _notify_ranks(self, item, "on_epoch_end")
                 if checkpointing:
                     save_training_checkpoint(self, item, loader, epoch + 1, 0, Path(checkpointing["directory"]) / "latest.pt")
                 offset = 0
-            _notify(self, item, "on_training_end")
+            _notify_ranks(self, item, "on_training_end")
             return item.history
         except BaseException:
             item.optimizer.zero_grad(set_to_none=True)
-            _notify(self, item, "on_training_terminated")
+            try:
+                _notify(self, item, "on_training_terminated")
+            except Exception:
+                pass  # Keep the original failure during teardown.
             raise

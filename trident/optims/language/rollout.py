@@ -6,7 +6,7 @@ import torch
 
 from trident.data.pipeline.language import ChatTemplate
 from .generation import generate_tokens
-from .objectives import forward_model, token_log_probs, unwrap_model
+from .objectives import unwrap_model
 
 
 @dataclass
@@ -76,8 +76,9 @@ class TorchRolloutEngine:
             for generation in range(num_generations):
                 ids[index * num_generations + generation, -len(row):] = torch.tensor(row, device=device)
                 mask[index * num_generations + generation, -len(row):] = 1
-        output = generate_tokens(self.policy, ids, mask, max_new_tokens, temperature, top_k, top_p,
-                                 self.tokenizer.eos_token_id, self.tokenizer.pad_token_id)
+        output, sampled = generate_tokens(self.policy, ids, mask, max_new_tokens, temperature, top_k, top_p,
+                                          self.tokenizer.eos_token_id, self.tokenizer.pad_token_id,
+                                          return_log_probs=True)
         completion = output[:, width:]
         completion_mask = torch.ones_like(completion)
         completions = []
@@ -91,8 +92,8 @@ class TorchRolloutEngine:
         labels = torch.full_like(output, -100)
         labels[:, width:] = completion.masked_fill(~completion_mask.bool(), -100)
         tensors = {"input_ids": output, "attention_mask": attention_mask, "labels": labels}
-        logits = forward_model(self.policy, tensors, use_cache=False)["logits"]
-        tensors["old_log_probs"] = token_log_probs(logits, labels)[0].detach()
+        tensors["old_log_probs"] = torch.nn.functional.pad(sampled.masked_fill(~completion_mask.bool(), 0),
+                                                           (width - 1, 0))
         return RolloutBatch(tensors, [prompt for prompt in prompts for _ in range(num_generations)],
                             completions, torch.arange(len(samples), device=device).repeat_interleave(num_generations),
                             self.policy_version).validate()

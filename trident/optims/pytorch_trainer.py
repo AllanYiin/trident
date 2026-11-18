@@ -114,6 +114,7 @@ class Model(model.ModelBase,Layer):
         self._gradient_weight = 0
         self._gradient_target_weight = 1
         self._sum_gradients = {}
+        self._normalized_gradients = {}
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
         if hasattr(output, '_signature'):
@@ -446,7 +447,7 @@ class Model(model.ModelBase,Layer):
         elif inspect.isclass(
                 optimizer) and optimizer.__class__.__name__ == "type":  # The loss is a class but not initialized yet.
             self.optimizer = optimizer(params, **kwargs)
-        elif isinstance(optimizer, Optimizer):
+        elif isinstance(optimizer, torch.optim.Optimizer):
             self.optimizer = optimizer
         else:
             self.optimizer = optimizer(params, **kwargs)
@@ -459,9 +460,20 @@ class Model(model.ModelBase,Layer):
         else:
             self.cautious_enable = cautious_enable if cautious_enable is not None else False
 
+        for loss in self._losses.values():
+            self._register_loss_parameters(loss)
         self.base_lr = kwargs.get('lr', kwargs.get('learning_rate', 1e-3))
         self.training_context['current_lr'] = self.base_lr
         return self
+
+    def _register_loss_parameters(self, loss):
+        if self.optimizer is None or not isinstance(loss, nn.Module):
+            return
+        known = {id(parameter) for group in self.optimizer.param_groups for parameter in group['params']}
+        new = [parameter for parameter in loss.parameters()
+               if parameter.requires_grad and id(parameter) not in known]
+        if new:
+            self.optimizer.add_param_group({'params': new})
 
     def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
         alias = name
@@ -546,6 +558,7 @@ class Model(model.ModelBase,Layer):
 
         self._losses[alias].start_epoch = start_epoch
         self._losses[alias].as_metric = as_metric
+        self._register_loss_parameters(self._losses[alias])
         return self
 
     def with_metric(self, metric, print_only=False, name='', **kwargs):
@@ -877,7 +890,7 @@ class Model(model.ModelBase,Layer):
             else:
                 train_data[item] = to_tensor(train_data[item]).to(get_device())
             if item in input_list and torch.is_tensor(train_data[item]) and train_data[item].is_floating_point():
-                train_data[item].require_grads = True
+                train_data[item] = train_data[item].requires_grad_(True)
 
             if test_data is not None and item in test_data:
                 if getattr(getattr(test_data[item], 'dtype', None), 'kind', None) in {'U', 'S'}:
@@ -898,63 +911,79 @@ class Model(model.ModelBase,Layer):
         return self.training_context['current_loss']
 
 
-    def _gradient_batch_weight(self):
-        # Legacy losses normally return a batch mean. A declared sum is already
-        # additive and must keep its scale across microbatches.
-        if (not self._regs and (self._losses or self.use_output_as_loss) and
-                builtins.all(getattr(loss, 'reduction', None) == 'sum' for loss in self._losses.values())):
-            return 0
-        for value in self.training_context['train_data'].values():
-            if getattr(value, 'ndim', 0) > 0 or isinstance(value, (list, tuple)):
-                return len(value)
-        return 1
-
     def _clear_gradient_window(self):
         if self.optimizer is not None:
             self.optimizer.zero_grad()
             self.optimizer._trident_is_accumulating_gradients = False
         self._gradient_batches = self._gradient_weight = 0
         self._sum_gradients.clear()
+        self._normalized_gradients.clear()
+
+    def _trainable_optimizer_parameters(self):
+        return [p for group in self.optimizer.param_groups for p in group['params'] if p.requires_grad]
 
     def _finish_gradient_window(self, log_gradients=False):
         if not self._gradient_batches:
-            return
+            return False
         optimizer = self.optimizer
         optimizer._trident_is_accumulating_gradients = False
-        parameters = [p for group in optimizer.param_groups for p in group['params'] if p.requires_grad]
+        parameters = self._trainable_optimizer_parameters()
         if self._gradient_weight and self._gradient_weight != self._gradient_target_weight:
             correction = self._gradient_target_weight / self._gradient_weight
             for parameter in parameters:
                 if parameter.grad is not None:
                     parameter.grad.mul_(correction)
-        for parameter, gradient in self._sum_gradients.items():
-            if parameter.grad is None:
-                parameter.grad = gradient
-            else:
-                parameter.grad.add_(gradient)
-        if self.gradscaler is not None and self.is_autocast_enabled:
+
+        def add_gradients(gradients, scale=1):
+            for parameter, gradient in gradients.items():
+                if parameter.grad is None:
+                    parameter.grad = gradient * scale
+                else:
+                    parameter.grad.add_(gradient, alpha=scale)
+
+        add_gradients(self._sum_gradients)
+        for weight, gradients in self._normalized_gradients.values():
+            if weight:
+                add_gradients(gradients, 1 / weight)
+        gradients = [p.grad for p in parameters if p.grad is not None]
+        if not gradients:
+            self._clear_gradient_window()
+            return False
+
+        use_amp = self.gradscaler is not None and self.is_autocast_enabled
+        if use_amp:
             self.gradscaler.unscale_(optimizer)
+        finite = all(torch.isfinite(g.coalesce().values() if g.is_sparse else g).all().item()
+                     for g in gradients)
+        if not finite:
+            if use_amp:
+                self.gradscaler.update()
+                self._clear_gradient_window()
+                return False
+            self._clear_gradient_window()
+            raise FloatingPointError("Nonfinite gradients; optimizer was not updated")
         if self.grad_clipping_by_norm:
-            torch.nn.utils.clip_grad_norm_(parameters, self.grad_clipping_threshold)
+            torch.nn.utils.clip_grad_norm_(parameters, self.grad_clipping_threshold, error_if_nonfinite=True)
         super().on_optimization_step_start()
         if log_gradients:
             self.log_gradient()
-        if self.gradscaler is not None and self.is_autocast_enabled:
+        if use_amp:
             self.gradscaler.step(optimizer)
             self.gradscaler.update()
         elif is_tpu_available():
             import torch_xla.core.xla_model as xm
             xm.optimizer_step(optimizer, barrier=True)
         else:
-            optimizer.step(self.get_current_loss)
+            optimizer.step()
         self._clear_gradient_window()
+        if any(not torch.isfinite(p).all().item() for p in parameters):
+            raise FloatingPointError("Optimizer produced nonfinite parameters")
+        self.do_calculate_constraints()
         self.do_on_optimization_step_end()
+        return True
 
     def do_gradient_update(self, log_gradients=False):
-        stop = self.training_context['stop_update']
-        if stop != 0 and not (0 < stop < 1 and random.random() <= stop):
-            if stop > 1:
-                self.training_context['stop_update'] -= 1
+        if not self._should_update_gradients():
             return
         if isinstance(self._model, nn.Module):
             self._model.train()
@@ -962,29 +991,42 @@ class Model(model.ModelBase,Layer):
         weight = self._gradient_batch_weight() if self.accumulation_steps > 1 else 1
         if not self._gradient_batches:
             self._gradient_target_weight = (weight or 1) * self.accumulation_steps
-        # Normalize before AMP scaling; correct an uneven or partial window before clipping.
         try:
             use_amp = ctx.amp_available and self.is_autocast_enabled and get_device() == 'cuda'
             if use_amp and self.gradscaler is None:
                 self.gradscaler = torch.cuda.amp.GradScaler()
-            summed = self.training_context.get('sum_reduced_loss')
-            if self.accumulation_steps > 1 and weight and summed is not None:
-                # With both sums and means, only the mean component is sample-normalized.
-                loss = loss - summed
-                params = [p for group in self.optimizer.param_groups for p in group['params'] if p.requires_grad]
-                if summed.requires_grad:
-                    gradients = torch.autograd.grad(self.gradscaler.scale(summed) if use_amp else summed,
-                                                    params, retain_graph=True, allow_unused=True)
-                    for param, grad in zip(params, gradients):
-                        if grad is not None:
-                            if param in self._sum_gradients:
-                                self._sum_gradients[param].add_(grad)
-                            else:
-                                self._sum_gradients[param] = grad.detach()
-            objective = loss * (weight / self._gradient_target_weight) if weight else loss
-            if use_amp:
-                objective = self.gradscaler.scale(objective)
-            objective.backward(retain_graph=self.training_context['retain_graph'])
+            params = self._trainable_optimizer_parameters()
+
+            def accumulate(term, gradients):
+                if not params or not torch.is_tensor(term) or not term.requires_grad:
+                    return
+                objective = self.gradscaler.scale(term) if use_amp else term
+                for p, grad in zip(params, torch.autograd.grad(objective, params, retain_graph=True,
+                                                               allow_unused=True)):
+                    if grad is not None:
+                        if p in gradients:
+                            gradients[p].add_(grad)
+                        else:
+                            gradients[p] = grad.detach()
+
+            if self.accumulation_steps > 1:
+                summed = self.training_context.get('sum_reduced_loss')
+                if summed is not None:
+                    accumulate(summed, self._sum_gradients)
+                    loss = loss - summed
+                for name, (term, denominator) in self.training_context.get('normalized_losses', {}).items():
+                    loss = loss - term
+                    denominator = float(denominator)
+                    total, buffer = self._normalized_gradients.get(name, (0, {}))
+                    if denominator:
+                        accumulate(term * denominator, buffer)
+                    self._normalized_gradients[name] = total + denominator, buffer
+            if params and weight and torch.is_tensor(loss) and loss.requires_grad:
+                objective = loss * (weight / self._gradient_target_weight)
+                if use_amp:
+                    objective = self.gradscaler.scale(objective)
+                # Limit leaf accumulation to this optimizer, even for losses using other networks.
+                objective.backward(inputs=params, retain_graph=self.training_context['retain_graph'])
             self._gradient_batches += 1
             self._gradient_weight += weight
             ending = self.training_context['current_batch'] + 1 == self.training_context['total_batch']
@@ -992,7 +1034,7 @@ class Model(model.ModelBase,Layer):
             setattr(self.optimizer, '_trident_is_accumulating_gradients', accumulate_grads)
             if self.accumulation_steps > 1:
                 self.training_context['tmp_losses'].collect(
-                    'total_losses', self.training_context['steps'], to_scalar(self.training_context['current_loss'].detach()))
+                    'total_losses', self.training_context['steps'], to_scalar(self.training_context['current_loss']))
             if not accumulate_grads:
                 self._finish_gradient_window(log_gradients)
         except (KeyboardInterrupt, Exception):

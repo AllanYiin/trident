@@ -296,39 +296,46 @@ class Adam(Optimizer):
                 loss = closure()
 
         for group in self.param_groups:
-            params_with_grad = []
-            grads = []
+            for parameter in group['params']:
+                grad = parameter.grad
+                if grad is None or not parameter.requires_grad:
+                    continue
+                if grad.is_sparse:
+                    raise RuntimeError("Adam does not support sparse gradients")
+                if not torch.isfinite(grad).all().item():
+                    raise FloatingPointError("Nonfinite gradients; Adam was not updated")
 
+        for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
                 state = self.state[p]
-                half_precision = p.data.dtype == torch.float16
+                half_precision = p.dtype in (torch.float16, torch.bfloat16)
                 if half_precision:
                     if 'fp32_param' not in state:
                         state['fp32_param'] = p.data.float().clone()
-                    p_fp32 = state['fp32_param']
+                    p_fp32 = state['fp32_param'] = state['fp32_param'].to(device=p.device, dtype=torch.float32)
                     grad = p.grad.data.float()
                 else:
                     p_fp32 = p.data
                     grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-                if any_abnormal_number(grad):
-                    grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
                 amsgrad = group['amsgrad']
 
                 # State initialization
-                if len(state) == 0:
+                if 'exp_avg' not in state:
                     state['step'] = 0
                     # Exponential moving average of gradient values
-                    state['exp_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    state['exp_avg'] = torch.zeros_like(p_fp32, memory_format=torch.preserve_format)
                     # Exponential moving average of squared gradient values
-                    state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    state['exp_avg_sq'] = torch.zeros_like(p_fp32, memory_format=torch.preserve_format)
                     # if amsgrad:
                     # Maintains max of all exp. moving avg. of sq. grad. values
-                    state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    state['max_exp_avg_sq'] = torch.zeros_like(p_fp32, memory_format=torch.preserve_format)
 
+                for key in ('exp_avg', 'exp_avg_sq', 'max_exp_avg_sq'):
+                    state[key] = state[key].to(p_fp32)
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
 
                 max_exp_avg_sq = state['max_exp_avg_sq']
@@ -369,8 +376,7 @@ class Adam(Optimizer):
 
                 p_fp32.add_(G_grad, alpha=-step_size)
                 if half_precision:
-                    p.data.copy_(p_fp32.half())
-                    p.grad = p.grad.half()
+                    p.copy_(p_fp32)
                 else:
                     p.data.copy_(p_fp32)
         return loss
@@ -1906,7 +1912,7 @@ class Ranger21(Optimizer):
                 if self.use_adabelief:
                     grad_ma.mul_(beta1).add_(grad, alpha=1 - beta1)
                     grad_residual = grad - grad_ma
-                    variance_ma_belief.mul_(beta2).addcmul(grad_residual, grad_residual, value=1 - beta2)
+                    variance_ma_belief.mul_(beta2).addcmul_(grad_residual, grad_residual, value=1 - beta2)
 
                 # print(f"upper loop grad = {grad.shape}")
                 variance_ma.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
@@ -1927,6 +1933,8 @@ class Ranger21(Optimizer):
         #     raise ValueError("failed to set param size")
 
         # stable weight decay
+        if not param_size:
+            return loss
         if self.use_madgrad:
             variance_normalized = torch.pow(variance_ma_sum / param_size, 1 / 3)
         else:
@@ -1987,7 +1995,7 @@ class Ranger21(Optimizer):
 
             # stable decay and / or norm loss
             # ==================================
-            if decay:
+            if decay and variance_normalized > 0:
                 if not self.use_madgrad:
                     # stable weight decay
                     p.data.mul_(1 - decay * lr / variance_normalized)
@@ -2822,6 +2830,8 @@ class RangerAdaBelief(Optimizer):
 
         # gc on or off
         self.gradient_centralization = gradient_centralization
+        self.use_gc = gradient_centralization is not None
+        self.gc_conv_only = gradient_centralization == "gcc"
         # level of gradient centralization
         # self.gc_gradient_threshold = 3 if gc_conv_only else 1
 
@@ -3311,10 +3321,10 @@ class Lion(Optimizer):
 
                 if len(state) == 0:
                     state['step'] = 0
-                    state['exp_avg'] = torch.zeros_like(p_data)
+                    state['exp_avg'] = torch.zeros_like(grad)
 
                 else:
-                    state['exp_avg'] = state['exp_avg'].type_as(p_data)
+                    state['exp_avg'] = state['exp_avg'].to(grad)
 
                 exp_avg = state['exp_avg']
                 beta1, beta2 = group['betas']
@@ -3654,11 +3664,9 @@ class GaLore(Optimizer):
     def _low_rank(self, grad, rank):
         if grad.dim() < 2:
             return grad
-        u, s, v = torch.linalg.svd(grad, full_matrices=False)
-        s = s[:rank]
-        u = u[:, :rank]
-        v = v[:rank, :]
-        return (u * s) @ v
+        flat = grad.reshape(grad.size(0), -1)
+        u, s, vh = torch.linalg.svd(flat, full_matrices=False)
+        return ((u[:, :rank] * s[:rank]) @ vh[:rank]).reshape_as(grad)
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -3675,6 +3683,8 @@ class GaLore(Optimizer):
                     continue
 
                 grad = p.grad.detach()
+                if grad.dtype in (torch.float16, torch.bfloat16):
+                    grad = grad.float()
                 if group['weight_decay'] != 0:
                     grad = grad.add(p.data, alpha=group['weight_decay'])
 
@@ -3683,9 +3693,11 @@ class GaLore(Optimizer):
                 state = self.state[p]
                 if len(state) == 0:
                     state['step'] = 0
-                    state['exp_avg'] = torch.zeros_like(p)
-                    state['exp_avg_sq'] = torch.zeros_like(p)
+                    state['exp_avg'] = torch.zeros_like(grad)
+                    state['exp_avg_sq'] = torch.zeros_like(grad)
 
+                state['exp_avg'] = state['exp_avg'].to(grad)
+                state['exp_avg_sq'] = state['exp_avg_sq'].to(grad)
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 state['step'] += 1
 
@@ -3723,14 +3735,11 @@ class Apollo(Optimizer):
                         enable_cautious=enable_cautious)
         super(Apollo, self).__init__(params, defaults)
 
-        for group in self.param_groups:
-            group['scale'] = torch.zeros(rank, device=next(iter(group['params'])).device)
-
     def _project(self, grad, rank):
-        flat = grad.view(grad.size(0), -1)
-        rand = torch.randn(flat.size(1), rank, device=grad.device)
+        flat = grad.reshape(grad.size(0) if grad.ndim else 1, -1)
+        rand = torch.randn(flat.size(1), rank, device=grad.device, dtype=grad.dtype)
         proj = flat @ rand
-        scale = proj.norm(dim=0)
+        scale = proj.norm(dim=1)
         return scale
 
     @torch.no_grad()
@@ -3742,27 +3751,28 @@ class Apollo(Optimizer):
             lr = group['lr']
             eps = group['eps']
             rank = group['rank']
-            scale = group['scale']
 
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
 
                 grad = p.grad.detach()
+                if grad.dtype in (torch.float16, torch.bfloat16):
+                    grad = grad.float()
                 if group['weight_decay'] != 0:
                     grad = grad.add(p.data, alpha=group['weight_decay'])
 
                 state = self.state[p]
                 if len(state) == 0:
                     state['step'] = 0
-                    state['exp_avg'] = torch.zeros_like(p)
+                    state['exp_avg'] = torch.zeros_like(grad)
 
-                exp_avg = state['exp_avg']
+                exp_avg = state['exp_avg'] = state['exp_avg'].to(grad)
                 state['step'] += 1
 
-                scale[:] = self._project(grad, rank)
+                scale = self._project(grad, rank)
 
-                norm_grad = grad / (scale.view(-1, *([1] * (grad.dim() - 1))) + eps)
+                norm_grad = grad / (scale.reshape((grad.shape[0],) + (1,) * (grad.ndim - 1) if grad.ndim else ()) + eps)
                 exp_avg.mul_(beta1).add_(norm_grad, alpha=1 - beta1)
 
                 step_size = lr / (1 - beta1 ** state['step'])

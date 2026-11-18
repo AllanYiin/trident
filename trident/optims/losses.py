@@ -152,8 +152,7 @@ class Loss(object):
 
     def _handel_abnormal(self, loss):
         if any_abnormal_number(loss):
-            sys.stderr.write('{0} has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.name))
-            loss = where(is_nan(loss), zeros_like(loss, requires_grad=True), loss)
+            raise FloatingPointError("{} produced nonfinite loss".format(self.name))
         return loss
 
     def _do_ohem(self, loss: Tensor):
