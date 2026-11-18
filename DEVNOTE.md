@@ -2,44 +2,45 @@
 
 ## SNAPSHOT — 當前狀態
 
-最後更新：2026-11-13T23:43+08:00
+最後更新：2026-11-18T17:23+08:00
 交接狀態：verified
 
 ### 目標與授權範圍
 
-診斷並根治訓練資料中的 Corrupt JPEG data: premature end of data segment 警告。
+檢視 Trident 目前程式碼、發行與測試，評估是否值得繼續維護。
 
 ### 目前進度
 
-已加入逐檔 JPEG 稽核工具，改善影像解碼失敗時的路徑錯誤訊息；尚未取得使用者實際訓練資料，因此未完成來源檔修復或排除。舊自動 checkpoint 僅含空 suggestions，無有效待辦。
+已評估 master 5cad1b99。資料管線、繁中增強與 PyTorch 訓練有可執行用途。原始碼預設隔離建置與兩個舊視覺模型入口有可重現缺陷。
 
 ### 下一步
 
-取得訓練資料路徑後執行 python scripts/audit_jpegs.py <資料夾> --report bad-jpegs.txt，依清單從原始來源替換或排除損毀檔及對應標籤，再重跑訓練。
+若採納聚焦維護，優先修正隔離建置與 ResNet50 的參數凍結行為，將實際使用的模型與資料流程納入 CI。是否擴大公開支援，仍待確認活躍下游。
 
 ### DECISIONS
 
-- 以 OpenCV/libjpeg 實際解碼結果稽核 JPEG；逐檔子程序捕捉原生 stderr 並保留檔名。
-- 不自動重編碼損毀影像，以免掩蓋已遺失的像素資料。
+- 評估建議優先維護資料管線、現有 PyTorch 訓練與仍有使用者的舊模型。維護範圍尚待專案擁有人決定。
 
 ### LANDMINES
 
-- 使用者實際資料集未提供，不能宣稱訓練警告已在其資料上消失。
-- 舊 DEVNOTE checkpoint 未含可驗證的專案進度資訊。
+- Windows 與微型語料驗證涵蓋正確性。Linux、JAX、大模型效能、活躍下游與維運人力仍待驗證。
+- 前一輪 JPEG 稽核工具已提交，實際訓練資料尚未提供，仍待依來源修復或排除檔案。
 
 ### 證據索引
 
-- scripts/audit_jpegs.py
-- tests/test_jpeg_audit.py
-- trident/backend/opencv_backend.py
-- trident/data/dataset.py
-- 本輪使用者要求與測試結果
+- setup.py、requirements.txt、.github/workflows/language.yml、PyPI tridentx 0.7.12
+- trident/data/pipeline/transforms.py、trident/data/text_transforms.py、tests/test_language_core.py、examples/language/quickstart.py
+- trident/models/pytorch_resnet.py、trident/models/tensorflow_resnet.py、trident/models/__init__.py
+- git log、git rev-parse HEAD refs/remotes/origin/master、git lfs ls-files
 
 ### VALIDATION
 
-- python -m pytest tests/test_jpeg_audit.py tests/test_data_pipeline_wp0_characterization.py -q — PASS：4 passed
-- 掃描工作區 images 與 examples/cat.jpg — PASS：3 張 JPEG，0 damaged
-- 實際訓練資料稽核與重訓 — NOT_RUN：使用者尚未提供資料集位置
+- Windows、Python 3.10.10，本機既有環境執行 python -m pytest tests -q — FAIL：107 passed、2 failed。Dense 與 MoE 的 Hugging Face 匯出測試在 accelerate 匯入時失敗。
+- 使用專案記錄的相依套件目錄與可寫的 Numba 快取，完整重跑 tests — PASS：同一輪測試 109 passed、15 warnings，耗時 142 秒。兩個 Hugging Face 匯出案例均通過。
+- 從 HEAD 建置並安裝 wheel 後執行離線 quickstart — PASS：本機 setuptools 80.9.0 使用 --no-build-isolation 成功。CPU fp32 在範例四句語料上更新 20 次，loss 5.5827 降至 2.2951。
+- 從 HEAD 使用 pip 預設隔離建置 wheel — FAIL：setup.py 第 4 行匯入 pkg_resources 失敗，建置需求階段中止。
+- PyTorch 2.7.1 的 ResNet50 訓練參數與 TensorFlow 2.20.0 的模型入口 — FAIL：PyTorch 兩類輸出正常，但 pretrained=False、freeze_features=False 時 161 個參數張量僅 fc.weight 與 fc.bias 可訓練。TensorFlow 可執行張量運算，Trident 模型套件匯入時發生 resnet 循環匯入。
+- 發行日期與安裝資訊核對 — PASS：PyPI 的 0.7.12 於 2026-06-10 發行，僅列 visualize、tests 兩個 extras。工作樹同版號已加入 llm 等 extras。
 
 # HISTORY
 
@@ -68,3 +69,10 @@
 <!-- devnote-review:8eb9d58df70f32b3112d270a -->
 
 新增 JPEG 逐檔稽核與測試，改善解碼失敗時的錯誤定位；實際資料集尚待檢查。精煉舊空白 checkpoint，未推定其代表已完成任務。
+
+
+## [2026-11-18T17:23+08:00] 維護價值評估與使用入口驗證
+
+<!-- devnote-review:b9a7e4a5f5fcd112002564d3 -->
+
+已核對前次按主題整理的 10 筆提交。本地 HEAD 與 origin/master 追蹤參照同指 5cad1b99，Git LFS 列出 11 檔。本輪驗證資料與訓練功能、模型行為及發行落差，提出維護範圍建議。
