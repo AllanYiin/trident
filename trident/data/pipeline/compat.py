@@ -116,6 +116,9 @@ class TrainingPlanAdapter(object):
         for batch in self.iterator:
             yield self._wrap(batch)
 
+    def iter_epoch(self):
+        return iter(self)
+
     def __len__(self):
         return len(self.iterator)
 

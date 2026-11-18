@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import builtins
 import copy
 import gc
 import inspect
@@ -38,15 +39,15 @@ from trident.backend.common import *
 from trident.backend.tensorspec import *
 from trident.backend import dtype as Dtype
 from trident.backend.pytorch_backend import *
+from trident.backend.pytorch_checkpoint import restore_model_checkpoint, write_model_checkpoint
+from trident.backend.checkpoint import staged_checkpoints
 from trident.backend.pytorch_ops import *
 from trident.backend import model
 from trident.data.mask_common import color2label
 from trident.data.transform import Transform
 from trident.backend.opencv_backend import array2image, image2array
 from trident.data.image_common import image_backend_adaption,reverse_image_backend_adaption
-from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
 from trident.optims.trainers import TrainingPlan
-from trident.data.data_provider import DataProvider
 from trident.optims.pytorch_constraints import get_constraint
 from trident.optims.pytorch_losses import *
 from trident.optims.pytorch_metrics import get_metric
@@ -109,6 +110,10 @@ class Model(model.ModelBase,Layer):
         self.filter_index = 1
 
         self._enable_tensorboard = False
+        self._gradient_batches = 0
+        self._gradient_weight = 0
+        self._gradient_target_weight = 1
+        self._sum_gradients = {}
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
         if hasattr(output, '_signature'):
@@ -427,61 +432,6 @@ class Model(model.ModelBase,Layer):
                     self.with_metric(v, name=k)
         return self
 
-    def fit(self,
-            x=None,
-            y=None,
-            batch_size=8,
-            epochs=1,
-            verbose=1,
-            callbacks=None,
-            validation_split=0.0,
-            validation_data=None,
-            shuffle=True,
-            class_weight=None,
-            sample_weight=None,
-            initial_epoch=0,
-            steps_per_epoch=None,
-            validation_steps=None,
-            validation_batch_size=8,
-            validation_freq=1,
-            max_queue_size=10,
-            workers=1,
-            use_multiprocessing=False,
-            ):
-
-        split_range = list(range(len(x)))
-        random.shuffle(split_range)
-        cutoff = int(validation_split * len(x))
-        mask_validate = split_range[:cutoff]
-        mask_train = split_range[cutoff:]
-        train_x = x[mask_train]
-        train_y = y[mask_train]
-        validate_x = x[mask_validate]
-        validate_y = y[mask_validate]
-
-        data_ds = NumpyDataset(data=train_x, symbol="input")
-        label_ds = LabelDataset(labels=train_y, symbol="target")
-        dataprovider = DataProvider(
-            traindata=Iterator(data=data_ds, label=label_ds, minibatch_size=batch_size, is_shuffe=shuffle,
-                               buffer_size=max_queue_size, workers=workers))
-        if validation_split > 0:
-            data_test_ds = NumpyDataset(data=train_x, symbol="input")
-            label_test_ds = LabelDataset(labels=train_y, symbol="target")
-            dataprovider.testdata = Iterator(data=data_test_ds, label=label_test_ds,
-                                             minibatch_size=validation_batch_size, is_shuffe=shuffle,
-                                             buffer_size=max_queue_size,
-                                             workers=workers)
-
-        plan = TrainingPlan() \
-            .add_training_item(self) \
-            .with_data_loader(dataprovider) \
-            .repeat_epochs(epochs) \
-            .within_minibatch_size(batch_size) \
-            .print_progress_scheduling(1, unit='epoch') \
-            .out_sample_evaluation_scheduling(validation_steps, unit='epoch') \
-            .save_model_scheduling(1, unit='epoch').start_now()
-        return self
-
     def with_optimizer(self, optimizer, **kwargs):
         params = [self._model] if is_tensor(self._model) else self._model.parameters()
 
@@ -767,6 +717,7 @@ class Model(model.ModelBase,Layer):
 
 
     def do_on_epoch_end(self):
+        self._finish_gradient_window()
         super().do_on_epoch_end()
         if self.model is not None and is_gpu_available() and get_device() == 'cuda':
             torch.cuda.synchronize()
@@ -827,126 +778,116 @@ class Model(model.ModelBase,Layer):
         if self.training_context['steps'] == 0 and (
                 'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or len(
             [v for v in self.training_context['data_feed'].value_list if v is None]) > 0):
-            try:
-                data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context[
-                    'data_feed']
-                if isinstance(self._model, Layer):
+            data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context[
+                'data_feed']
+            if isinstance(self._model, Layer):
 
-                    inshapes = self.inputs.value_list
-                    outshapes = self.targets.value_list
-                    available_fields = copy.deepcopy(train_data.key_list)
-                    if train_data is not None:
-                        # check input
-                        for arg in self._model.signature.inputs.key_list:
-                            if arg in data_feed and data_feed[arg] in available_fields:
-                                available_fields.remove(data_feed[arg])
+                inshapes = self.inputs.value_list
+                outshapes = self.targets.value_list
+                available_fields = copy.deepcopy(train_data.key_list)
+                if train_data is not None:
+                    # check input
+                    for arg in self._model.signature.inputs.key_list:
+                        if arg in data_feed and data_feed[arg] in available_fields:
+                            available_fields.remove(data_feed[arg])
+                        else:
+                            data_feed[arg] = ''
+                            if len(train_data) == 1 and len(self._model.signature.inputs.key_list) == 1:
+                                data_feed[arg] = train_data.key_list[0]
+                                available_fields.remove(train_data.key_list[0])
+                            elif arg in available_fields:
+                                data_feed[arg] = arg
+                                available_fields.remove(arg)
+                            elif arg in ['x', 'input'] and 'data' in available_fields:
+                                data_feed[arg] = 'data'
+                                available_fields.remove('data')
+                            elif arg in ['x', 'input'] and 'image' in available_fields:
+                                data_feed[arg] = 'image'
+                                available_fields.remove('image')
+                            elif arg == 'x' and 'input' in available_fields:
+                                data_feed[arg] = 'input'
+                                available_fields.remove('input')
+                            elif len(self._model.signature.inputs.key_list) == 1:
+                                for item in available_fields:
+                                    data_shape = train_data[item].shape if len(
+                                        train_data[item].shape) > 2 else TensorShape([None])
+                                    if 'target' not in item and 'output' != item and data_shape == inshapes[
+                                        0].shape:
+                                        data_feed[arg] = item
+                                        available_fields.remove(item)
+                                        break
                             else:
+                                Warning(
+                                    'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
+                                        arg))
+
+                    # check for target
+                    if len(available_fields) > 0:
+                        if len(available_fields) == 1:
+                            data_feed['target'] = available_fields[0]
+                        else:
+                            for i in range(len(self.targets)):
+                                arg = self.targets.key_list[i]
                                 data_feed[arg] = ''
-                                if len(train_data) == 1 and len(self._model.signature.inputs.key_list) == 1:
-                                    data_feed[arg] = train_data.key_list[0]
-                                    available_fields.remove(train_data.key_list[0])
+                                if len(train_data) == 1:
+                                    data_feed[self.targets.key_list[0]] = train_data.key_list[0]
                                 elif arg in available_fields:
                                     data_feed[arg] = arg
                                     available_fields.remove(arg)
-                                elif arg in ['x', 'input'] and 'data' in available_fields:
-                                    data_feed[arg] = 'data'
-                                    available_fields.remove('data')
-                                elif arg in ['x', 'input'] and 'image' in available_fields:
-                                    data_feed[arg] = 'image'
-                                    available_fields.remove('image')
-                                elif arg == 'x' and 'input' in available_fields:
-                                    data_feed[arg] = 'input'
-                                    available_fields.remove('input')
-                                elif len(self._model.signature.inputs.key_list) == 1:
+                                elif arg == 'target' and 'label' in available_fields:
+                                    data_feed[arg] = 'label'
+                                    available_fields.remove('label')
+                                elif arg == 'target' and len(available_fields) == 1:
+                                    data_feed[arg] = available_fields[0]
+                                    available_fields.remove(available_fields[0])
+                                elif len(available_fields) > 0:
+                                    target_shape = outshapes
                                     for item in available_fields:
-                                        data_shape = train_data[item].shape if len(
-                                            train_data[item].shape) > 2 else TensorShape([None])
-                                        if 'target' not in item and 'output' != item and data_shape == inshapes[
-                                            0].shape:
+                                        data_shape = list(train_data[item].shape) if len(
+                                            train_data[item].shape) > 1 else [None]
+                                        if target_shape == data_shape:
                                             data_feed[arg] = item
                                             available_fields.remove(item)
-                                            break
-                                else:
-                                    Warning(
-                                        'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-                                            arg))
+                                        elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
+                                                train_data[item].dtype)) and target_shape[:-1] == data_shape:
+                                            data_feed[arg] = item
+                                            available_fields.remove(item)
+                                        else:
+                                            Warning(
+                                                'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
+                                                    arg))
+                            # if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
+                            #     self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
 
-                        # check for target
-                        if len(available_fields) > 0:
-                            if len(available_fields) == 1:
-                                data_feed['target'] = available_fields[0]
-                            else:
-                                for i in range(len(self.targets)):
-                                    arg = self.targets.key_list[i]
-                                    data_feed[arg] = ''
-                                    if len(train_data) == 1:
-                                        data_feed[self.targets.key_list[0]] = train_data.key_list[0]
-                                    elif arg in available_fields:
-                                        data_feed[arg] = arg
-                                        available_fields.remove(arg)
-                                    elif arg == 'target' and 'label' in available_fields:
-                                        data_feed[arg] = 'label'
-                                        available_fields.remove('label')
-                                    elif arg == 'target' and len(available_fields) == 1:
-                                        data_feed[arg] = available_fields[0]
-                                        available_fields.remove(available_fields[0])
-                                    elif len(available_fields) > 0:
-                                        target_shape = outshapes
-                                        for item in available_fields:
-                                            data_shape = list(train_data[item].shape) if len(
-                                                train_data[item].shape) > 1 else [None]
-                                            if target_shape == data_shape:
-                                                data_feed[arg] = item
-                                                available_fields.remove(item)
-                                            elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
-                                                    train_data[item].dtype)) and target_shape[:-1] == data_shape:
-                                                data_feed[arg] = item
-                                                available_fields.remove(item)
-                                            else:
-                                                Warning(
-                                                    'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-                                                        arg))
-                                # if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
-                                #     self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
+                    # if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
+                    #     self.training_context['data_feed'] = data_feed
+                    # elif '' not in data_feed.value_list:
+                    self.training_context['data_feed'] = data_feed
+                    print('data_feed for {0} :'.format(self.name))
+                    print(json.dumps(data_feed, indent=4, sort_keys=True))
 
-                        # if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
-                        #     self.training_context['data_feed'] = data_feed
-                        # elif '' not in data_feed.value_list:
-                        self.training_context['data_feed'] = data_feed
-                        print('data_feed for {0} :'.format(self.name))
-                        print(json.dumps(data_feed, indent=4, sort_keys=True))
-
-            except:
-                PrintException()
 
         # convert to tensor
-        try:
-            data_feed = self.training_context['data_feed']
-            input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list] if not is_tensor(
-                self._model) else []
-            for item in train_data.key_list:
-                if train_data[item].dtype is np.str_ or train_data[item].dtype is np.str_ or train_data[
-                    item].dtype.kind in {'U', 'S'}:
-                    train_data[item] = [s.item() for s in train_data[item]]
+        data_feed = self.training_context['data_feed']
+        input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list] if not is_tensor(
+            self._model) else []
+        for item in train_data.key_list:
+            if getattr(getattr(train_data[item], 'dtype', None), 'kind', None) in {'U', 'S'}:
+                train_data[item] = [s.item() for s in train_data[item]]
+            else:
+                train_data[item] = to_tensor(train_data[item]).to(get_device())
+            if item in input_list and torch.is_tensor(train_data[item]) and train_data[item].is_floating_point():
+                train_data[item].require_grads = True
+
+            if test_data is not None and item in test_data:
+                if getattr(getattr(test_data[item], 'dtype', None), 'kind', None) in {'U', 'S'}:
+                    test_data[item] = [s.item() for s in test_data[item]]
                 else:
-                    train_data[item] = to_tensor(train_data[item]).to(get_device())
-                if item in input_list and 'float' in str(train_data[item].dtype):
-                    train_data[item].require_grads = True
+                    test_data[item] = to_tensor(test_data[item]).to(get_device())
 
-                if test_data is not None and item in test_data:
-                    if test_data[item].dtype is np.str_ or test_data[item].dtype is np.str_ or test_data[
-                        item].dtype.kind in {'U', 'S'}:
-                        test_data[item] = [s.item() for s in test_data[item]]
-                    else:
-                        test_data[item] = to_tensor(test_data[item]).to(get_device())
+        self.training_context['train_data'] = train_data
+        self.training_context['test_data'] = test_data
 
-            self.training_context['train_data'] = train_data
-            self.training_context['test_data'] = test_data
-
-        except:
-            PrintException()
-            self.training_context['train_data'] = train_data
-            self.training_context['test_data'] = test_data
         gc.collect()
         train_data, test_data = super().do_on_data_received(self.training_context['train_data'],self.training_context['test_data'])
 
@@ -957,84 +898,106 @@ class Model(model.ModelBase,Layer):
         return self.training_context['current_loss']
 
 
-    def do_gradient_update(self, log_gradients=False):
-        try:
-            accumulate_grads = (self.training_context['steps'] + 1) % self.accumulation_steps != 0
-            if self.optimizer is not None:
-                setattr(self.optimizer, '_trident_is_accumulating_gradients', accumulate_grads)
-            need_backward = self.training_context['stop_update'] == 0 or (
-                    0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
-                'stop_update'])
-            is_layer = isinstance(self._model, (Layer, nn.Module))
+    def _gradient_batch_weight(self):
+        # Legacy losses normally return a batch mean. A declared sum is already
+        # additive and must keep its scale across microbatches.
+        if (not self._regs and (self._losses or self.use_output_as_loss) and
+                builtins.all(getattr(loss, 'reduction', None) == 'sum' for loss in self._losses.values())):
+            return 0
+        for value in self.training_context['train_data'].values():
+            if getattr(value, 'ndim', 0) > 0 or isinstance(value, (list, tuple)):
+                return len(value)
+        return 1
 
-            if is_layer:
-                self._model.train()
-            if need_backward:
-                if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
-                    if self.gradscaler is None:
-                        self.gradscaler = torch.cuda.amp.GradScaler()
+    def _clear_gradient_window(self):
+        if self.optimizer is not None:
+            self.optimizer.zero_grad()
+            self.optimizer._trident_is_accumulating_gradients = False
+        self._gradient_batches = self._gradient_weight = 0
+        self._sum_gradients.clear()
 
-                    self.gradscaler.scale(self.training_context['current_loss'] / self.accumulation_steps).backward(
-                        retain_graph=self.training_context['retain_graph'])
-
-                else:
-
-                    (self.training_context['current_loss']).backward(retain_graph=self.training_context['retain_graph'])
-
-                if not accumulate_grads:
-                    # only check once every epoch start.
-                    if is_layer and self.grad_clipping_by_norm:
-
-                        if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
-                            self.gradscaler.unscale_(self.optimizer)
-                            torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
-
-                        else:
-                            torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
-
-                    super().on_optimization_step_start()
-
-                    if log_gradients:
-                        self.log_gradient()
-                    # amp support
-                    if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
-                        self.gradscaler.step(self.optimizer)
-                        self.gradscaler.update()
-                        self.optimizer.zero_grad()
-                    elif is_tpu_available():
-                        import torch_xla.core.xla_model as xm
-                        ctx.print('current_loss device', self.training_context['current_loss'].device)
-                        xm.optimizer_step(self.optimizer, barrier=True)
-                        self.optimizer.zero_grad()
-                    else:
-                        self.optimizer.step(self.get_current_loss)
-                        self.optimizer.zero_grad()
-
-                    if is_tensor(self._model):
-                        pass
-                        # if self._model.grad is not None:
-                        #     self._model.requires_grad = False
-                        #     self._model.requires_grad = True
-                    elif is_layer:
-                        self._model.zero_grad()
-
-                    self.do_on_optimization_step_end()
-                    for callback in self.callbacks:
-                        callback.on_optimization_step_end(self.training_context)
-
+    def _finish_gradient_window(self, log_gradients=False):
+        if not self._gradient_batches:
+            return
+        optimizer = self.optimizer
+        optimizer._trident_is_accumulating_gradients = False
+        parameters = [p for group in optimizer.param_groups for p in group['params'] if p.requires_grad]
+        if self._gradient_weight and self._gradient_weight != self._gradient_target_weight:
+            correction = self._gradient_target_weight / self._gradient_weight
+            for parameter in parameters:
+                if parameter.grad is not None:
+                    parameter.grad.mul_(correction)
+        for parameter, gradient in self._sum_gradients.items():
+            if parameter.grad is None:
+                parameter.grad = gradient
             else:
-                self.training_context['stop_update'] = self.training_context['stop_update'] - 1 if \
-                    self.training_context['stop_update'] > 1 else self.training_context['stop_update']
+                parameter.grad.add_(gradient)
+        if self.gradscaler is not None and self.is_autocast_enabled:
+            self.gradscaler.unscale_(optimizer)
+        if self.grad_clipping_by_norm:
+            torch.nn.utils.clip_grad_norm_(parameters, self.grad_clipping_threshold)
+        super().on_optimization_step_start()
+        if log_gradients:
+            self.log_gradient()
+        if self.gradscaler is not None and self.is_autocast_enabled:
+            self.gradscaler.step(optimizer)
+            self.gradscaler.update()
+        elif is_tpu_available():
+            import torch_xla.core.xla_model as xm
+            xm.optimizer_step(optimizer, barrier=True)
+        else:
+            optimizer.step(self.get_current_loss)
+        self._clear_gradient_window()
+        self.do_on_optimization_step_end()
 
+    def do_gradient_update(self, log_gradients=False):
+        stop = self.training_context['stop_update']
+        if stop != 0 and not (0 < stop < 1 and random.random() <= stop):
+            if stop > 1:
+                self.training_context['stop_update'] -= 1
+            return
+        if isinstance(self._model, nn.Module):
+            self._model.train()
+        loss = self.training_context['current_loss']
+        weight = self._gradient_batch_weight() if self.accumulation_steps > 1 else 1
+        if not self._gradient_batches:
+            self._gradient_target_weight = (weight or 1) * self.accumulation_steps
+        # Normalize before AMP scaling; correct an uneven or partial window before clipping.
+        try:
+            use_amp = ctx.amp_available and self.is_autocast_enabled and get_device() == 'cuda'
+            if use_amp and self.gradscaler is None:
+                self.gradscaler = torch.cuda.amp.GradScaler()
+            summed = self.training_context.get('sum_reduced_loss')
+            if self.accumulation_steps > 1 and weight and summed is not None:
+                # With both sums and means, only the mean component is sample-normalized.
+                loss = loss - summed
+                params = [p for group in self.optimizer.param_groups for p in group['params'] if p.requires_grad]
+                if summed.requires_grad:
+                    gradients = torch.autograd.grad(self.gradscaler.scale(summed) if use_amp else summed,
+                                                    params, retain_graph=True, allow_unused=True)
+                    for param, grad in zip(params, gradients):
+                        if grad is not None:
+                            if param in self._sum_gradients:
+                                self._sum_gradients[param].add_(grad)
+                            else:
+                                self._sum_gradients[param] = grad.detach()
+            objective = loss * (weight / self._gradient_target_weight) if weight else loss
+            if use_amp:
+                objective = self.gradscaler.scale(objective)
+            objective.backward(retain_graph=self.training_context['retain_graph'])
+            self._gradient_batches += 1
+            self._gradient_weight += weight
+            ending = self.training_context['current_batch'] + 1 == self.training_context['total_batch']
+            accumulate_grads = self._gradient_batches < self.accumulation_steps and not ending
+            setattr(self.optimizer, '_trident_is_accumulating_gradients', accumulate_grads)
             if self.accumulation_steps > 1:
-                self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],
-                                                            to_scalar(self.training_context['current_loss'].copy()))
-
-
-        except Exception as e:
-            ctx.print(e)
-            PrintException()
-
+                self.training_context['tmp_losses'].collect(
+                    'total_losses', self.training_context['steps'], to_scalar(self.training_context['current_loss'].detach()))
+            if not accumulate_grads:
+                self._finish_gradient_window(log_gradients)
+        except (KeyboardInterrupt, Exception):
+            self._clear_gradient_window()
+            raise
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
@@ -1056,8 +1019,8 @@ class Model(model.ModelBase,Layer):
 
 
     def do_on_excution_exception(self):
+        self._clear_gradient_window()
         super().do_on_excution_exception()
-        self.save_model()
 
     def log_gradient(self, grads=None):
         grad_dict = OrderedDict()
@@ -1076,125 +1039,34 @@ class Model(model.ModelBase,Layer):
             self.weights_history.append(weight_dict)
 
     @measure_perf
-    def save_model(self, save_path=None, **kwargs):
-        is_abnormal = False
-
-        def _atomic_file_save(target_path, save_func):
-            temp_path = '{0}.{1}.tmp'.format(target_path, uuid.uuid4().hex)
-            try:
-                with open(temp_path, 'wb') as f:
-                    save_func(f)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.replace(temp_path, target_path)
-            finally:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-
-        for callback in self.training_context['callbacks']:
-            callback.on_model_saving_start(self.training_context)
-
-        if isinstance(self._model, nn.Module) and any_abnormal_number(self._model):
-            is_abnormal = True
-            sys.stderr.write(self._get_name() + ' nan/inf detected in model weights. Skip saving.\n')
-        if is_tensor(self._model) and any_abnormal_number(self._model):
-            is_abnormal = True
-
-            sys.stderr.write(self._get_name() + ' nan/inf detected in tensor weights. Skip saving.\n')
+    def save_model(self, save_path=None, *, save_full_model=False, **kwargs):
+        """Save weights-only archives. Opt in to whole-model pickle for legacy consumers."""
         if save_path is not None:
-            folder, filename, ext = split_path(save_path)
-            if filename == '':
-                filename = self.name
-            self.training_context['save_path'] = save_path
-        else:
-            save_path = self.training_context['save_path']
-
-        if is_abnormal:
-            for callback in self.training_context['callbacks']:
+            self.training_context['save_path'] = os.fspath(save_path)
+        folder, name, _ = split_path(self.training_context['save_path'])
+        name = name or self.name
+        os.makedirs(folder or '.', exist_ok=True)
+        for callback in self.callbacks:
+            callback.on_model_saving_start(self.training_context)
+        try:
+            if any_abnormal_number(self._model):
+                sys.stderr.write('nan/inf detected in model weights. Skip saving.\n')
+                return False
+            if isinstance(self._model, nn.Module):
+                metadata = dict(backend='pytorch', trident_version=__version__,
+                                pytorch_version=str(torch.__version__))
+                if hasattr(self, 'vocabs'):
+                    metadata['vocabs'] = self.vocabs
+                write_model_checkpoint(self._model, os.path.join(folder, name + '.pth.tar'),
+                                       metadata, save_full_model=save_full_model)
+            elif torch.is_tensor(self._model):
+                with staged_checkpoints(os.path.join(folder, name + '.npy')) as (draft,):
+                    np.save(draft, to_numpy(self._model))
+            else:
+                raise TypeError("Expected a torch.nn.Module or tensor")
+        finally:
+            for callback in self.callbacks:
                 callback.on_model_saving_end(self.training_context)
-            return False
-
-        if isinstance(self._model, nn.Module):
-            try:
-                folder, filename, ext = split_path(save_path)
-                if not os.path.exists(folder):
-                    folder = os.path.join(get_trident_dir(), 'models')
-                if filename == '':
-                    filename = self.name
-                ext = '.pth.tar'
-                save_path = os.path.join(folder, filename + ext)
-                make_dir_if_need(sanitize_path(save_path))
-                save_path = sanitize_path(save_path)
-                device = get_device()
-                self._model.eval()
-                self._model.cpu()
-
-
-
-                try:
-                    _atomic_file_save(save_path, lambda f: torch.save({
-                        'state_dict': self._model.state_dict(),
-                        'backend': 'pytorch',
-                        'trident_version': __version__,
-                        'pytorch_version': str(torch.__version__),
-                        'signature': self._model.signature
-                    }, f))
-                except Exception as e:
-                    ctx.print(e)
-
-                ext = '.pth'
-                save_path = save_path.replace('.pth.tar', '.pth')
-
-
-                try:
-                    _atomic_file_save(save_path, lambda f: save(self._model, f))
-                except Exception as e:
-                    ctx.print(e)
-
-
-                self._model.to(get_device())
-                self._model.train()
-                gc.collect()
-
-            except Exception as e:
-                self._model.train()
-                ctx.print(e)
-                PrintException()
-                gc.collect()
-
-        elif is_tensor(self._model):
-            folder, filename, ext = split_path(save_path)
-            if not os.path.exists(folder):
-                folder = os.path.join(get_trident_dir(), 'models')
-            if filename == '':
-                filenam = self.name
-
-            ext = '.npy'
-            save_path = os.path.join(folder, filename + ext)
-            make_dir_if_need(sanitize_path(save_path))
-            save_path = sanitize_path(save_path)
-
-            temfolder = tempfile.gettempdir()
-            tempfilename = filename + '_' + str(uuid.uuid4().node)
-            temppath = os.path.join(temfolder, tempfilename + ext)
-            try:
-                numpy_model = to_numpy(self._model)
-                np.save(temppath, numpy_model)
-                os.replace(temppath, save_path)
-                sys.stdout.write(
-                    'Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
-            except Exception as e:
-                ctx.print(e)
-                if os.path.exists(temppath):
-                    if os.path.exists(save_path):
-                        shutil.move(save_path, save_path + '._')
-                    shutil.move(temppath, save_path)
-        else:
-            raise ValueError(
-                'only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
-
-        for callback in self.training_context['callbacks']:
-            callback.on_model_saving_end(self.training_context)
 
     def save_onnx(self, save_path=None, batch_size=1, dynamic_axes=None, need_simplify=False, **kwargs):
         if isinstance(self._model, nn.Module):
@@ -1286,66 +1158,23 @@ class Model(model.ModelBase,Layer):
             raise ValueError(
                 'only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
 
-    def load_model(self, file_path, **kwargs):
-        ctx.print('Loading pretrained model from {}'.format(file_path))
-        folder, filename, ext = split_path(file_path)
-        if filename == '':
-            filename = self.name
-        state_dict = None
-        pretrained_dict = None
-        if ext == '.pth.tar':
-            state_dict = torch.load(file_path, map_location=torch.device('cpu'), weights_only=False)
-        elif ext == '.pth':
-            load_path = file_path
-            if not os.path.exists(file_path):
-                if os.path.exists(file_path.replace(ext, '.pth.tar')):
-                    load_path = file_path.replace(ext, '.pth.tar')
-                elif os.path.exists(os.path.join(working_directory, filename + ext)):
-                    load_path = os.path.join(working_directory, filename + ext)
-            recovery_pth = fix_layer(torch.load(load_path, map_location=torch.device('cpu'), weights_only=False))
+    def load_model(self, file_path, *, strict=False, trusted_legacy=False, **kwargs):
+        """Load into a native or Trident module and report missing/unexpected keys.
 
-            if isinstance(recovery_pth, dict):
-                state_dict = recovery_pth
-
-            elif isinstance(recovery_pth, Layer):
-                state_dict = recovery_pth.state_dict()
-
-        if 'backend' in state_dict and state_dict['backend'] != 'pytorch':
-            raise RuntimeError(
-                'The model archive {0} is a {1}-based model, but current backend is PyTorch, so cannot load model properly.'.format(
-                    file_path, state_dict['backend']))
-
-        if "state_dict" in state_dict.keys():
-            pretrained_dict = state_dict['state_dict']
-        else:
-            pretrained_dict = state_dict
-
-        if isinstance(self._model, Layer):
-            if check_keys(self._model, pretrained_dict):
-                has_abnormal = False
-                for key in pretrained_dict.keys():
-                    value = pretrained_dict[key]
-                    if is_tensor(value) and any_abnormal_number(value):
-                        has_abnormal = True
-                        ctx.print('detect abnormal in state_dict[{0}],value:{1}'.format(key, value))
-                        pretrained_dict[key] = where(is_nan(value),
-                                                     random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(
-                                                         value.dtype), value)
-                    if is_tensor(value) and ndim(value) == 0:
-                        pretrained_dict[key] = to_tensor(value.item())
-
-                if has_abnormal:
-                    sys.stderr.write(self.training_context['training_name'] + '  has_abnormal detected and  fixed!!\n')
-                self._model.load_state_dict(pretrained_dict, strict=False)
-                ctx.print('Model loaded!')
-                # must switch to evluate first beforeinference or training
-                # Dropout and Batch normalization will behavior change!!!
-
-                self._model.eval()
-        if "signature" in state_dict.keys() and (
-                self._model.signature is None or state_dict['signature'] != self._model.signature):
-            self._model.signature = state_dict['signature']
+        Set trusted_legacy=True only for an old pickled model from a trusted source.
+        """
+        path = os.fspath(file_path)
+        if path.endswith('.pth') and not os.path.isfile(path):
+            if os.path.isfile(path + '.tar'):
+                path += '.tar'
+            else:
+                path = os.path.join(working_directory, os.path.basename(path))
+        result, metadata = restore_model_checkpoint(self._model, path, strict=strict,
+                                                    trusted_legacy=trusted_legacy)
+        if 'vocabs' in metadata and hasattr(self, 'vocabs'):
+            self.vocabs = metadata['vocabs']
         self._model.to(get_device())
+        return result
 
     def summary(self,inputs=None):
         # self.rebinding_input_output(self._model.input_shape)
@@ -2242,94 +2071,6 @@ class LanguageModel(Model):
         self.vocabs = None
         self.preprocess_flow = []
 
-    def save_model(self, save_path=None, **kwargs):
-        is_abnormal = False
-
-        def _atomic_file_save(target_path, save_func):
-            temp_path = '{0}.{1}.tmp'.format(target_path, uuid.uuid4().hex)
-            try:
-                with open(temp_path, 'wb') as f:
-                    save_func(f)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.replace(temp_path, target_path)
-            finally:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-
-        for callback in self.training_context['callbacks']:
-            callback.on_model_saving_start(self.training_context)
-
-        if isinstance(self._model, nn.Module) and any_abnormal_number(self._model):
-            is_abnormal = True
-            sys.stderr.write(self._get_name() + ' nan/inf detected in model weights. Skip saving.\n')
-        if save_path is not None:
-            folder, filename, ext = split_path(save_path)
-            if filename == '':
-                filename = self.name
-            self.training_context['save_path'] = save_path
-        else:
-            save_path = self.training_context['save_path']
-
-        if is_abnormal:
-            for callback in self.training_context['callbacks']:
-                callback.on_model_saving_end(self.training_context)
-            return False
-
-        if isinstance(self._model, nn.Module):
-            try:
-                folder, filename, ext = split_path(save_path)
-                if filename == '':
-                    filename = self.name
-
-                ext = '.pth.tar'
-                save_path = os.path.join(folder, filename + ext)
-                make_dir_if_need(sanitize_path(save_path))
-                save_path = sanitize_path(save_path)
-                device = get_device()
-                self._model.eval()
-                self._model.cpu()
-                _atomic_file_save(save_path, lambda f: torch.save({
-                    'state_dict': self._model.state_dict(),
-                    'vocabs': self.vocabs,
-                    'backend': 'pytorch',
-                    'trident_version': __version__,
-                    'pytorch_version': torch.__version__,
-                    'signature': self._model.signature
-                }, f))
-
-                save_path = save_path.replace('.pth.tar', '.pth')
-                _atomic_file_save(save_path, lambda f: save(self._model, f))
-                self._model.train()
-                self._model.to(device)
-            except Exception as e:
-                ctx.print(e)
-                PrintException()
-
-        elif isinstance(self._model, torch.Tensor):
-            folder, filename, ext = split_path(save_path)
-            if filename == '':
-                filenam = self.name
-
-            ext = '.npy'
-            save_path = os.path.join(folder, filename + ext)
-            make_dir_if_need(sanitize_path(save_path))
-            save_path = sanitize_path(save_path)
-            numpy_model = to_numpy(self._model)
-            temppath = '{0}.{1}.tmp'.format(save_path, uuid.uuid4().hex)
-            with open(temppath, 'wb') as f:
-                np.save(f, numpy_model)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(temppath, save_path)
-            sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
-        else:
-            raise ValueError(
-                'only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
-
-        for callback in self.training_context['callbacks']:
-            callback.on_model_saving_end(self.training_context)
-
     def save_onnx(self, save_path, dynamic_axes=None, **kwargs):
         if isinstance(self._model, nn.Module):
 
@@ -2374,66 +2115,3 @@ class LanguageModel(Model):
         else:
             raise ValueError(
                 'only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
-
-    def load_model(self, file_path, **kwargs):
-        ctx.print('Loading pretrained model from {}'.format(file_path))
-        folder, filename, ext = split_path(file_path)
-        if filename == '':
-            filename = self.name
-        state_dict = None
-        pretrained_dict = None
-        if ext == '.pth.tar':
-            state_dict = torch.load(file_path, map_location=torch.device(get_device()), weights_only=False)
-        elif ext == '.pth':
-            load_path = file_path
-            if not os.path.exists(file_path):
-                if os.path.exists(file_path.replace(ext, '.pth.tar')):
-                    load_path = file_path.replace(ext, '.pth.tar')
-                elif os.path.exists(os.path.join(working_directory, filename + ext)):
-                    load_path = os.path.join(working_directory, filename + ext)
-            recovery_pth = torch.load(load_path, map_location=torch.device(get_device()), weights_only=False)
-
-            if isinstance(recovery_pth, dict):
-                state_dict = recovery_pth
-
-            elif isinstance(recovery_pth, Layer):
-                state_dict = recovery_pth.state_dict()
-
-        if 'vocabs' in state_dict:
-            self.vocabs = state_dict['vocabs']
-        if 'backend' in state_dict and state_dict['backend'] != 'pytorch':
-            raise RuntimeError(
-                'The model archive {0} is a {1}-based model, but current backend is PyTorch, so cannot load model properly.'.format(
-                    file_path, state_dict['backend']))
-
-        if "state_dict" in state_dict.keys():
-            pretrained_dict = state_dict['state_dict']
-        else:
-            pretrained_dict = state_dict
-
-        if isinstance(self._model, Layer):
-            if check_keys(self._model, pretrained_dict):
-                has_abnormal = False
-                for key in pretrained_dict.keys():
-                    value = pretrained_dict[key]
-                    if is_tensor(value) and any_abnormal_number(value):
-                        has_abnormal = True
-                        ctx.print('detect abnormal in state_dict[{0}],value:{1}'.format(key, value))
-                        pretrained_dict[key] = where(is_nan(value),
-                                                     random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(
-                                                         value.dtype), value)
-                    if is_tensor(value) and ndim(value) == 0:
-                        pretrained_dict[key] = to_tensor(value.item())
-
-                if has_abnormal:
-                    sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
-                self._model.load_state_dict(pretrained_dict, strict=False)
-                ctx.print('Model loaded!')
-                # must switch to evluate first beforeinference or training
-                # Dropout and Batch normalization will behavior change!!!
-
-                self._model.eval()
-        if "signature" in state_dict.keys() and (
-                self._model._signature is None or state_dict['signature'] != self._model._signature):
-            self._model._signature = state_dict['signature']
-        self._model.to(get_device())

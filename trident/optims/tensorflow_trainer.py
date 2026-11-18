@@ -33,8 +33,7 @@ from trident.backend.tensorflow_serialization import save, load_pthtar
 from trident.backend.tensorspec import *
 from trident.callbacks import LambdaCallback
 from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase, AdjustLRCallback
-from trident.data.data_provider import DataProvider
-from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
+from trident.backend.checkpoint import staged_checkpoints
 from trident.data.image_common import image_backend_adaption,reverse_image_backend_adaption
 from trident.data.mask_common import color2label
 from trident.data.transform import Transform
@@ -374,61 +373,6 @@ class Model(ModelBase,Layer):
             elif isinstance(metrics, dict):
                 for k, v in metrics.items():
                     self.with_metric(v, name=k)
-        return self
-
-    def fit(self,
-            x=None,
-            y=None,
-            batch_size=8,
-            epochs=1,
-            verbose=1,
-            callbacks=None,
-            validation_split=0.0,
-            validation_data=None,
-            shuffle=True,
-            class_weight=None,
-            sample_weight=None,
-            initial_epoch=0,
-            steps_per_epoch=None,
-            validation_steps=None,
-            validation_batch_size=8,
-            validation_freq=1,
-            max_queue_size=10,
-            workers=1,
-            use_multiprocessing=False,
-            ):
-
-        split_range = list(range(len(x)))
-        random.shuffle(split_range)
-        cutoff = int(validation_split * len(x))
-        mask_validate = split_range[:cutoff]
-        mask_train = split_range[cutoff:]
-        train_x = x[mask_train]
-        train_y = y[mask_train]
-        validate_x = x[mask_validate]
-        validate_y = y[mask_validate]
-
-        data_ds = NumpyDataset(data=train_x, symbol="input")
-        label_ds = LabelDataset(labels=train_y, symbol="target")
-        dataprovider = DataProvider(
-            traindata=Iterator(data=data_ds, label=label_ds, minibatch_size=batch_size, is_shuffle=shuffle,
-                               buffer_size=max_queue_size, workers=workers))
-        if validation_split > 0:
-            data_test_ds = NumpyDataset(data=train_x, symbol="input")
-            label_test_ds = LabelDataset(labels=train_y, symbol="target")
-            dataprovider.testdata = Iterator(data=data_test_ds, label=label_test_ds,
-                                             minibatch_size=validation_batch_size, is_shuffle=shuffle,
-                                             buffer_size=max_queue_size,
-                                             workers=workers)
-
-        plan = TrainingPlan() \
-            .add_training_item(self) \
-            .with_data_loader(dataprovider) \
-            .repeat_epochs(epochs) \
-            .within_minibatch_size(batch_size) \
-            .print_progress_scheduling(1, unit='epoch') \
-            .out_sample_evaluation_scheduling(validation_steps, unit='epoch') \
-            .save_model_scheduling(1, unit='epoch').start_now()
         return self
 
     def with_optimizer(self, optimizer, **kwargs):
@@ -981,7 +925,6 @@ class Model(ModelBase,Layer):
 
     def do_on_excution_exception(self):
         super().do_on_excution_exception()
-        self.save_model()
 
     def log_gradient(self, grads=None):
         grads = list(grads)
@@ -1000,186 +943,40 @@ class Model(ModelBase,Layer):
             self.weights_history.append(weight_dict)
 
     def save_model(self, save_path=None, **kwargs):
-        is_abnormal = False
-        for callback in self.training_context['callbacks']:
-            callback.on_model_saving_start(self.training_context)
-
-        if isinstance(self._model, tf.Module) and any_abnormal_number(self._model):
-            is_abnormal = True
-            for para in getattr(self._model, "weights", []):
-                if any_abnormal_number(para):
-                    para.assign(
-                        where(is_abnormal_number(para),
-                              random_normal_like(para, mean=0, std=0.02).to(para.device), para))
-        if is_tensor(self._model) and any_abnormal_number(self._model):
-            is_abnormal = True
-
-            sys.stderr.write(self._get_name() + '  nan detected!!\n')
-        if save_path is None:
-            save_path = self.training_context['save_path']
-
         if save_path is not None:
-            folder, filename, ext = split_path(save_path)
-            if filename == '':
-                filename = self.name
-            if not filename.endswith('_tf'):
-                filename += '_tf'
-            self.training_context['save_path'] = save_path
-        else:
-            save_path = self.training_context['save_path']
-
-        if isinstance(self._model, Layer) and not is_abnormal:
-            try:
-                folder, filename, ext = split_path(save_path)
-                if filename == '':
-                    filename = self.name
-                if not filename.endswith('_tf'):
-                    filename += '_tf'
-                ext = '.pth.tar'
-                save_path = os.path.join(folder, filename + ext)
-                make_dir_if_need(sanitize_path(save_path))
-                save_path = sanitize_path(save_path)
-                device = get_device()
-                self._model.eval()
-                self._model.cpu()
-
-                # tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
-                # temfolder = tempfile.gettempdir()
-                with tempfile.TemporaryDirectory() as temfolder:
-                    tempfilename = filename + '_' + str(uuid.uuid4().node)
-                    temppath = os.path.join(temfolder, tempfilename + ext)
-
-                    try:
-                        with open(temppath, 'wb') as f:
-                            with tf.device('/cpu:0'):
-                                save({
-                                    'state_dict': self._model.state_dict(),
-                                    'backend': 'tensorflow',
-                                    'trident_version': __version__,
-                                    'tensorflow_version': tf.version.VERSION,
-                                    'signature': self._model.signature
-                                }, f, is_compressed=True)
-
-                        if os.path.exists(save_path):
-                            os.remove(save_path)
-                            shutil.move(temppath, save_path)
-                            # os.rename(move_path, save_path)
-                        else:
-                            shutil.move(temppath, save_path)
-
-                    except Exception as e:
-                        ctx.print(e)
-                        if os.path.exists(temppath):
-                            if os.path.exists(save_path):
-                                shutil.move(save_path, save_path + '._')
-                            shutil.move(temppath, save_path)
-
-                    ext = '.pth'
-                    save_path = save_path.replace('.pth.tar', '.pth')
-                    tempfilename2 = filename + '_' + str(uuid.uuid4().node)
-                    temppath2 = os.path.join(temfolder, tempfilename2 + ext)
-
-                    try:
-                        with open(temppath2, 'wb') as f:
-                            save(self._model, f)
-
-                        if os.path.exists(save_path):
-                            os.remove(save_path)
-                            shutil.move(temppath2, save_path)
-                            # os.rename(move_path2, save_path)
-                        else:
-                            shutil.move(temppath2, save_path)
-                    except Exception as e:
-                        ctx.print(e)
-                        if os.path.exists(temppath2):
-                            if os.path.exists(save_path):
-                                shutil.move(save_path, save_path + '._')
-                            shutil.move(temppath2, save_path)
-
-                with tf.device(get_device()):
-                    self._model.train()
-                gc.collect()
-            except Exception as e:
-                self._model.train()
-                ctx.print(e)
-                PrintException()
-                gc.collect()
-        elif self._model._is_keras and not is_abnormal:
-            try:
-                folder, filename, ext = split_path(save_path)
-                if filename == '':
-                    filename = self.name
-                if not filename.endswith('keras'):
-                    filename += '_keras'
-                ext = '.h5'
-                save_path = os.path.join(folder, filename + ext)
-                make_dir_if_need(sanitize_path(save_path))
-                save_path = sanitize_path(save_path)
-
-                temfolder = tempfile.gettempdir()
-                tempfilename = filename + '_' + str(uuid.uuid4().node)
-                temppath = os.path.join(temfolder, tempfilename + ext)
-
-                try:
-                    self._model.save(temppath)
-
-                    if os.path.exists(save_path):
-                        os.remove(save_path)
-                        shutil.move(temppath, save_path)
-                        # os.rename(move_path, save_path)
-                    else:
-                        shutil.move(temppath, save_path)
-
-                except Exception as e:
-                    ctx.print(e)
-                    if os.path.exists(temppath):
-                        if os.path.exists(save_path):
-                            shutil.move(save_path, save_path + '._')
-                        shutil.move(temppath, save_path)
-
-                gc.collect()
-                self._model.train()
-
-            except Exception as e:
-                self._model.train()
-                ctx.print(e)
-                PrintException()
-        elif is_tensor(self._model) and not is_abnormal:
-            folder, filename, ext = split_path(save_path)
-            if filename == '':
-                filenam = self.name
-
-            ext = '.npy'
-            save_path = os.path.join(folder, filename + ext)
-            make_dir_if_need(sanitize_path(save_path))
-            save_path = sanitize_path(save_path)
-
-            temfolder = tempfile.gettempdir()
-            tempfilename = filename + '_' + str(uuid.uuid4().node)
-            temppath = os.path.join(temfolder, tempfilename + ext)
-            try:
-                numpy_model = to_numpy(self._model)
-                np.save(temppath, numpy_model)
-                if os.path.exists(save_path):
-                    os.remove(save_path)
-                    shutil.move(temppath, save_path)
-                    # os.rename(move_path, save_path)
-                else:
-                    shutil.move(temppath, save_path)
-                    sys.stdout.write(
-                        'Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
-            except Exception as e:
-                ctx.print(e)
-                if os.path.exists(temppath):
-                    if os.path.exists(save_path):
-                        shutil.move(save_path, save_path + '._')
-                    shutil.move(temppath, save_path)
-
-        else:
-            raise ValueError(
-                'only Layer or tf.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
-        for callback in self.training_context['callbacks']:
-            callback.on_model_saving_end(self.training_context)
+            self.training_context['save_path'] = os.fspath(save_path)
+        folder, name, _ = split_path(self.training_context['save_path'])
+        name = name or self.name
+        for callback in self.callbacks:
+            callback.on_model_saving_start(self.training_context)
+        try:
+            if (isinstance(self._model, tf.Module) or is_tensor(self._model)) and any_abnormal_number(self._model):
+                sys.stderr.write('nan/inf detected in model weights. Skip saving.\n')
+                return False
+            if isinstance(self._model, Layer):
+                stem = os.path.join(folder, name if name.endswith('_tf') else name + '_tf')
+                state = dict(state_dict=self._model.state_dict(), backend='tensorflow',
+                             trident_version=__version__, tensorflow_version=tf.version.VERSION,
+                             signature=self._model.signature)
+                if hasattr(self, 'vocabs'):
+                    state['vocabs'] = self.vocabs
+                with staged_checkpoints(stem + '.pth', stem + '.pth.tar') as (whole, archive):
+                    with tf.device('/cpu:0'), archive.open('wb') as stream:
+                        save(state, stream, is_compressed=True)
+                    with whole.open('wb') as stream:
+                        save(self._model, stream)
+            elif getattr(self._model, '_is_keras', False):
+                stem = name if name.endswith('keras') else name + '_keras'
+                with staged_checkpoints(os.path.join(folder, stem + '.h5')) as (draft,):
+                    self._model.save(str(draft))
+            elif is_tensor(self._model):
+                with staged_checkpoints(os.path.join(folder, name + '.npy')) as (draft,):
+                    np.save(draft, to_numpy(self._model))
+            else:
+                raise TypeError("Expected a TensorFlow model or tensor")
+        finally:
+            for callback in self.callbacks:
+                callback.on_model_saving_end(self.training_context)
 
     def save_onnx(self, save_path=None, dynamic_axes=None, **kwargs):
         pass
@@ -1282,235 +1079,216 @@ class Model(ModelBase,Layer):
                     is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False,
                     is_out_sample_evaluation=False, **kwargs):
         with tf.device(get_device()):
-            try:
-                self.training_context['current_epoch'] = current_epoch
-                self.training_context['current_batch'] = current_batch
-                self.training_context['total_epoch'] = total_epoch
-                self.training_context['total_batch'] = total_batch
-                self.training_context['done'] = done
-                self.training_context['is_collect_data'] = is_collect_data
-                self.training_context['log_gradients'] = log_gradients
-                self.training_context['log_weights'] = log_weights
-                self.training_context['current_model'] = self._model
-                self.training_context['accumulate_grads'] = None
+            self.training_context['current_epoch'] = current_epoch
+            self.training_context['current_batch'] = current_batch
+            self.training_context['total_epoch'] = total_epoch
+            self.training_context['total_batch'] = total_batch
+            self.training_context['done'] = done
+            self.training_context['is_collect_data'] = is_collect_data
+            self.training_context['log_gradients'] = log_gradients
+            self.training_context['log_weights'] = log_weights
+            self.training_context['current_model'] = self._model
+            self.training_context['accumulate_grads'] = None
 
-                if self.training_context['current_batch'] == 0:
-                    if self.training_context['current_epoch'] == 0:
-                        # epoch is not the logical inteval for us to control the flow
-                        self.training_context['steps'] = 0
-                        self.training_context['accum_gradient'] = OrderedDict()
+            if self.training_context['current_batch'] == 0:
+                if self.training_context['current_epoch'] == 0:
+                    # epoch is not the logical inteval for us to control the flow
+                    self.training_context['steps'] = 0
+                    self.training_context['accum_gradient'] = OrderedDict()
 
-                        self.training_context['grads_state'] = OrderedDict()
-                        self.training_context['grads_state']['first_layer'] = []
-                        self.training_context['grads_state']['last_layer'] = []
-                    self.training_context['is_print_batch_progress'] = is_print_batch_progress
-                    self.training_context['is_print_epoch_progress'] = is_print_epoch_progress
-                    self.training_context['print_batch_progress_frequency'] = 1
-                    self.training_context['print_epoch_progress_frequency'] = 1
+                    self.training_context['grads_state'] = OrderedDict()
+                    self.training_context['grads_state']['first_layer'] = []
+                    self.training_context['grads_state']['last_layer'] = []
+                self.training_context['is_print_batch_progress'] = is_print_batch_progress
+                self.training_context['is_print_epoch_progress'] = is_print_epoch_progress
+                self.training_context['print_batch_progress_frequency'] = 1
+                self.training_context['print_epoch_progress_frequency'] = 1
 
-                self.training_context['train_data'] = train_data
-                self.training_context['test_data'] = test_data
-                self.training_context['is_out_sample_evaluation'] = is_out_sample_evaluation
+            self.training_context['train_data'] = train_data
+            self.training_context['test_data'] = test_data
+            self.training_context['is_out_sample_evaluation'] = is_out_sample_evaluation
 
-                self.training_context['optimizer'] = self.optimizer
-                self.training_context['current_lr'] = self.optimizer.lr
-                self.batch_loss_history.collect('epoch', self.training_context['steps'], current_epoch)
-                self.batch_metric_history.collect('epoch', self.training_context['steps'], current_epoch)
-                is_epoch_end = (self.training_context['current_batch'] == self.training_context['total_batch'] - 1) if \
-                    self.training_context['total_batch'] is not None else done
+            self.training_context['optimizer'] = self.optimizer
+            self.training_context['current_lr'] = self.optimizer.lr
+            self.batch_loss_history.collect('epoch', self.training_context['steps'], current_epoch)
+            self.batch_metric_history.collect('epoch', self.training_context['steps'], current_epoch)
+            is_epoch_end = (self.training_context['current_batch'] == self.training_context['total_batch'] - 1) if \
+                self.training_context['total_batch'] is not None else done
 
-                self.do_on_batch_start()
-                for callback in self.callbacks:
-                    callback.on_batch_start(self.training_context)
+            self.do_on_batch_start()
+            for callback in self.callbacks:
+                callback.on_batch_start(self.training_context)
 
-                train_data, test_data = self.do_on_data_received(train_data, test_data)
+            train_data, test_data = self.do_on_data_received(train_data, test_data)
 
-                for callback in self.callbacks:
-                    callback.on_data_received(self.training_context)
+            for callback in self.callbacks:
+                callback.on_data_received(self.training_context)
 
-                if (not self.training_context[
-                    'skip_reset_total_loss']):  # and (not (self.training_context['steps'] + 1) % self.accumulation_steps != 0):
-                    self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
+            if (not self.training_context[
+                'skip_reset_total_loss']):  # and (not (self.training_context['steps'] + 1) % self.accumulation_steps != 0):
+                self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
 
-                with tf.GradientTape() as grad_tape:
-                    grad_tape.watch(self._model.variables)
+            with tf.GradientTape() as grad_tape:
+                grad_tape.watch(self._model.variables)
 
-                    if 'skip_generate_output' not in self.training_context or self.training_context[
-                        'skip_generate_output'] == False:
-                        try:
-                            if self.output_fn is not None and callable(self.output_fn):
-                                self.output_fn(self, self.training_context, is_training=True,
-                                               is_autocast_enabled=self.is_autocast_enabled)
-                            else:
-                                self.do_calculate_forward(is_training=True)
-
-                        except Exception as e:
-                            ctx.print(e)
-                            PrintException()
-
-                    self.do_on_loss_calculation_start()
-                    # confirm singleton
-                    # output=unpack_singleton(output)
-
-                    # losss
-                    for k, v in self._losses.items():
-                        if not hasattr(v, 'start_epoch') or (
-                                hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
-
-                            try:
-                                loss_weight = to_tensor(1.0)
-                                if k in self.loss_weights:
-                                    loss_weight = self.loss_weights[k]
-                                loss_weight = to_tensor(loss_weight, 'float32')
-                                this_loss = loss_weight * try_map_args_and_call(v, self.train_data,
-                                                                                self.training_context['data_feed'],
-                                                                                self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
-
-                                if isinstance(this_loss, tuple):
-                                    overall_loss = to_tensor(0.0, requires_grad=True)
-                                    for i in range(len(this_loss)):
-                                        if any_abnormal_number(this_loss[i]):
-                                            sys.stderr.write(
-                                                'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(
-                                                    k))
-                                        else:
-                                            # a leaf Variable that requires grad connotused in an in-place operation.
-                                            overall_loss = overall_loss + this_loss[i]
-                                    self.training_context['current_loss'] = self.training_context[
-                                                                                'current_loss'] + overall_loss
-
-                                    if hasattr(v, 'as_metric') and v.as_metric == True:
-                                        self.training_context['tmp_metrics'].collect(camel2snake(k),
-                                                                                     self.training_context['steps'],
-                                                                                     to_numpy(overall_loss))
-
-                                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'],
-                                                                                overall_loss)
-
-                                else:
-                                    if any_abnormal_number(this_loss):
-                                        sys.stderr.write(
-                                            'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(
-                                                k))
-                                    else:
-                                        # a leaf Variable that requires grad connotused in an in-place operation.
-                                        self.training_context['current_loss'] = self.training_context[
-                                                                                    'current_loss'] + this_loss
-
-                                    if hasattr(v, 'as_metric') and v.as_metric == True:
-                                        self.training_context['tmp_metrics'].collect(camel2snake(k),
-                                                                                     self.training_context['steps'],
-                                                                                     to_numpy(this_loss))
-
-                                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'],
-                                                                                this_loss)
-                            except Exception as e:
-                                ctx.print(e)
-                                PrintException()
-
-                    self.do_on_loss_calculation_end()
-
-                    for k, v in self._regs.items():
-                        this_loss = to_tensor(0.0, requires_grad=True)
-                        if 'model' in v.signature.inputs:
-                            this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0,
-                                                                                                                  requires_grad=True)
-                        elif 'output' in v.signature.inputs:
-                            this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
-                                                              self.is_autocast_enabled) if self.training_context[
-                                                                                               'stop_update'] < 1 else to_tensor(
-                                0.0)
-                        if not any_abnormal_number(this_loss):
-                            # a leaf Variable that requires grad connotused in an in-place operation.
-                            self.training_context['current_loss'] = self.training_context[
-                                                                        'current_loss'] + this_loss  # self.training_context[
-                        # 'current_loss'] + this_loss
-
-                        self.training_context['tmp_losses'].collect(k + '_Loss', self.training_context['steps'],
-                                                                    this_loss)
-
-                vars = grad_tape.watched_variables()
-                grads = grad_tape.gradient(self.training_context['current_loss'], vars,
-                                           unconnected_gradients=tf.UnconnectedGradients.NONE)
-
-                need_backward = self.training_context['stop_update'] == 0 or (
-                        0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
-                    'stop_update'])
-                if need_backward:
-                    if self.training_context['accum_gradient'] is None or len(self.training_context['accum_gradient'])==0:
-                        self.training_context['accum_gradient'] = grads
-                    else:
-                        self.training_context['accum_gradient'] = [(acum_grad + grad) for acum_grad, grad in
-                                                                   zip(self.training_context['accum_gradient'], grads)]
-
-                self.training_context['grads_and_vars'] = zip(self.training_context['accum_gradient'], vars)
-                # for this_grad,this_var in zip(grads, vars):
-                #     if this_var.ref() not in   self.training_context['accum_gradient']:
-                #         self.training_context['accum_gradient'][this_var.ref()]=this_grad
-                #     else:
-                #         assign_add(self.training_context['accum_gradient'][this_var.ref()],this_grad)
-
-                # for g,v in enumerate(zip(grads, vars)):
-                #     ctx.print(v.name,v.shape,)
-                # self.optimizer.step(zip(grads,vars))
-                self.do_gradient_update(log_gradients and is_collect_data)
-                self.training_context['current_lr'] = self.optimizer.lr
-
-                self.do_calculate_constraints()
-
-                if log_weights and is_collect_data:
-                    if isinstance(self._model, Layer):
-                        self.log_weight(weghts=self._model.weights)
-                    elif is_tensor(self._model):
-                        self.log_weight(weghts=self._model)
-
-                if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0 and \
-                        self.training_context['stop_update'] < 1:
+                if 'skip_generate_output' not in self.training_context or self.training_context[
+                    'skip_generate_output'] == False:
                     if self.output_fn is not None and callable(self.output_fn):
-                        self.output_fn(self, self.training_context, is_training=False,
+                        self.output_fn(self, self.training_context, is_training=True,
                                        is_autocast_enabled=self.is_autocast_enabled)
                     else:
-                        self.do_calculate_forward(is_training=False)
-                self.do_calculate_metrics()
+                        self.do_calculate_forward(is_training=True)
 
-                if is_print_batch_progress or is_print_epoch_progress or is_epoch_end:
-                    for k, v in self.training_context['tmp_metrics'].items():
-                        steps, values = self.training_context['tmp_metrics'].get_series(k)
 
-                        # check
-                        if len(steps) > 0:
-                            self.training_context['metrics'].collect(k, self.training_context['steps'],
-                                                                     to_numpy(values).mean())
-                    self.training_context['tmp_metrics'].reset()
+                self.do_on_loss_calculation_start()
+                # confirm singleton
+                # output=unpack_singleton(output)
 
-                # ON_BATCH_END
-                self.do_on_batch_end()
-                # print batch progresss
-                if is_print_batch_progress:
-                    self.print_batch_progress(self.training_context['print_batch_progress_frequency'])
-                    self.training_context['print_batch_progress_frequency'] = 1
+                # losss
+                for k, v in self._losses.items():
+                    if not hasattr(v, 'start_epoch') or (
+                            hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
 
+                        loss_weight = to_tensor(1.0)
+                        if k in self.loss_weights:
+                            loss_weight = self.loss_weights[k]
+                        loss_weight = to_tensor(loss_weight, 'float32')
+                        this_loss = loss_weight * try_map_args_and_call(v, self.train_data,
+                                                                        self.training_context['data_feed'],
+                                                                        self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
+
+                        if isinstance(this_loss, tuple):
+                            overall_loss = to_tensor(0.0, requires_grad=True)
+                            for i in range(len(this_loss)):
+                                if any_abnormal_number(this_loss[i]):
+                                    raise FloatingPointError("Nonfinite loss: {0}".format(k))
+                                else:
+                                    # a leaf Variable that requires grad connotused in an in-place operation.
+                                    overall_loss = overall_loss + this_loss[i]
+                            self.training_context['current_loss'] = self.training_context[
+                                                                        'current_loss'] + overall_loss
+
+                            if hasattr(v, 'as_metric') and v.as_metric == True:
+                                self.training_context['tmp_metrics'].collect(camel2snake(k),
+                                                                             self.training_context['steps'],
+                                                                             to_numpy(overall_loss))
+
+                            self.training_context['tmp_losses'].collect(k, self.training_context['steps'],
+                                                                        overall_loss)
+
+                        else:
+                            if any_abnormal_number(this_loss):
+                                raise FloatingPointError("Nonfinite loss: {0}".format(k))
+                            else:
+                                # a leaf Variable that requires grad connotused in an in-place operation.
+                                self.training_context['current_loss'] = self.training_context[
+                                                                            'current_loss'] + this_loss
+
+                            if hasattr(v, 'as_metric') and v.as_metric == True:
+                                self.training_context['tmp_metrics'].collect(camel2snake(k),
+                                                                             self.training_context['steps'],
+                                                                             to_numpy(this_loss))
+
+                            self.training_context['tmp_losses'].collect(k, self.training_context['steps'],
+                                                                        this_loss)
+
+                self.do_on_loss_calculation_end()
+
+                for k, v in self._regs.items():
+                    this_loss = to_tensor(0.0, requires_grad=True)
+                    if 'model' in v.signature.inputs:
+                        this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0,
+                                                                                                              requires_grad=True)
+                    elif 'output' in v.signature.inputs:
+                        this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
+                                                          self.is_autocast_enabled) if self.training_context[
+                                                                                           'stop_update'] < 1 else to_tensor(
+                            0.0)
+                    if not any_abnormal_number(this_loss):
+                        # a leaf Variable that requires grad connotused in an in-place operation.
+                        self.training_context['current_loss'] = self.training_context[
+                                                                    'current_loss'] + this_loss  # self.training_context[
+                    # 'current_loss'] + this_loss
+
+                    self.training_context['tmp_losses'].collect(k + '_Loss', self.training_context['steps'],
+                                                                this_loss)
+
+            vars = grad_tape.watched_variables()
+            grads = grad_tape.gradient(self.training_context['current_loss'], vars,
+                                       unconnected_gradients=tf.UnconnectedGradients.NONE)
+
+            need_backward = self.training_context['stop_update'] == 0 or (
+                    0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
+                'stop_update'])
+            if need_backward:
+                if self.training_context['accum_gradient'] is None or len(self.training_context['accum_gradient'])==0:
+                    self.training_context['accum_gradient'] = grads
                 else:
-                    self.training_context['print_batch_progress_frequency'] += 1
-                if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0:
-                    verbose = []
-                    for k in self.training_context['out_sample_metrics'].get_keys():
-                        test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
-                        metric_value = test_values[-1]
-                        history_metric_value = to_scalar(test_values[-1])
-                        verbose.append('{0}: {1}'.format(k,
-                                                         adaptive_format(history_metric_value, prev_value=test_values,
-                                                                         value_type='metric', name=k)))
-                    out_sample_evaluation_str = cyan_color(
-                        self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
-                    ctx.print(out_sample_evaluation_str)
-                # self.training_context['steps'] += 1
-            except KeyboardInterrupt as k:
-                self.do_on_excution_exception()
-                raise
-            except Exception:
-                self.do_on_excution_exception()
-                PrintException()
+                    self.training_context['accum_gradient'] = [(acum_grad + grad) for acum_grad, grad in
+                                                               zip(self.training_context['accum_gradient'], grads)]
+
+            self.training_context['grads_and_vars'] = zip(self.training_context['accum_gradient'], vars)
+            # for this_grad,this_var in zip(grads, vars):
+            #     if this_var.ref() not in   self.training_context['accum_gradient']:
+            #         self.training_context['accum_gradient'][this_var.ref()]=this_grad
+            #     else:
+            #         assign_add(self.training_context['accum_gradient'][this_var.ref()],this_grad)
+
+            # for g,v in enumerate(zip(grads, vars)):
+            #     ctx.print(v.name,v.shape,)
+            # self.optimizer.step(zip(grads,vars))
+            self.do_gradient_update(log_gradients and is_collect_data)
+            self.training_context['current_lr'] = self.optimizer.lr
+
+            self.do_calculate_constraints()
+
+            if log_weights and is_collect_data:
+                if isinstance(self._model, Layer):
+                    self.log_weight(weghts=self._model.weights)
+                elif is_tensor(self._model):
+                    self.log_weight(weghts=self._model)
+
+            if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0 and \
+                    self.training_context['stop_update'] < 1:
+                if self.output_fn is not None and callable(self.output_fn):
+                    self.output_fn(self, self.training_context, is_training=False,
+                                   is_autocast_enabled=self.is_autocast_enabled)
+                else:
+                    self.do_calculate_forward(is_training=False)
+            self.do_calculate_metrics()
+
+            if is_print_batch_progress or is_print_epoch_progress or is_epoch_end:
+                for k, v in self.training_context['tmp_metrics'].items():
+                    steps, values = self.training_context['tmp_metrics'].get_series(k)
+
+                    # check
+                    if len(steps) > 0:
+                        self.training_context['metrics'].collect(k, self.training_context['steps'],
+                                                                 to_numpy(values).mean())
+                self.training_context['tmp_metrics'].reset()
+
+            # ON_BATCH_END
+            self.do_on_batch_end()
+            # print batch progresss
+            if is_print_batch_progress:
+                self.print_batch_progress(self.training_context['print_batch_progress_frequency'])
+                self.training_context['print_batch_progress_frequency'] = 1
+
+            else:
+                self.training_context['print_batch_progress_frequency'] += 1
+            if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0:
+                verbose = []
+                for k in self.training_context['out_sample_metrics'].get_keys():
+                    test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
+                    metric_value = test_values[-1]
+                    history_metric_value = to_scalar(test_values[-1])
+                    verbose.append('{0}: {1}'.format(k,
+                                                     adaptive_format(history_metric_value, prev_value=test_values,
+                                                                     value_type='metric', name=k)))
+                out_sample_evaluation_str = cyan_color(
+                    self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
+                ctx.print(out_sample_evaluation_str)
+            # self.training_context['steps'] += 1
 
     def summary(self,inputs=None):
         # self.rebinding_input_output(self._model.input_shape)
@@ -2314,81 +2092,6 @@ class LanguageModel(Model):
         super(LanguageModel, self).__init__(inputs, input_shape, output)
         self.vocabs = None
         self.preprocess_flow = []
-
-    def save_model(self, save_path=None, **kwargs):
-        is_abnormal = False
-        for callback in self.training_context['callbacks']:
-            callback.on_model_saving_start(self.training_context)
-
-        if isinstance(self._model, tf.Module) and any_abnormal_number(self._model):
-            is_abnormal = True
-            for para in getattr(self._model, "weights", []):
-                if any_abnormal_number(para.value() if hasattr(para, "value") else para):
-                    para.assign(
-                        where(is_nan(para), random_normal_like(para.value() if hasattr(para, "value") else para,
-                                                             mean=0, std=0.02).to(para.device), para))
-
-        if save_path is not None:
-            pass
-        else:
-            save_path = self.training_context['save_path']
-        folder, filename, ext = split_path(save_path)
-        if filename == '':
-            filename = self.name
-        if not filename.endswith('_tf'):
-            filename += '_tf'
-        save_path = os.path.join(folder, filename + ext)
-        self.training_context['save_path'] = save_path
-
-        if isinstance(self._model, Layer) and not is_abnormal:
-            folder, filename, ext = split_path(save_path)
-            ext = '.pth.tar_'
-            save_path = os.path.join(folder, filename + ext)
-            make_dir_if_need(sanitize_path(save_path))
-            save_path = sanitize_path(save_path)
-            device = get_device()
-            self._model.eval()
-
-            with tf.device('/cpu:0'):
-                save({
-                    'state_dict': self._model.state_dict(),
-                    'backend': 'tensorflow',
-                    'trident_version': __version__,
-                    'tensorflow_version': tf.version.VERSION,
-                    'signature': self.signature
-                }, save_path, is_compressed=True)
-
-                shutil.copy2(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
-                os.remove(save_path)
-                save_path = save_path.replace('pth.tar_', 'pth_')
-                save(self._model, save_path)
-                shutil.copy2(save_path, save_path.replace('.pth_', '.pth'))
-                os.remove(save_path)
-            gc.collect()
-            with tf.device(device):
-                self._model.train()
-
-
-
-
-
-        elif is_tensor(self._model) and not is_abnormal:
-            save_path = self.get_save_path(save_path, default_folder='Models',
-                                           default_file_name='{0}_epoch{1}.npy_'.format(self._model.name,
-                                                                                        self.training_context[
-                                                                                            'current_epoch']))
-            numpy_model = to_numpy(self._model)
-            save_path = sanitize_path(save_path)
-            self.current_save_path = save_path
-            np.save(save_path, numpy_model)
-            shutil.copy2(save_path, save_path.replace('.npy_', '.npy'))
-            os.remove(save_path)
-            sys.stdout.write('Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
-        else:
-            raise ValueError(
-                'only Layer or tf.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
-        for callback in self.training_context['callbacks']:
-            callback.on_model_saving_end(self.training_context)
 
     def save_onnx(self, save_path=None, **kwargs):
         pass

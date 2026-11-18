@@ -145,6 +145,15 @@ If you want to cite the framework feel free to use this:
   year={2020}
 }
 ```
+## PyTorch checkpoints
+
+The legacy trainer writes a weights-only checkpoint to both `.pth.tar` and `.pth`. Use
+`model.load_model(path, strict=True)` to require an exact parameter match. Partial loads
+return the missing and unexpected keys and issue a warning. For older checkpoints containing
+a pickled module or signature, use `trusted_legacy=True` only when you trust the file's
+origin. To export a whole module for an older consumer, use `save_model(path, save_full_model=True)`
+and give that consumer the `.pth` file.
+
 ## JPEG dataset check
 
 Before training on a folder of JPEG images, run `python scripts/audit_jpegs.py PATH_TO_DATASET --report bad-jpegs.txt`.

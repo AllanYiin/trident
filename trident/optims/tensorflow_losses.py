@@ -532,7 +532,7 @@ class _PairwiseLoss(Loss, AutoTrackable):
                 total_loss = math_ops.reduce_sum(loss, 0)
                 return math_ops.div_no_nan(total_loss, math_ops.div_no_nan(num_present, batch_size), name='value')
             elif self.reduction in ('mean', 'batch_mean'):
-                return lmath_ops.reduce_mean(loss)
+                return tf.reduce_mean(loss)
             elif self.reduction == ('sum', 'batch_sum'):
                 return math_ops.reduce_sum(loss)
             else:

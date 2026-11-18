@@ -1117,6 +1117,8 @@ class Layer(tf.Module):
 
         if device is None:
             device = get_device()
+        if dtype is None and device == self.device:
+            return self
         if dtype is None and len(self.weights) > 0:
             dtype = self.weights[0].dtype
         if 'cpu' in device:
@@ -1137,10 +1139,12 @@ class Layer(tf.Module):
                             module._buffers[name] = None
                         else:
                             module._buffers[name] = tf.identity(cast(buff, dtype))
-                module.device = self.device
+                module.factory_kwargs['device'] = device
             except Exception as e:
                 print(e)
                 PrintException()
+
+        return self
 
     def cuda(self: T, device: Optional[Union[int, str]] = None) -> T:
         r"""Moves all model parameters and buffers to the GPU.
@@ -1159,7 +1163,7 @@ class Layer(tf.Module):
 
         if tf.test.is_gpu_available:
             if self.get_root().device != '/gpu:0':
-                self.get_root().device = '/gpu:0'
+                self.get_root().factory_kwargs['device'] = '/gpu:0'
                 with tf.device(self.device):
                     return self._apply(lambda t: tf.identity(t))
 
@@ -1174,7 +1178,7 @@ class Layer(tf.Module):
         """
         if self.get_root().device != '/cpu:0':
             with tf.device('/cpu:0'):
-                self.get_root().device = '/cpu:0'
+                self.get_root().factory_kwargs['device'] = '/cpu:0'
                 return self._apply(lambda t: tf.identity(t))
 
     def gpu(self: T, device: Optional[Union[int, str]] = None) -> T:
@@ -1194,7 +1198,7 @@ class Layer(tf.Module):
 
         if tf.test.is_gpu_available:
             if self.get_root().device != '/gpu:0':
-                self.get_root().device = '/gpu:0'
+                self.get_root().factory_kwargs['device'] = '/gpu:0'
                 with tf.device(self.device):
                     return self._apply(lambda t: tf.identity(t))
 
@@ -1300,7 +1304,8 @@ class Layer(tf.Module):
             if len(self.weights) == 0:
                 return self.factory_kwargs['device']
             else:
-                return self.weights[0].device.type
+                device = tf.DeviceSpec.from_string(self.weights[0].device)
+                return '/{}:{}'.format(device.device_type.lower(), device.device_index or 0)
         else:
             return _root.device
 
@@ -3456,7 +3461,7 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed: OrderedDict = None, 
                 out = fn(*arg_map.value_list)
             return out
         else:
-            print('uncomplete arg_map', arg_map.key_list)
+            raise ValueError('incomplete argument mapping: {0}'.format(arg_map.key_list))
 
 
 def force_deterministic(seed):

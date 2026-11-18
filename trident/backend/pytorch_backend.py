@@ -3434,119 +3434,115 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None, is_autocast_ena
     if isinstance(fn, torch.Tensor):
         return fn
     else:
-        try:
-            arg_map = OrderedDict()
-            out = None
-            if isinstance(fn, Layer):
-                _device = fn.get_root().device
-                _signature = fn._signature
-                if None in fn._signature.inputs.value_list:
-                    _signature = get_signature(fn)
-                for arg in _signature.inputs.key_list:
-                    is_optional = fn.signature.inputs[arg].optional if isinstance(fn.signature.inputs[arg],
-                                                                                  TensorSpec) else False
-                    default = fn.signature.inputs[arg].default if isinstance(fn.signature.inputs[arg],
-                                                                             TensorSpec) else None
-                    is_input = arg.lower() in ['x', 'input']
-                    is_output = arg.lower() in ['y', 'output', 'y_pred']
-                    if arg in data_feed and data_feed[arg] in data:
-                        arg_map[arg] = to_tensor(data[data_feed[arg]], device=_device)
-                    elif arg in data:
-                        arg_map[arg] = to_tensor(data[arg], device=_device)
-                    elif is_input and 'input' in data_feed and data_feed['input'] in data:
-                        arg_map[arg] = to_tensor(data[data_feed['input']], device=_device)
-                    elif is_output and 'output' in data_feed and data_feed['output'] in data:
-                        arg_map[arg] = to_tensor(data[data_feed['output']], device=_device)
-                    elif is_optional:
-                        arg_map[arg] = default
-                    else:
-                        raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
-                # print('arg_map',arg_map.key_list)
-                if ctx.amp_available == True and is_autocast_enabled == True and get_device() == 'cuda':
-                    with torch.cuda.amp.autocast():
-                        out = fn(*arg_map.value_list)
+        arg_map = OrderedDict()
+        out = None
+        if isinstance(fn, Layer):
+            _device = fn.get_root().device
+            _signature = fn._signature
+            if None in fn._signature.inputs.value_list:
+                _signature = get_signature(fn)
+            for arg in _signature.inputs.key_list:
+                is_optional = fn.signature.inputs[arg].optional if isinstance(fn.signature.inputs[arg],
+                                                                              TensorSpec) else False
+                default = fn.signature.inputs[arg].default if isinstance(fn.signature.inputs[arg],
+                                                                         TensorSpec) else None
+                is_input = arg.lower() in ['x', 'input']
+                is_output = arg.lower() in ['y', 'output', 'y_pred']
+                if arg in data_feed and data_feed[arg] in data:
+                    arg_map[arg] = to_tensor(data[data_feed[arg]], device=_device)
+                elif arg in data:
+                    arg_map[arg] = to_tensor(data[arg], device=_device)
+                elif is_input and 'input' in data_feed and data_feed['input'] in data:
+                    arg_map[arg] = to_tensor(data[data_feed['input']], device=_device)
+                elif is_output and 'output' in data_feed and data_feed['output'] in data:
+                    arg_map[arg] = to_tensor(data[data_feed['output']], device=_device)
+                elif is_optional:
+                    arg_map[arg] = default
                 else:
+                    raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
+            # print('arg_map',arg_map.key_list)
+            if ctx.amp_available == True and is_autocast_enabled == True and get_device() == 'cuda':
+                with torch.cuda.amp.autocast():
                     out = fn(*arg_map.value_list)
-                    # for item in data.value_list:
-                    #     if hasattr(item, 'cpu'):
-                    #         item.cpu()
-                return out
-            elif (hasattr(fn, 'signature') or hasattr(fn, '_signature')) and callable(fn):
-                sig = fn._signature if hasattr(fn, '_signature') else fn.signature
-                for arg in fn.signature.inputs.key_list:
-                    is_optional = sig.inputs[arg].optional if isinstance(sig.inputs[arg], TensorSpec) else False
-                    default = sig.inputs[arg].default if isinstance(sig.inputs[arg], TensorSpec) else None
-                    is_input = arg.lower() in ['x', 'input']
-                    is_output = arg.lower() in ['y', 'output', 'y_pred']
-                    if arg in data_feed and data_feed[arg] in data:
-                        arg_map[arg] = to_tensor(data[data_feed[arg]], device=get_device())
-                    elif arg in data:
-                        arg_map[arg] = to_tensor(data[arg], device=get_device())
-                    elif is_input and 'input' in data_feed and data_feed['input'] in data:
-                        arg_map[arg] = to_tensor(data[data_feed['input']], device=get_device())
-                    elif is_output and 'output' in data_feed and data_feed['output'] in data:
-                        arg_map[arg] = to_tensor(data[data_feed['output']], device=get_device())
-                    elif isinstance(fn, partial) and arg in fn.keywords:
-                        arg_map[arg] = fn.keywords[arg]
-                    elif is_optional:
-                        arg_map[arg] = default
-                    else:
-                        raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
-
-                # print('arg_map', arg_map.key_list)
-                if ctx.amp_available == True and is_autocast_enabled == True and get_device() == 'cuda':
-                    with torch.cuda.amp.autocast():
-                        if isinstance(fn, partial):
-                            out = fn.func(*arg_map.value_list)
-                        else:
-                            out = fn(*arg_map.value_list)
+            else:
+                out = fn(*arg_map.value_list)
+                # for item in data.value_list:
+                #     if hasattr(item, 'cpu'):
+                #         item.cpu()
+            return out
+        elif (hasattr(fn, 'signature') or hasattr(fn, '_signature')) and callable(fn):
+            sig = fn._signature if hasattr(fn, '_signature') else fn.signature
+            for arg in fn.signature.inputs.key_list:
+                is_optional = sig.inputs[arg].optional if isinstance(sig.inputs[arg], TensorSpec) else False
+                default = sig.inputs[arg].default if isinstance(sig.inputs[arg], TensorSpec) else None
+                is_input = arg.lower() in ['x', 'input']
+                is_output = arg.lower() in ['y', 'output', 'y_pred']
+                if arg in data_feed and data_feed[arg] in data:
+                    arg_map[arg] = to_tensor(data[data_feed[arg]], device=get_device())
+                elif arg in data:
+                    arg_map[arg] = to_tensor(data[arg], device=get_device())
+                elif is_input and 'input' in data_feed and data_feed['input'] in data:
+                    arg_map[arg] = to_tensor(data[data_feed['input']], device=get_device())
+                elif is_output and 'output' in data_feed and data_feed['output'] in data:
+                    arg_map[arg] = to_tensor(data[data_feed['output']], device=get_device())
+                elif isinstance(fn, partial) and arg in fn.keywords:
+                    arg_map[arg] = fn.keywords[arg]
+                elif is_optional:
+                    arg_map[arg] = default
                 else:
+                    raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
+
+            # print('arg_map', arg_map.key_list)
+            if ctx.amp_available == True and is_autocast_enabled == True and get_device() == 'cuda':
+                with torch.cuda.amp.autocast():
                     if isinstance(fn, partial):
                         out = fn.func(*arg_map.value_list)
                     else:
                         out = fn(*arg_map.value_list)
-                    # for item in data.value_list:
-                    #     if hasattr(item, 'cpu'):
-                    #         item.cpu()
-
-                return out
-            elif callable(fn):
-                fn.signature = get_signature(fn)
-                args = fn.signature.inputs.key_list
-                for arg in args:
-                    is_optional = fn.signature.inputs[arg].optional if isinstance(fn.signature.inputs[arg],
-                                                                                  TensorSpec) else False
-                    default = fn.signature.inputs[arg].default if isinstance(fn.signature.inputs[arg],
-                                                                             TensorSpec) else None
-                    is_input = arg.lower() in ['x', 'input']
-                    is_output = arg.lower() in ['y', 'output', 'y_pred']
-                    if arg in data_feed and data_feed[arg] in data:
-                        arg_map[arg] = to_tensor(data[data_feed[arg]], device=get_device())
-                    elif arg in data:
-                        arg_map[arg] = to_tensor(data[arg], device=get_device())
-                    elif is_input and 'input' in data_feed and data_feed['input'] in data:
-                        arg_map[arg] = to_tensor(data[data_feed['input']], device=get_device())
-                    elif is_output and 'output' in data_feed and data_feed['output'] in data:
-                        arg_map[arg] = to_tensor(data[data_feed['output']], device=get_device())
-                    elif is_optional:
-                        arg_map[arg] = default
-                    else:
-                        arg_map.pop(arg)
-                # print('arg_map', arg_map.key_list)
-                if ctx.amp_available == True and is_autocast_enabled == True and get_device() == 'cuda':
-                    with torch.cuda.amp.autocast():
-                        out = fn(*arg_map.value_list)
+            else:
+                if isinstance(fn, partial):
+                    out = fn.func(*arg_map.value_list)
                 else:
                     out = fn(*arg_map.value_list)
-                    # for item in data.value_list:
-                    #     if is_tensor(item):
-                    #         item.cpu()
-                return out
+                # for item in data.value_list:
+                #     if hasattr(item, 'cpu'):
+                #         item.cpu()
+
+            return out
+        elif callable(fn):
+            fn.signature = get_signature(fn)
+            args = fn.signature.inputs.key_list
+            for arg in args:
+                is_optional = fn.signature.inputs[arg].optional if isinstance(fn.signature.inputs[arg],
+                                                                              TensorSpec) else False
+                default = fn.signature.inputs[arg].default if isinstance(fn.signature.inputs[arg],
+                                                                         TensorSpec) else None
+                is_input = arg.lower() in ['x', 'input']
+                is_output = arg.lower() in ['y', 'output', 'y_pred']
+                if arg in data_feed and data_feed[arg] in data:
+                    arg_map[arg] = to_tensor(data[data_feed[arg]], device=get_device())
+                elif arg in data:
+                    arg_map[arg] = to_tensor(data[arg], device=get_device())
+                elif is_input and 'input' in data_feed and data_feed['input'] in data:
+                    arg_map[arg] = to_tensor(data[data_feed['input']], device=get_device())
+                elif is_output and 'output' in data_feed and data_feed['output'] in data:
+                    arg_map[arg] = to_tensor(data[data_feed['output']], device=get_device())
+                elif is_optional:
+                    arg_map[arg] = default
+                else:
+                    arg_map.pop(arg)
+            # print('arg_map', arg_map.key_list)
+            if ctx.amp_available == True and is_autocast_enabled == True and get_device() == 'cuda':
+                with torch.cuda.amp.autocast():
+                    out = fn(*arg_map.value_list)
             else:
-                print('uncomplete arg_map', arg_map.key_list)
-        except Exception as e:
-            print(e)
-            PrintException()
+                out = fn(*arg_map.value_list)
+                # for item in data.value_list:
+                #     if is_tensor(item):
+                #         item.cpu()
+            return out
+        else:
+            raise ValueError('incomplete argument mapping: {0}'.format(arg_map.key_list))
 
 
 def force_deterministic(seed):

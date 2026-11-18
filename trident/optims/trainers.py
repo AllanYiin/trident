@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import builtins
-import copy
+from copy import deepcopy
 import itertools
 import json
 import math
@@ -70,6 +70,7 @@ class TrainingPlan(object):
         self.print_progress_frequency = 10
         self.print_progress_unit = 'batch'
         self.print_progress_on_epoch_end = False
+        self.fit_validation = None
         self.out_sample_evaluation_frequency = 1
         self.out_sample_evaluation_unit = 'epoch'
         self.out_sample_evaluation_on_epoch_end = True
@@ -535,6 +536,40 @@ class TrainingPlan(object):
         for callback in self.callbacks:
             callback.on_overall_batch_end(self.__dict__)
 
+    def _epochs_to_run(self, only_steps, max_batches):
+        if not only_steps:
+            yield from range(self.num_epochs)
+            return
+        if not isinstance(max_batches, (int, np.integer)) or max_batches < 1:
+            raise ValueError("only_steps requires a positive integer batch count")
+        for epoch in itertools.count():
+            before = self.steps
+            yield epoch
+            if self.steps == before:
+                raise ValueError("the training provider yielded no batches")
+
+    @staticmethod
+    def _epoch_batches(provider):
+        if hasattr(provider, 'iter_epoch'):
+            return provider.iter_epoch()
+        sampler = provider.batch_sampler
+        if isinstance(provider, (DataProvider, TextSequenceDataProvider)):
+            return sampler.iter_epoch()
+        return itertools.islice(provider, len(sampler))
+
+    @staticmethod
+    def _named_batch(batch, template):
+        if isinstance(batch, dict):
+            return OrderedDict((getattr(key, 'name', key), value) for key, value in batch.items())
+        return OrderedDict((spec.name, value) for spec, value in zip(template, batch))
+
+    def _notify_training_failure(self):
+        for item in self.training_items.values():
+            try:
+                item.do_on_excution_exception()
+            except Exception as cleanup_error:
+                ctx.print("Training failure callback raised: {}".format(cleanup_error))
+
     def start_now(self, collect_data_inteval=None, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
         if any(getattr(item, 'uses_objective_runner', False) for item in self.training_items.values()):
@@ -542,6 +577,7 @@ class TrainingPlan(object):
             return run_language_plan(self, only_steps=only_steps, max_batches=max_batches)
         data_provider = self._dataloaders.value_list[-1]
         data_provider.batch_size = self.batch_size
+        previous_mode = data_provider.mode
         data_provider.mode = 'dict'
 
         if collect_data_inteval is None:
@@ -549,8 +585,6 @@ class TrainingPlan(object):
 
         try:
             self.execution_id = get_time_suffix()
-            exception_cnt = 0
-            abnormal_num_count = 0
             # update callback
 
             # enable tensorboard & mlflow
@@ -586,7 +620,7 @@ class TrainingPlan(object):
                         if callback not in item.callbacks:
                             # private callback
                             if not callback.is_shared:
-                                item.with_callbacks(copy.deepcopy(callback))
+                                item.with_callbacks(deepcopy(callback))
                             else:
                                 # shared callback
                                 item.with_callbacks(callback)
@@ -600,196 +634,156 @@ class TrainingPlan(object):
                 self.generate_datafeed(data_provider)
                 if collect_data_inteval == 1 and len(data_provider.batch_sampler) * self.num_epochs > 1000:
                     collect_data_inteval = self.default_collect_data_inteval
-            if only_steps:
-                self.num_epochs = (max_batches // len(data_provider.batch_sampler)) + 2
+            first_step = self.steps
 
             if len(data_provider._batch_transform_funcs) > 0:
                 data_provider.traindata.batch_sampler._batch_transform_funcs = data_provider._batch_transform_funcs
             self.do_on_training_start()
-            for epoch in range(self.num_epochs):
+            for epoch in self._epochs_to_run(only_steps, max_batches):
                 self.epochs = epoch
-                for mbs, return_data in enumerate(data_provider):
-                    try:
+                for mbs, return_data in enumerate(self._epoch_batches(data_provider)):
+                    if self.is_terminate:
+                        for callback in self.callbacks:
+                            if callback.is_shared:
+                                callback.on_training_terminated(self.__dict__)
 
-                        if self.is_terminate:
-                            for callback in self.callbacks:
-                                if callback.is_shared:
-                                    callback.on_training_terminated(self.__dict__)
-
-                            for k, trainitem in self.training_items.items():
-                                for callback in trainitem.training_context['callbacks']:
-                                    if not callback.is_shared:
-                                        callback.on_training_terminated(trainitem.training_context)
-                            data_provider.mode = 'tuple'
-                            return True
-
-                        else:
-
-                            iter_data = OrderedDict()
-
-                            if isinstance(return_data, OrderedDict):
-                                for spec, data in return_data.item_list:
-                                    iter_data[spec.name] = data
-                            elif isinstance(return_data, tuple):
-                                for i in range(len(return_data)):
-                                    iter_data[data_provider.traindata.data_template.key_list[i].name] = return_data[i]
-
-                            # check weather need out-of-sample evaluation
-                            need_out_sample_evaluation = False
-                            if self.out_sample_evaluation_on_epoch_end == True and mbs > 0 and self.out_sample_evaluation_unit == 'batch' and mbs % \
-                                    self.out_sample_evaluation_frequency == 0:
-                                need_out_sample_evaluation = True
-                            elif self.out_sample_evaluation_on_epoch_end == True and only_steps == False and self.out_sample_evaluation_unit == 'epoch' and mbs == len(
-                                    data_provider.batch_sampler) - 1 and epoch % self.out_sample_evaluation_frequency == 0:
-                                need_out_sample_evaluation = True
-
-                            iter_testdata = None
-                            if isinstance(data_provider, (DataProvider,
-                                                          TextSequenceDataProvider)) and data_provider.testdata is not None and need_out_sample_evaluation:
-                                return_test = data_provider.next_test()
-                                if return_test is not None:
-                                    iter_testdata = OrderedDict()
-                                    if isinstance(return_test, OrderedDict):
-                                        for spec, data in return_test.item_list:
-                                            iter_testdata[spec.name] = data
-                                    elif isinstance(return_test, tuple):
-                                        for i in range(len(return_test)):
-                                            iter_testdata[data_provider.traindata.data_template.key_list[i].name] = \
-                                                return_test[i]
-
-                            # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
-                            num_epoch = self.num_epochs if only_steps == False else 1
-                            num_batches = len(data_provider.batch_sampler) if only_steps == False else max_batches
-                            current_batch = mbs if only_steps == False else self.steps
-                            current_epoch = epoch if only_steps == False else 0
-                            is_epoch_end = current_batch == num_batches - 1
-                            for trainitem_name, trainitem in zip(self.training_names.value_list,
-                                                                 self.training_items.value_list):
-                                train_data = copy.deepcopy(iter_data)
-                                test_data = copy.deepcopy(iter_testdata)
-                                trainitem.training_context['data_template'] = data_provider.traindata.data_template
-                                trainitem.training_context['collect_data_inteval'] = collect_data_inteval
-                                trainitem.training_context['model_name'] = trainitem_name
-                                start_epoch = 0 if not hasattr(trainitem, 'start_epoch') else trainitem.start_epoch
-                                if epoch < start_epoch:
-                                    trainitem.training_context['stop_update'] = 1
-
-                                if current_batch == 0:
-                                    trainitem.do_on_epoch_start()
-                                trainitem.steps = self.steps
-                                trainitem.current_epoch = current_epoch
-                                trainitem.current_batch = current_batch
-
-                                trainitem.train_model(train_data, test_data,
-                                                      current_epoch,
-                                                      current_batch,
-                                                      num_epoch,
-                                                      num_batches,
-                                                      done=None,
-                                                      is_collect_data=current_batch == 0 or (
-                                                              self.steps + 1) % collect_data_inteval == 0,
-                                                      is_print_batch_progress=self.print_progress_unit == 'batch' and self.steps > 0 and (
-                                                              current_batch + 1) % self.print_progress_frequency == 0,
-                                                      is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
-                                                      log_gradients=keep_gradient_history,
-                                                      log_weights=keep_weights_history,
-                                                      accumulate_grads=(
-                                                                               self.steps + 1) % trainitem.accumulation_steps != 0,
-                                                      is_out_sample_evaluation=need_out_sample_evaluation)
-
-                                if is_epoch_end:
-                                    trainitem.do_on_epoch_end()
-
-                            self.steps += 1
-
-                            if ctx.enable_tensorboard and len(
-                                    self.training_items) > 1 and mbs % collect_data_inteval == 0:
-                                compare_dict = OrderedDict()
-                                step = None
-                                for trainitem_name, trainitem in zip(self.training_names.value_list,
-                                                                     self.training_items.value_list):
-                                    for k, v in trainitem.training_context["losses"].items():
-                                        if k not in compare_dict:
-                                            compare_dict[k] = OrderedDict()
-                                        compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
-                                        step = v[-1][0]
-                                    for k, v in trainitem.training_context["metrics"].items():
-                                        if k not in compare_dict:
-                                            compare_dict[k] = OrderedDict()
-                                        compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
-                                for k, v in compare_dict.items():
-                                    ctx.summary_writer.add_scalars(k, v, step)
-
-                            if (self.print_progress_unit == 'batch' and (
-                                    current_batch + 1) % self.print_progress_frequency == 0) or \
-                                    (self.print_progress_unit == 'epoch' and (
-                                            epoch + 1) % self.print_progress_frequency == 0):
-                                if len(self.training_items) > 1:
-                                    ctx.print(' \n', flush=True)
-
-                            self.do_on_overall_batch_end()
-                            if is_epoch_end:
-                                self.do_on_overall_epoch_end()
-
-                            # `current_batch` is zero-based and resets every epoch, so
-                            # frequency=100 triggers on each epoch's 100th batch.
-                            if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (
-                                    current_batch + 1) % \
-                                    self.save_model_frequency == 0:
-                                for k, trainitem in self.training_items.items():
-                                    trainitem.save_model(trainitem.training_context['save_path'], )
-                                    # if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
-                                    #     trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                    #     ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
-                                    #     trainitem.training_context['upload_onnx'] = True
-                            if only_steps == True and self.steps >= max_batches - 1:
-                                for k, trainitem in self.training_items.items():
-                                    try:
-                                        trainitem.save_model(trainitem.training_context['save_path'], )
-                                    except Exception as e:
-                                        ctx.print(e)
-                                data_provider.mode = 'tuple'
-                                return True
-
-                            if only_steps == False and (self.steps + 1) % len(data_provider.batch_sampler) == 0:
-                                break
-
-                    except RuntimeError as runtime_e:
-                        if 'CUDA out of memory' in str(runtime_e):
-                            gc.collect()
-
-                    except StopIteration:
                         for k, trainitem in self.training_items.items():
-                            trainitem.do_on_epoch_end()
+                            finish = getattr(trainitem, '_finish_gradient_window', None)
+                            if callable(finish):
+                                finish()
+                            for callback in trainitem.training_context['callbacks']:
+                                if not callback.is_shared:
+                                    callback.on_training_terminated(trainitem.training_context)
+                        data_provider.mode = 'tuple'
+                        return True
+
+                    template = data_provider.traindata.data_template
+                    iter_data = self._named_batch(return_data, template)
+                    # check weather need out-of-sample evaluation
+                    need_out_sample_evaluation = False
+                    if self.out_sample_evaluation_on_epoch_end == True and mbs > 0 and self.out_sample_evaluation_unit == 'batch' and mbs % \
+                            self.out_sample_evaluation_frequency == 0:
+                        need_out_sample_evaluation = True
+                    elif self.out_sample_evaluation_on_epoch_end == True and only_steps == False and self.out_sample_evaluation_unit == 'epoch' and mbs == len(
+                            data_provider.batch_sampler) - 1 and epoch % self.out_sample_evaluation_frequency == 0:
+                        need_out_sample_evaluation = True
+
+                    iter_testdata = None
+                    if need_out_sample_evaluation and getattr(data_provider, 'testdata', None) is not None:
+                        held_out = data_provider.next_test()
+                        if held_out is not None:
+                            iter_testdata = self._named_batch(held_out, template)
+                    need_out_sample_evaluation = iter_testdata is not None
+
+                    # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
+                    num_epoch = self.num_epochs if only_steps == False else 1
+                    num_batches = len(data_provider.batch_sampler) if only_steps == False else max_batches
+                    current_batch = mbs if only_steps == False else self.steps - first_step
+                    current_epoch = epoch if only_steps == False else 0
+                    for trainitem_name, trainitem in zip(self.training_names.value_list,
+                                                         self.training_items.value_list):
+                        train_data = deepcopy(iter_data)
+                        test_data = deepcopy(iter_testdata)
+                        trainitem.training_context['data_template'] = data_provider.traindata.data_template
+                        trainitem.training_context['collect_data_inteval'] = collect_data_inteval
+                        trainitem.training_context['model_name'] = trainitem_name
+                        start_epoch = 0 if not hasattr(trainitem, 'start_epoch') else trainitem.start_epoch
+                        if epoch < start_epoch:
+                            trainitem.training_context['stop_update'] = 1
+
+                        if current_batch == 0:
+                            trainitem.do_on_epoch_start()
+                        trainitem.steps = self.steps
+                        trainitem.current_epoch = current_epoch
+                        trainitem.current_batch = current_batch
+
+                        trainitem.train_model(train_data, test_data,
+                                              current_epoch,
+                                              current_batch,
+                                              num_epoch,
+                                              num_batches,
+                                              done=None,
+                                              is_collect_data=current_batch == 0 or (
+                                                      self.steps + 1) % collect_data_inteval == 0,
+                                              is_print_batch_progress=self.print_progress_unit == 'batch' and self.steps > 0 and (
+                                                      current_batch + 1) % self.print_progress_frequency == 0,
+                                              is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
+                                              log_gradients=keep_gradient_history,
+                                              log_weights=keep_weights_history,
+                                              accumulate_grads=(
+                                                                       self.steps + 1) % trainitem.accumulation_steps != 0,
+                                              is_out_sample_evaluation=need_out_sample_evaluation)
+
+
+                    self.steps += 1
+
+                    if ctx.enable_tensorboard and len(
+                            self.training_items) > 1 and mbs % collect_data_inteval == 0:
+                        compare_dict = OrderedDict()
+                        step = None
+                        for trainitem_name, trainitem in zip(self.training_names.value_list,
+                                                             self.training_items.value_list):
+                            for k, v in trainitem.training_context["losses"].items():
+                                if k not in compare_dict:
+                                    compare_dict[k] = OrderedDict()
+                                compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
+                                step = v[-1][0]
+                            for k, v in trainitem.training_context["metrics"].items():
+                                if k not in compare_dict:
+                                    compare_dict[k] = OrderedDict()
+                                compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
+                        for k, v in compare_dict.items():
+                            ctx.summary_writer.add_scalars(k, v, step)
+
+                    if (self.print_progress_unit == 'batch' and (
+                            current_batch + 1) % self.print_progress_frequency == 0) or \
+                            (self.print_progress_unit == 'epoch' and (
+                                    epoch + 1) % self.print_progress_frequency == 0):
+                        if len(self.training_items) > 1:
+                            ctx.print(' \n', flush=True)
+
+                    self.do_on_overall_batch_end()
+
+                    # `current_batch` is zero-based and resets every epoch, so
+                    # frequency=100 triggers on each epoch's 100th batch.
+                    if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (
+                            current_batch + 1) % \
+                            self.save_model_frequency == 0:
+                        for k, trainitem in self.training_items.items():
                             trainitem.save_model(trainitem.training_context['save_path'], )
+                            # if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
+                            #     trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
+                            #     ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
+                            #     trainitem.training_context['upload_onnx'] = True
+                    if only_steps and self.steps - first_step >= max_batches:
+                        for item in self.training_items.values():
+                            item.do_on_epoch_end()
+                        self.do_on_overall_epoch_end()
+                        self.do_on_training_end()
+                        return True
 
-                    except ValueError as ve:
-                        ctx.print(ve)
-                        PrintException()
-                        for k, trainitem in self.training_items.items():
-                            trainitem.do_on_excution_exception()
-
-                    except Exception as e:
-                        ctx.print(e)
-                        PrintException()
-                for k, trainitem in self.training_items.items():
-                    trainitem.do_on_excution_exception()
+                if not only_steps:
+                    for item in self.training_items.values():
+                        item.do_on_epoch_end()
+                    if self.fit_validation and (epoch + 1) % self.out_sample_evaluation_frequency == 0:
+                        validation, size, limit = self.fit_validation
+                        if validation.batch_size != size:
+                            validation.batch_size = size
+                        for item in self.training_items.values():
+                            item._evaluate_fit_batches(validation.batch_sampler.iter_epoch(), limit)
+                    self.do_on_overall_epoch_end()
                 if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (
                         epoch + 1) % self.save_model_frequency == 0:
                     for k, trainitem in self.training_items.items():
                         trainitem.save_model(trainitem.training_context['save_path'], )
             self.do_on_training_end()
-            data_provider.mode = 'tuple'
 
 
-        except KeyboardInterrupt:
-            ctx.print('Training interrupted. Skip auto-saving checkpoint on interrupt to avoid overwriting existing model.')
-            data_provider.mode = 'tuple'
-        except Exception as e:
-            ctx.print(e)
-            PrintException()
-            ctx.print('Training aborted by exception. Skip auto-saving checkpoint to avoid overwriting existing model.')
-            data_provider.mode = 'tuple'
+        except (KeyboardInterrupt, Exception):
+            self._notify_training_failure()
+            raise
+        finally:
+            data_provider.mode = previous_mode
 
     def resume(self):
         self.start_now(is_resume=True)
@@ -1273,6 +1267,7 @@ class GanTrainingPlan(TrainingPlan):
         data_provider = self._dataloaders.value_list[0]
 
         data_provider.batch_size = self.batch_size
+        previous_mode = data_provider.mode
         data_provider.mode = 'dict'
         # generate data feed
         self.generate_datafeed(data_provider)
@@ -1312,7 +1307,7 @@ class GanTrainingPlan(TrainingPlan):
                         if callback not in item.callbacks:
                             # private callback
                             if not callback.is_shared:
-                                item.with_callbacks(copy.deepcopy(callback))
+                                item.with_callbacks(deepcopy(callback))
                             else:
                                 # shared callback
                                 item.with_callbacks(callback)
@@ -1350,159 +1345,134 @@ class GanTrainingPlan(TrainingPlan):
             if not is_resume or only_steps == True:
                 if collect_data_inteval == 1 and len(data_provider.batch_sampler) * self.num_epochs > 1000:
                     collect_data_inteval = self.default_collect_data_inteval
-            if only_steps:
-                self.num_epochs = (max_batches // len(data_provider.batch_sampler)) + 2
+            first_step = self.steps
 
-            for epoch in range(self.num_epochs):
-                try:
-                    for mbs, return_data in enumerate(data_provider):
+            for epoch in self._epochs_to_run(only_steps, max_batches):
+                for mbs, return_data in enumerate(self._epoch_batches(data_provider)):
 
-                        if self.is_terminate:
-                            for callback in self.callbacks:
-                                if callback.is_shared:
-                                    callback.on_training_terminated(self.__dict__)
+                    if self.is_terminate:
+                        for callback in self.callbacks:
+                            if callback.is_shared:
+                                callback.on_training_terminated(self.__dict__)
 
-                            for k, trainitem in self.training_items.items():
+                        for k, trainitem in self.training_items.items():
 
-                                for callback in trainitem.training_context['callbacks']:
-                                    if not callback.is_shared:
-                                        callback.on_training_terminated(trainitem.training_context)
-                            data_provider.mode = 'tuple'
-                        else:
+                            for callback in trainitem.training_context['callbacks']:
+                                if not callback.is_shared:
+                                    callback.on_training_terminated(trainitem.training_context)
+                        data_provider.mode = 'tuple'
+                    else:
 
-                            iter_data = OrderedDict()
+                        iter_data = OrderedDict()
 
-                            if isinstance(return_data, OrderedDict):
-                                for spec, data in return_data.item_list:
-                                    iter_data[spec.name] = data
-                            elif isinstance(return_data, tuple):
-                                for i in range(len(return_data)):
-                                    iter_data[data_provider.traindata.data_template.key_list[i].name] = return_data[i]
+                        if isinstance(return_data, OrderedDict):
+                            for spec, data in return_data.item_list:
+                                iter_data[spec.name] = data
+                        elif isinstance(return_data, tuple):
+                            for i in range(len(return_data)):
+                                iter_data[data_provider.traindata.data_template.key_list[i].name] = return_data[i]
 
-                            # check weather need out-of-sample evaluation
-                            need_out_sample_evaluation = False
+                        # check weather need out-of-sample evaluation
+                        need_out_sample_evaluation = False
 
-                            # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
+                        # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
 
+                        for trainitem_name, trainitem in zip(self.training_names.value_list,
+                                                             self.training_items.value_list):
+                            train_data = deepcopy(iter_data)
+                            trainitem.training_context['data_template'] = data_provider.traindata.data_template
+                            trainitem.training_context['collect_data_inteval'] = collect_data_inteval
+                            trainitem.training_context['model_name'] = trainitem_name
+                            if epoch < int(trainitem.start_epoch):
+                                trainitem.training_context['stop_update'] = 1
+
+
+                            # if self.is_generator_first:
+                            #     trainitem.model.zero_grad()
+                            should_collect_data = True
+
+                            dis_k = 1
+                            if self.gan_type not in ['began', 'ebgan'] and trainitem.training_context['gan_role'] == 'discriminator' and 'd_fake' in trainitem.training_context[ 'tmp_metrics'] and len(trainitem.training_context[ 'tmp_metrics']['d_fake'])>0:
+
+                                if trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
+                                        trainitem.training_context['tmp_metrics'].get_last('d_fake')[-1] < 0.1:
+                                    dis_k = 1
+                                elif trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
+                                        trainitem.training_context['tmp_metrics'].get_last('d_fake')[-1] > 0.3:
+                                    dis_k = 1
+                            if (trainitem.training_context['gan_role'] == 'discriminator' and mbs % dis_k == 0) or (
+                                    trainitem.training_context['gan_role'] == 'generator' and mbs % 1 == 0):
+                                trainitem.training_context['stop_update'] = 0
+                            else:
+                                trainitem.training_context['stop_update'] = 1
+                                should_collect_data = False
+                            if self._use_total_variation_loss and trainitem.training_context[
+                                'gan_role'] == 'generator' and epoch == self.total_variation_start_epoch and mbs == 0:
+                                self.generator.with_regularizer('total_variation_norm_reg',
+                                                                reg_weight=self.total_variation_reg_weight)
+
+                            trainitem.train_model(train_data, None,
+                                                  epoch if only_steps == False else 0,
+                                                  mbs if only_steps == False else self.steps - first_step,
+                                                  self.num_epochs if only_steps == False else 1,
+                                                  len(data_provider.batch_sampler) if only_steps == False else max_batches,
+                                                  is_collect_data=mbs == 0 or (
+                                                          should_collect_data and mbs % collect_data_inteval) == 0,
+                                                  is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
+                                                  is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
+                                                  log_gradients=keep_gradient_history,
+                                                  log_weights=keep_weights_history,
+                                                  accumulate_grads=False,
+                                                  is_out_sample_evaluation=need_out_sample_evaluation)
+                            trainitem.steps += 1
+                        self.steps += 1
+
+                        if ctx.enable_tensorboard and len(
+                                self.training_items) > 1 and mbs % collect_data_inteval == 0:
+                            compare_dict = OrderedDict()
+                            step = None
                             for trainitem_name, trainitem in zip(self.training_names.value_list,
                                                                  self.training_items.value_list):
-                                train_data = copy.deepcopy(iter_data)
-                                trainitem.training_context['data_template'] = data_provider.traindata.data_template
-                                trainitem.training_context['collect_data_inteval'] = collect_data_inteval
-                                trainitem.training_context['model_name'] = trainitem_name
-                                if epoch < int(trainitem.start_epoch):
-                                    trainitem.training_context['stop_update'] = 1
+                                for k, v in trainitem.training_context["losses"].items():
+                                    if k not in compare_dict:
+                                        compare_dict[k] = OrderedDict()
+                                    compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
+                                    step = v[-1][0]
+                                for k, v in trainitem.training_context["metrics"].items():
+                                    if k not in compare_dict:
+                                        compare_dict[k] = OrderedDict()
+                                    compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
+                            for k, v in compare_dict.items():
+                                ctx.summary_writer.add_scalars(k, v, step)
 
+                        if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
+                                (self.print_progress_unit == 'epoch' and (
+                                        epoch + 1) % self.print_progress_frequency == 0):
+                            if len(self.training_items) > 1:
+                                ctx.print(' \n', flush=True)
 
-                                # if self.is_generator_first:
-                                #     trainitem.model.zero_grad()
-                                should_collect_data = True
+                        for k, trainitem in self.training_items.items():
+                            finish = getattr(trainitem, '_finish_gradient_window', None)
+                            if callable(finish):
+                                finish()
+                            for callback in trainitem.training_context['callbacks']:
+                                if not callback.is_shared:
+                                    callback.on_overall_batch_end(trainitem.training_context)
+                        for callback in self.callbacks:
+                            if callback.is_shared:
+                                callback.on_overall_batch_end(self.__dict__)
 
-                                dis_k = 1
-                                if self.gan_type not in ['began', 'ebgan'] and trainitem.training_context['gan_role'] == 'discriminator' and 'd_fake' in trainitem.training_context[ 'tmp_metrics'] and len(trainitem.training_context[ 'tmp_metrics']['d_fake'])>0:
-
-                                    if trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
-                                            trainitem.training_context['tmp_metrics'].get_last('d_fake')[-1] < 0.1:
-                                        dis_k = 1
-                                    elif trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
-                                            trainitem.training_context['tmp_metrics'].get_last('d_fake')[-1] > 0.3:
-                                        dis_k = 1
-                                if (trainitem.training_context['gan_role'] == 'discriminator' and mbs % dis_k == 0) or (
-                                        trainitem.training_context['gan_role'] == 'generator' and mbs % 1 == 0):
-                                    trainitem.training_context['stop_update'] = 0
-                                else:
-                                    trainitem.training_context['stop_update'] = 1
-                                    should_collect_data = False
-                                if self._use_total_variation_loss and trainitem.training_context[
-                                    'gan_role'] == 'generator' and epoch == self.total_variation_start_epoch and mbs == 0:
-                                    self.generator.with_regularizer('total_variation_norm_reg',
-                                                                    reg_weight=self.total_variation_reg_weight)
-
-                                trainitem.train_model(train_data, None,
-                                                      epoch if only_steps == False else 0,
-                                                      mbs if only_steps == False else self.steps,
-                                                      self.num_epochs if only_steps == False else 1,
-                                                      len(data_provider.batch_sampler) if only_steps == False else max_batches,
-                                                      is_collect_data=mbs == 0 or (
-                                                              should_collect_data and mbs % collect_data_inteval) == 0,
-                                                      is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
-                                                      is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
-                                                      log_gradients=keep_gradient_history,
-                                                      log_weights=keep_weights_history,
-                                                      accumulate_grads=False,
-                                                      is_out_sample_evaluation=need_out_sample_evaluation)
-                                trainitem.steps += 1
-                            self.steps += 1
-
-                            if ctx.enable_tensorboard and len(
-                                    self.training_items) > 1 and mbs % collect_data_inteval == 0:
-                                compare_dict = OrderedDict()
-                                step = None
-                                for trainitem_name, trainitem in zip(self.training_names.value_list,
-                                                                     self.training_items.value_list):
-                                    for k, v in trainitem.training_context["losses"].items():
-                                        if k not in compare_dict:
-                                            compare_dict[k] = OrderedDict()
-                                        compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
-                                        step = v[-1][0]
-                                    for k, v in trainitem.training_context["metrics"].items():
-                                        if k not in compare_dict:
-                                            compare_dict[k] = OrderedDict()
-                                        compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
-                                for k, v in compare_dict.items():
-                                    ctx.summary_writer.add_scalars(k, v, step)
-
-                            if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
-                                    (self.print_progress_unit == 'epoch' and (
-                                            epoch + 1) % self.print_progress_frequency == 0):
-                                if len(self.training_items) > 1:
-                                    ctx.print(' \n', flush=True)
-
+                        if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (self.steps + 1) % \
+                                self.save_model_frequency == 0:
                             for k, trainitem in self.training_items.items():
-                                for callback in trainitem.training_context['callbacks']:
-                                    if not callback.is_shared:
-                                        callback.on_overall_batch_end(trainitem.training_context)
-                            for callback in self.callbacks:
-                                if callback.is_shared:
-                                    callback.on_overall_batch_end(self.__dict__)
-
-                            if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (self.steps + 1) % \
-                                    self.save_model_frequency == 0:
-                                for k, trainitem in self.training_items.items():
-                                    trainitem.save_model(trainitem.training_context['save_path'], )
-                                    if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or
-                                                                   trainitem.training_context['upload_onnx'] == False):
-                                        trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                        ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                        trainitem.training_context['upload_onnx'] = True
-                            if only_steps == True and self.steps >= max_batches - 1:
-                                for k, trainitem in self.training_items.items():
-                                    try:
-                                        trainitem.save_model(trainitem.training_context['save_path'], )
-                                    except Exception as e:
-                                        ctx.print(e)
-                                data_provider.mode = 'tuple'
-                                return True
-
-                            if only_steps == False and (mbs + 1) % len(data_provider.batch_sampler) == 0:
-                                break
-
-
-                except StopIteration:
-                    for k, trainitem in self.training_items.items():
-                        trainitem.do_on_epoch_end()
-                        trainitem.save_model(trainitem.training_context['save_path'], )
-
-                except ValueError as ve:
-                    ctx.print(ve)
-                    PrintException()
-                    for k, trainitem in self.training_items.items():
-                        trainitem.do_on_excution_exception()
-                except Exception as e:
-                    ctx.print(e)
-                    PrintException()
-                    for k, trainitem in self.training_items.items():
-                        trainitem.do_on_excution_exception()
+                                trainitem.save_model(trainitem.training_context['save_path'], )
+                                if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or
+                                                               trainitem.training_context['upload_onnx'] == False):
+                                    trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
+                                    ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
+                                    trainitem.training_context['upload_onnx'] = True
+                        if only_steps and self.steps - first_step >= max_batches:
+                            return True
 
                 if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (
                         epoch + 1) % self.save_model_frequency == 0:
@@ -1511,14 +1481,11 @@ class GanTrainingPlan(TrainingPlan):
             data_provider.mode = 'tuple'
 
 
-        except KeyboardInterrupt:
-            ctx.print('Training interrupted. Skip auto-saving checkpoint on interrupt to avoid overwriting existing model.')
-            data_provider.mode = 'tuple'
-        except Exception as e:
-            ctx.print(e)
-            PrintException()
-            ctx.print('Training aborted by exception. Skip auto-saving checkpoint to avoid overwriting existing model.')
-            data_provider.mode = 'tuple'
+        except (KeyboardInterrupt, Exception):
+            self._notify_training_failure()
+            raise
+        finally:
+            data_provider.mode = previous_mode
 
 
 class CycleGanTrainingPlan(TrainingPlan):
@@ -1994,6 +1961,7 @@ class CycleGanTrainingPlan(TrainingPlan):
         data_provider = self._dataloaders.value_list[0]
 
         data_provider.batch_size = self.batch_size
+        previous_mode = data_provider.mode
         data_provider.mode = 'dict'
         # generate data feed
         self.generate_datafeed(data_provider)
@@ -2033,7 +2001,7 @@ class CycleGanTrainingPlan(TrainingPlan):
                         if callback not in item.callbacks:
                             # private callback
                             if not callback.is_shared:
-                                item.with_callbacks(copy.deepcopy(callback))
+                                item.with_callbacks(deepcopy(callback))
                             else:
                                 # shared callback
                                 item.with_callbacks(callback)
@@ -2071,168 +2039,143 @@ class CycleGanTrainingPlan(TrainingPlan):
             if not is_resume or only_steps == True:
                 if collect_data_inteval == 1 and len(data_provider.batch_sampler) * self.num_epochs > 1000:
                     collect_data_inteval = self.default_collect_data_inteval
-            if only_steps:
-                self.num_epochs = (max_batches // len(data_provider.batch_sampler)) + 2
+            first_step = self.steps
 
-            for epoch in range(self.num_epochs):
-                try:
-                    for mbs, return_data in enumerate(data_provider):
+            for epoch in self._epochs_to_run(only_steps, max_batches):
+                for mbs, return_data in enumerate(self._epoch_batches(data_provider)):
 
-                        if self.is_terminate:
-                            for callback in self.callbacks:
-                                if callback.is_shared:
-                                    callback.on_training_terminated(self.__dict__)
+                    if self.is_terminate:
+                        for callback in self.callbacks:
+                            if callback.is_shared:
+                                callback.on_training_terminated(self.__dict__)
 
-                            for k, trainitem in self.training_items.items():
+                        for k, trainitem in self.training_items.items():
 
-                                for callback in trainitem.training_context['callbacks']:
-                                    if not callback.is_shared:
-                                        callback.on_training_terminated(trainitem.training_context)
-                            data_provider.mode = 'tuple'
-                        else:
+                            for callback in trainitem.training_context['callbacks']:
+                                if not callback.is_shared:
+                                    callback.on_training_terminated(trainitem.training_context)
+                        data_provider.mode = 'tuple'
+                    else:
 
-                            iter_data = OrderedDict()
+                        iter_data = OrderedDict()
 
-                            if isinstance(return_data, OrderedDict):
-                                for spec, data in return_data.item_list:
-                                    iter_data[spec.name] = data
-                            elif isinstance(return_data, tuple):
-                                for i in range(len(return_data)):
-                                    iter_data[data_provider.traindata.data_template.key_list[i].name] = return_data[i]
+                        if isinstance(return_data, OrderedDict):
+                            for spec, data in return_data.item_list:
+                                iter_data[spec.name] = data
+                        elif isinstance(return_data, tuple):
+                            for i in range(len(return_data)):
+                                iter_data[data_provider.traindata.data_template.key_list[i].name] = return_data[i]
 
-                            # check weather need out-of-sample evaluation
-                            need_out_sample_evaluation = False
+                        # check weather need out-of-sample evaluation
+                        need_out_sample_evaluation = False
 
-                            # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
+                        # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
 
+                        for trainitem_name, trainitem in zip(self.training_names.value_list,
+                                                             self.training_items.value_list):
+                            train_data = deepcopy(iter_data)
+                            trainitem.training_context['data_template'] = data_provider.traindata.data_template
+                            trainitem.training_context['collect_data_inteval'] = collect_data_inteval
+                            trainitem.training_context['model_name'] = trainitem_name
+                            if epoch < int(trainitem.start_epoch):
+                                trainitem.training_context['stop_update'] = 1
+                            if self.max_noise_intensity > 0 and trainitem.training_context[
+                                'gan_role'] == 'discriminator':
+                                current_intensity = self.min_noise_intensity + (
+                                        self.max_noise_intensity - self.min_noise_intensity) * math.exp(
+                                    -1.0 * self.steps / self.decay)
+                                if self.steps % 100 == 0:
+                                    ctx.print('noise intensity:{0}'.format(current_intensity))
+                                train_data['img_real'] = train_data['img_real'] + random_normal_like(
+                                    train_data['img_real']) * current_intensity
+
+                            # if self.is_generator_first:
+                            #     trainitem.model.zero_grad()
+                            should_collect_data = True
+
+                            dis_k = 1
+                            if self.gan_type not in ['began', 'ebgan'] and trainitem.training_context[
+                                'gan_role'] == 'discriminator' and 'd_fake' in trainitem.training_context[
+                                'metrics']:
+
+                                if trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
+                                        trainitem.training_context['metrics']['d_fake'][-1][1] < 0.1:
+                                    dis_k = 1
+                                if trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
+                                        trainitem.training_context['metrics']['d_fake'][-1][1] > 0.3:
+                                    dis_k = 1
+                            if (trainitem.training_context['gan_role'] == 'discriminator' and mbs % dis_k == 0) or (
+                                    trainitem.training_context['gan_role'] == 'generator' and mbs % 1 == 0):
+                                trainitem.training_context['stop_update'] = 0
+                            else:
+                                trainitem.training_context['stop_update'] = 1
+                                should_collect_data = False
+                            if self._use_total_variation_loss and trainitem.training_context[
+                                'gan_role'] == 'generator' and epoch == self.total_variation_start_epoch and mbs == 0:
+                                self.generator.with_regularizer('total_variation_norm_reg',
+                                                                reg_weight=self.total_variation_reg_weight)
+
+                            trainitem.train_model(train_data, None,
+                                                  epoch if only_steps == False else 0,
+                                                  mbs if only_steps == False else self.steps - first_step,
+                                                  self.num_epochs if only_steps == False else 1,
+                                                  len(data_provider.batch_sampler) if only_steps == False else max_batches,
+                                                  is_collect_data=mbs == 0 or (
+                                                          should_collect_data and mbs % collect_data_inteval) == 0,
+                                                  is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
+                                                  is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
+                                                  log_gradients=keep_gradient_history,
+                                                  log_weights=keep_weights_history,
+                                                  accumulate_grads=False,
+                                                  is_out_sample_evaluation=need_out_sample_evaluation)
+                        self.steps += 1
+
+                        if ctx.enable_tensorboard and len(
+                                self.training_items) > 1 and mbs % collect_data_inteval == 0:
+                            compare_dict = OrderedDict()
+                            step = None
                             for trainitem_name, trainitem in zip(self.training_names.value_list,
                                                                  self.training_items.value_list):
-                                train_data = copy.deepcopy(iter_data)
-                                trainitem.training_context['data_template'] = data_provider.traindata.data_template
-                                trainitem.training_context['collect_data_inteval'] = collect_data_inteval
-                                trainitem.training_context['model_name'] = trainitem_name
-                                if epoch < int(trainitem.start_epoch):
-                                    trainitem.training_context['stop_update'] = 1
-                                if self.max_noise_intensity > 0 and trainitem.training_context[
-                                    'gan_role'] == 'discriminator':
-                                    current_intensity = self.min_noise_intensity + (
-                                            self.max_noise_intensity - self.min_noise_intensity) * math.exp(
-                                        -1.0 * self.steps / self.decay)
-                                    if self.steps % 100 == 0:
-                                        ctx.print('noise intensity:{0}'.format(current_intensity))
-                                    train_data['img_real'] = train_data['img_real'] + random_normal_like(
-                                        train_data['img_real']) * current_intensity
+                                for k, v in trainitem.training_context["losses"].items():
+                                    if k not in compare_dict:
+                                        compare_dict[k] = OrderedDict()
+                                    compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
+                                    step = v[-1][0]
+                                for k, v in trainitem.training_context["metrics"].items():
+                                    if k not in compare_dict:
+                                        compare_dict[k] = OrderedDict()
+                                    compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
+                            for k, v in compare_dict.items():
+                                ctx.summary_writer.add_scalars(k, v, step)
 
-                                # if self.is_generator_first:
-                                #     trainitem.model.zero_grad()
-                                should_collect_data = True
+                        if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
+                                (self.print_progress_unit == 'epoch' and (
+                                        epoch + 1) % self.print_progress_frequency == 0):
+                            if len(self.training_items) > 1:
+                                ctx.print(' \n', flush=True)
 
-                                dis_k = 1
-                                if self.gan_type not in ['began', 'ebgan'] and trainitem.training_context[
-                                    'gan_role'] == 'discriminator' and 'd_fake' in trainitem.training_context[
-                                    'metrics']:
+                        for k, trainitem in self.training_items.items():
+                            finish = getattr(trainitem, '_finish_gradient_window', None)
+                            if callable(finish):
+                                finish()
+                            for callback in trainitem.training_context['callbacks']:
+                                if not callback.is_shared:
+                                    callback.on_overall_batch_end(trainitem.training_context)
+                        for callback in self.callbacks:
+                            if callback.is_shared:
+                                callback.on_overall_batch_end(self.__dict__)
 
-                                    if trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
-                                            trainitem.training_context['metrics']['d_fake'][-1][1] < 0.1:
-                                        dis_k = 1
-                                    if trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
-                                            trainitem.training_context['metrics']['d_fake'][-1][1] > 0.3:
-                                        dis_k = 1
-                                if (trainitem.training_context['gan_role'] == 'discriminator' and mbs % dis_k == 0) or (
-                                        trainitem.training_context['gan_role'] == 'generator' and mbs % 1 == 0):
-                                    trainitem.training_context['stop_update'] = 0
-                                else:
-                                    trainitem.training_context['stop_update'] = 1
-                                    should_collect_data = False
-                                if self._use_total_variation_loss and trainitem.training_context[
-                                    'gan_role'] == 'generator' and epoch == self.total_variation_start_epoch and mbs == 0:
-                                    self.generator.with_regularizer('total_variation_norm_reg',
-                                                                    reg_weight=self.total_variation_reg_weight)
-
-                                trainitem.train_model(train_data, None,
-                                                      epoch if only_steps == False else 0,
-                                                      mbs if only_steps == False else self.steps,
-                                                      self.num_epochs if only_steps == False else 1,
-                                                      len(data_provider.batch_sampler) if only_steps == False else max_batches,
-                                                      is_collect_data=mbs == 0 or (
-                                                              should_collect_data and mbs % collect_data_inteval) == 0,
-                                                      is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
-                                                      is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
-                                                      log_gradients=keep_gradient_history,
-                                                      log_weights=keep_weights_history,
-                                                      accumulate_grads=False,
-                                                      is_out_sample_evaluation=need_out_sample_evaluation)
-                            self.steps += 1
-
-                            if ctx.enable_tensorboard and len(
-                                    self.training_items) > 1 and mbs % collect_data_inteval == 0:
-                                compare_dict = OrderedDict()
-                                step = None
-                                for trainitem_name, trainitem in zip(self.training_names.value_list,
-                                                                     self.training_items.value_list):
-                                    for k, v in trainitem.training_context["losses"].items():
-                                        if k not in compare_dict:
-                                            compare_dict[k] = OrderedDict()
-                                        compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
-                                        step = v[-1][0]
-                                    for k, v in trainitem.training_context["metrics"].items():
-                                        if k not in compare_dict:
-                                            compare_dict[k] = OrderedDict()
-                                        compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
-                                for k, v in compare_dict.items():
-                                    ctx.summary_writer.add_scalars(k, v, step)
-
-                            if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
-                                    (self.print_progress_unit == 'epoch' and (
-                                            epoch + 1) % self.print_progress_frequency == 0):
-                                if len(self.training_items) > 1:
-                                    ctx.print(' \n', flush=True)
-
+                        if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (self.steps + 1) % \
+                                self.save_model_frequency == 0:
                             for k, trainitem in self.training_items.items():
-                                for callback in trainitem.training_context['callbacks']:
-                                    if not callback.is_shared:
-                                        callback.on_overall_batch_end(trainitem.training_context)
-                            for callback in self.callbacks:
-                                if callback.is_shared:
-                                    callback.on_overall_batch_end(self.__dict__)
-
-                            if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (self.steps + 1) % \
-                                    self.save_model_frequency == 0:
-                                for k, trainitem in self.training_items.items():
-                                    trainitem.save_model(trainitem.training_context['save_path'], )
-                                    if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or
-                                                                   trainitem.training_context['upload_onnx'] == False):
-                                        trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                        ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                        trainitem.training_context['upload_onnx'] = True
-                            if only_steps == True and self.steps >= max_batches - 1:
-                                for k, trainitem in self.training_items.items():
-                                    try:
-                                        trainitem.save_model(trainitem.training_context['save_path'], )
-                                    except Exception as e:
-                                        ctx.print(e)
-                                data_provider.mode = 'tuple'
-                                return True
-
-                            if only_steps == False and (mbs + 1) % len(data_provider.batch_sampler) == 0:
-                                break
-
-
-                except StopIteration:
-                    for k, trainitem in self.training_items.items():
-                        trainitem.do_on_epoch_end()
-                        trainitem.save_model(trainitem.training_context['save_path'], )
-
-                except ValueError as ve:
-                    ctx.print(ve)
-                    PrintException()
-                    for k, trainitem in self.training_items.items():
-                        trainitem.do_on_excution_exception()
-                except Exception as e:
-                    ctx.print(e)
-                    PrintException()
-                    for k, trainitem in self.training_items.items():
-                        trainitem.do_on_excution_exception()
+                                trainitem.save_model(trainitem.training_context['save_path'], )
+                                if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or
+                                                               trainitem.training_context['upload_onnx'] == False):
+                                    trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
+                                    ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
+                                    trainitem.training_context['upload_onnx'] = True
+                        if only_steps and self.steps - first_step >= max_batches:
+                            return True
 
                 if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (
                         epoch + 1) % self.save_model_frequency == 0:
@@ -2241,11 +2184,8 @@ class CycleGanTrainingPlan(TrainingPlan):
             data_provider.mode = 'tuple'
 
 
-        except KeyboardInterrupt:
-            ctx.print('Training interrupted. Skip auto-saving checkpoint on interrupt to avoid overwriting existing model.')
-            data_provider.mode = 'tuple'
-        except Exception as e:
-            ctx.print(e)
-            PrintException()
-            ctx.print('Training aborted by exception. Skip auto-saving checkpoint to avoid overwriting existing model.')
-            data_provider.mode = 'tuple'
+        except (KeyboardInterrupt, Exception):
+            self._notify_training_failure()
+            raise
+        finally:
+            data_provider.mode = previous_mode

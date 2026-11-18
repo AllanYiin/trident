@@ -1,6 +1,6 @@
 """trident tensorflow basic operation."""
 import os
-import collections
+from collections.abc import Iterable
 import threading
 from copy import deepcopy
 import math
@@ -356,8 +356,8 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     input_dtype = dtype
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
-    elif dtype is None and isinstance(x, collections.Iterable) and all(
-            [isinstance(item, numbers.Integral) for item in x]):
+    elif (dtype is None and isinstance(x, Iterable) and not isinstance(x, (tf.Tensor, tf.Variable, np.ndarray))
+          and builtins.all(isinstance(item, numbers.Integral) for item in x)):
         dtype = Dtype.int64
     elif dtype is None:
         dtype = Dtype.float32

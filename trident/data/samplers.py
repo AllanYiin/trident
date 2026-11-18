@@ -128,93 +128,60 @@ class BatchSampler(Sampler):
 
 
 
-        idxes = np.arange(len(self.data_source.data))
-        if len(self.data_source) % self.batch_size > 0:
-            idxes = idxes[:-(len(self.data_source.data) % self.batch_size)]
-        if self.is_shuffle:
-            n = len(self.data_source)
-            random_range=np.arange(n)
-            np.random.shuffle(random_range)
-            self.sampler = itertools.cycle(iter(random_range.tolist()))
-
-        else:
-            self.sampler =itertools.cycle(iter(range(len(self.data_source))))
+        self.reset()
         self.sample_filter = None
         if inspect.isfunction(sample_filter) or callable(sample_filter):
             self.sample_filter = sample_filter
 
 
 
+    def _collate(self, rows):
+        batch = copy.deepcopy(self.data_source.data_template)
+        sequence_fields = []
+        for spec, values in zip(batch, zip(*rows)):
+            if not check_same_size(*values):
+                raise ValueError("incompatible sample shapes for field {0}".format(spec.name))
+            batch[spec] = np.asarray(values)
+            parent = self.data_source.parent
+            if (parent is not None and parent.dynamic_padding and
+                    batch[spec].ndim >= 2 and batch[spec].dtype.kind in "iu"):
+                sequence_fields.append(spec)
+        if sequence_fields:
+            last = 0
+            for spec in sequence_fields:
+                positions = np.nonzero(batch[spec])[1]
+                if positions.size:
+                    last = builtins.max(last, int(positions.max()))
+            for spec in sequence_fields:
+                batch[spec] = batch[spec][:, :last + 1]
+        return tuple(batch.values()) if self.data_source.mode == 'tuple' else batch
+
+    def _batches(self, indices):
+        rows = []
+        for index in indices:
+            values = self.data_source[index].value_list
+            if self.sample_filter is not None and not self.sample_filter(values):
+                continue
+            rows.append(values)
+            if len(rows) == self.batch_size:
+                yield self._collate(rows)
+                rows = []
+        if rows and not self.drop_last:
+            yield self._collate(rows)
+
+    def _epoch_indices(self):
+        indices = np.arange(len(self.data_source))
+        if self.is_shuffle:
+            np.random.shuffle(indices)
+        return indices
+
+    def iter_epoch(self):
+        """One finite pass for training, including a short last batch."""
+        return self._batches(self._epoch_indices())
+
     def __iter__(self):
-
-        batch_data = []
-        for idx in self.sampler:
-            try:
-
-                _return_data = self.data_source[idx]
-                # filter sample
-                if self.sample_filter is None or self.sample_filter(_return_data.value_list):
-                    batch_data.append(_return_data.value_list)
-
-                    if len(batch_data) == self.batch_size:
-
-                        returnData = copy.deepcopy(self.data_source.data_template)
-                        unzip_batch_data = list(zip(*batch_data))
-
-                        _dynamaic_paddings=[]
-                        for i in range(len(unzip_batch_data)):
-                            if check_same_size(*unzip_batch_data[i]):
-                                try:
-                                    if returnData.key_list[i].object_type==ObjectType.image_path and all([isinstance(s,str) for s in unzip_batch_data[i]]):
-                                        returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i]],dtype=np.str_)
-                                    else:
-                                        returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i] ])
-                                        if  self.data_source.parent is not None and self.data_source.parent .dynamic_padding and 'int' in  str(returnData[returnData.key_list[i]] .dtype):
-                                             _dynamaic_paddings.append(np.max(np.argwhere(returnData[returnData.key_list[i]]!=0)[:,1]))
-                                except Exception as e:
-                                    print([array.shape for array in unzip_batch_data[i] ])
-                            else:
-                                print([array.shape for array in unzip_batch_data[i] ])
-                                batch_data=[]
-                        if self.data_source.parent is not None and self.data_source.parent .dynamic_padding:
-                            final_sequence_length=builtins.max(_dynamaic_paddings)
-                            for k in returnData.key_list:
-                                if 'int' in  str(returnData[k] .dtype):
-                                    returnData[k]=returnData[k][:,:final_sequence_length+1]
-
-
-                        if self.data_source.mode=='tuple':
-                            yield tuple(returnData.value_list)
-                        elif self.data_source.mode=='dict':
-                            yield returnData
-                        batch_data = []
-            except Exception as e:
-                print('index:{0} get fail.'.format(idx))
-                print(e)
-
-        if len(batch_data) > 0 and not self.drop_last:
-            returnData = copy.deepcopy(self.data_source.data_template)
-            unzip_batch_data = list(zip(*batch_data))
-            for i in range(len(unzip_batch_data)):
-                if check_same_size(*unzip_batch_data[i]):
-                    try:
-                        if returnData.key_list[i].object_type==ObjectType.image_path and all([isinstance(s, str) for s in unzip_batch_data[i]]):
-                            returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i]], dtype=np.string_)
-                        else:
-                            returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i]])
-                    except Exception as e:
-                        print([array.shape for array in unzip_batch_data[i]])
-                else:
-                    print([array.shape for array in unzip_batch_data[i]])
-                    batch_data = []
-            if self.data_source.mode == 'tuple':
-                yield tuple(returnData.value_list)
-            elif self.data_source.mode == 'dict':
-                yield returnData
-
-            batch_data = []
-        self.reset()
-        # raise StopIteration
+        # The historical next() API fills batches across epoch boundaries.
+        return self._batches(self.sampler)
 
     def __len__(self):
         if self.drop_last:
@@ -223,12 +190,4 @@ class BatchSampler(Sampler):
             return (len(self.data_source) + self.batch_size - 1) // self.batch_size
 
     def reset(self):
-        idxes = np.arange(len(self.data_source))
-        if len(self.data_source) % self.batch_size > 0:
-            idxes = idxes[:-(len(self.data_source) % self.batch_size)]
-        if self.is_shuffle:
-            np.random.shuffle(idxes)
-        idxes = list(idxes)
-        self.sampler = iter(idxes)
-
-
+        self.sampler = itertools.cycle(self._epoch_indices())
