@@ -1203,7 +1203,8 @@ class Model(model.ModelBase,Layer):
     def load_model(self, file_path, *, strict=False, trusted_legacy=False, **kwargs):
         """Load into a native or Trident module and report missing/unexpected keys.
 
-        Set trusted_legacy=True only for an old pickled model from a trusted source.
+        Weights-only loading accepts older Trident signature metadata by default.
+        Set trusted_legacy=True only for a pickled whole model from a trusted source.
         """
         path = os.fspath(file_path)
         if path.endswith('.pth') and not os.path.isfile(path):

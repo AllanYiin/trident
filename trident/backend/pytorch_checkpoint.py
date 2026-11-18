@@ -3,14 +3,34 @@ import pickle
 import shutil
 import warnings
 from pathlib import Path
+from threading import RLock
 
 import numpy as np
 import torch
 from torch import nn
+from torch.torch_version import TorchVersion
 
 from trident.backend.checkpoint import staged_checkpoints
 from trident.backend.common import OrderedDict, Signature, TensorShape
 from trident.backend.tensorspec import ObjectType, TensorSpec
+
+
+_LEGACY_METADATA = (OrderedDict, Signature, TensorShape, TensorSpec, ObjectType, TorchVersion)
+_METADATA_LOAD_LOCK = RLock()
+
+
+def _load_weights_checkpoint(path):
+    serialization = torch.serialization
+    if not hasattr(serialization, 'safe_globals'):
+        return torch.load(path, map_location='cpu', weights_only=True)
+
+    # Old Trident state-dict archives embed the input/output signature as objects.
+    # Scope the allowlist to this load and preserve the caller's registrations.
+    with _METADATA_LOAD_LOCK:
+        registered = set(serialization.get_safe_globals())
+        metadata = [kind for kind in _LEGACY_METADATA if kind not in registered]
+        with serialization.safe_globals(metadata):
+            return torch.load(path, map_location='cpu', weights_only=True)
 
 
 def _plain(value):
@@ -102,11 +122,14 @@ def write_model_checkpoint(model, path, metadata, save_full_model=False):
 def restore_model_checkpoint(model, path, *, strict=False, trusted_legacy=False):
     """Return the key comparison and optional metadata after loading a state dict."""
     try:
-        archive = torch.load(path, map_location='cpu', weights_only=not trusted_legacy)
+        if trusted_legacy:
+            archive = torch.load(path, map_location='cpu', weights_only=False)
+        else:
+            archive = _load_weights_checkpoint(path)
     except pickle.UnpicklingError as exc:
         if trusted_legacy:
             raise
-        raise ValueError("Weights-only load failed. For a trusted legacy archive, "
+        raise ValueError("Weights-only load failed. For a trusted legacy whole-model archive, "
                          "pass trusted_legacy=True.") from exc
     if isinstance(archive, nn.Module) and trusted_legacy:
         from trident.backend.pytorch_backend import Layer, fix_layer

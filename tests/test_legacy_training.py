@@ -101,6 +101,37 @@ def test_restore_native_module_and_report_missing_keys(tmp_path):
     torch.testing.assert_close(layer.weight, torch.full_like(layer.weight, 9))
 
 
+@pytest.mark.skipif(not hasattr(torch.serialization, 'safe_globals'),
+                    reason='PyTorch legacy metadata allowlisting')
+def test_legacy_signature_checkpoint_loads_with_default_options(tmp_path):
+    from trident.backend.common import OrderedDict, Signature, TensorShape
+    from trident.backend.tensorspec import ObjectType, TensorSpec
+
+    _, item = make_plan(tmp_path)
+    signature = Signature(name='legacy', inputs=OrderedDict([
+        ('x', TensorSpec(shape=TensorShape([None, 1]), dtype=torch.float32,
+                         object_type=ObjectType.array_data, name='x')),
+    ]))
+    path = tmp_path / 'legacy-signature.pth.tar'
+    expected = item.model.weight.detach().clone()
+    torch.save({'state_dict': item.model.state_dict(), 'backend': 'pytorch',
+                'signature': signature, 'pytorch_version': torch.__version__}, path)
+    with torch.no_grad():
+        item.model.weight.zero_()
+
+    with torch.serialization.safe_globals([Signature]):
+        registered = set(torch.serialization.get_safe_globals())
+        item.load_model(path)
+        assert set(torch.serialization.get_safe_globals()) == registered
+
+    torch.testing.assert_close(item.model.weight, expected)
+    restored = item.model.signature
+    assert restored.name == 'legacy'
+    assert restored.inputs['x'].shape.dims == [None, 1]
+    assert restored.inputs['x'].dtype == torch.float32
+    assert restored.inputs['x'].object_type is ObjectType.array_data
+
+
 def test_portable_roundtrip_and_opt_in_legacy_load(tmp_path):
     _, item = make_plan(tmp_path)
     sample = torch.ones(2, 1, device=item.model.weight.device)
