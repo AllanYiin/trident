@@ -28,6 +28,12 @@ elif _backend == 'tensorflow':
     from trident.backend.tensorflow_backend import Tensor
     from trident.backend.tensorflow_ops import *
 
+elif _backend == 'jax':
+    from trident.backend.numpy_ops import any_abnormal_number
+
+    def to_scalar(value):
+        return np.asarray(value).mean().item()
+
 
 
 class HistoryBase(OrderedDict):

@@ -5,7 +5,6 @@ from __future__ import print_function
 import builtins
 from copy import deepcopy
 import itertools
-import json
 import math
 import threading
 import uuid
@@ -18,15 +17,16 @@ from trident.context import split_path, make_dir_if_need, sanitize_path
 from trident.backend import iteration_tools
 from trident.backend.common import get_backend, to_list, addindent, get_time_suffix, PrintException, OrderedDict, \
     open_browser, launchTensorBoard, launchMLFlow
-from trident.backend.tensorspec import get_signature
 from trident.callbacks.lr_schedulers import StepLR
 from trident.callbacks.visualization_callbacks import *
 from trident.data.data_provider import *
 from trident.data.dataset import ImageDataset
 from trident.loggers.history import HistoryBase
 from trident.misc.ipython_utils import *
+from trident.optims import gan
+from trident.optims.gan import JaxGanModel
 
-__all__ = ['TrainingPlan', 'GanTrainingPlan']
+__all__ = ['TrainingPlan', 'GanTrainingPlan', 'JaxGanModel']
 
 ctx = context._context()
 _backend = get_backend()
@@ -673,700 +673,540 @@ class TrainingPlan(object):
 
 
 class GanTrainingPlan(TrainingPlan):
-    def __init__(self,generator,discriminator):
+    """Alternate generator and discriminator updates on the same named batch."""
+
+    _GAN_TYPES = ('gan', 'dcgan', 'lsgan', 'lsgan1', 'rasgan', 'wgan', 'wgan-gp',
+                  'wgan-div', 'began', 'ebgan', 'hinge', 'rsgan', 'ralsgan', 'rahinge', 'gan-r1')
+    _RAW_SCORE_GAN_TYPES = ('rasgan', 'wgan', 'wgan-gp', 'wgan-div',
+                            'hinge', 'rsgan', 'ralsgan', 'rahinge', 'gan-r1')
+
+    def __init__(self, generator=None, discriminator=None, *, seed=None):
         super().__init__()
+        self.generator = generator
+        self.discriminator = discriminator
         self.is_generator_first = None
         self.gan_type = None
         self.is_condition_gan = False
-        self.discriminator = discriminator
-        self.generator = generator
         self.use_label_smoothing = False
         self.use_label_flipping = False
-        self.max_noise_intensity = 0
-        self.min_noise_intensity = 0
+        self.max_noise_intensity = self.min_noise_intensity = 0.
         self.decay = 10000
-        self._use_total_variation_loss = False
-        self.total_variation_reg_weight = 0.005
-        self.total_variation_start_epoch = 3
-        self._use_pull_away_term_loss = False
-        self._use_feature_matching = False
-        self.discriminator_feature_uuid = None
+        self.total_variation_start_epoch = 0
+        self.total_variation_reg_weight = 0.
+        self._feature_matching_weight = self._pull_away_weight = 0.
+        self._feature_matching_start = 0
+        self._penalty_weight = None
+        self._batch_fields = None
+        self._rng = np.random.default_rng(seed)
+        self._plan_callbacks = {}
+        self._from_logits = None
+        self._r1_gamma = 0.
+        self.k_t, self.measure, self.margin = 0., 1., 0.1
+
+    def _add_player(self, item, role, name):
+        if any(existing is item and existing.training_context['gan_role'] == role
+               for existing in self.training_items.values()):
+            return self
+        if self.training_items and any(existing.training_context['gan_role'] == role
+                                       for existing in self.training_items.values()):
+            raise ValueError(f'The GAN already has a registered {role}')
+        if any(existing is item for existing in self.training_items.values()):
+            raise ValueError('The GAN needs separate generator and discriminator models')
+        if _backend == 'jax':
+            if not isinstance(item, JaxGanModel):
+                raise TypeError('The JAX backend requires a JaxGanModel for each GAN player')
+        else:
+            if item.optimizer is None:
+                item.with_optimizer(Adam, lr=2e-4, betas=(0.5, 0.999))
+            if item.lr_scheduler is None:
+                item.with_learning_rate_scheduler(StepLR(frequency=5, unit='epoch', gamma=0.75))
+            if not item.grad_clipping_by_norm:
+                item.with_grad_clipping(10.)
+        if not self.training_items:
+            self.is_generator_first = role == 'generator'
+        setattr(self, role, item)
+        item.training_context['gan_role'] = role
+        return self.add_training_item(item, name=name, start_epoch=0)
 
     def with_generator(self, generator, name='modelG'):
-        if len(self.training_items) == 0:
-            self.is_generator_first = True
-        else:
-            self.is_generator_first =False
-
-        generator.training_context['gan_role'] = 'generator'
-        if generator.optimizer is None:
-            generator.with_optimizer(Adam, lr=2e-4, betas=(0.5, 0.999))
-        if generator.lr_scheduler is None:
-            generator.with_learning_rate_scheduler(StepLR(frequency=5, unit='epoch', gamma=0.75))
-        if not any([isinstance(cb, GanTileImageCallback) for cb in generator.callbacks]):
-            generator.with_callbacks(GanTileImageCallback(frequency=50, unit='batch', imshow=True))
-
-        self.generator = generator
-        return self.add_training_item(self.generator, name=name, start_epoch=0)
+        return self._add_player(generator, 'generator', name)
 
     def with_discriminator(self, discriminator, name='modelD'):
-        if len(self.training_items) == 0:
-            self.is_generator_first = False
-        else:
-            self.is_generator_first =True
+        return self._add_player(discriminator, 'discriminator', name)
 
-        discriminator.training_context['gan_role'] = 'discriminator'
-        if discriminator.optimizer is None:
-            discriminator.with_optimizer(Adam, lr=2e-4, betas=(0.5, 0.999))
-        if discriminator.lr_scheduler is None:
-            discriminator.with_learning_rate_scheduler(StepLR(frequency=5, unit='epoch', gamma=0.75))
-        self.discriminator = discriminator
-
-        if not self.is_generator_first:
-            self.discriminator.training_context['retain_graph'] = True
-        else:
-            self.discriminator.training_context['retain_graph'] = False
-        return self.add_training_item(self.discriminator, name=name, start_epoch=0)
+    def with_batch_fields(self, real, generator_input, *, condition=None):
+        """Bind named batch fields. A two-input critic receives (image, condition)."""
+        if any(not isinstance(name, str) or not name for name in (real, generator_input)):
+            raise ValueError('real and generator_input must be nonempty batch field names')
+        if condition is not None and (not isinstance(condition, str) or not condition):
+            raise ValueError('condition must be a nonempty batch field name')
+        self._batch_fields = real, generator_input, condition
+        return self
 
     def with_label_smoothing(self, one_side=True):
-        self.use_label_smoothing = "one_side" if one_side else "two_side"
+        self.use_label_smoothing = 'one_side' if one_side else 'two_side'
         return self
-    def with_label_flipping(self ):
-        self.use_label_flipping =True
+
+    def with_label_flipping(self, probability=0.05):
+        if not 0 <= probability <= 1:
+            raise ValueError('label-flipping probability must be in [0, 1]')
+        self.use_label_flipping = probability
         return self
 
     def with_noised_real_images(self, max_noise_intensity=0.1, min_noise_intensity=0, decay=10000):
-        self.max_noise_intensity = max_noise_intensity
-        self.min_noise_intensity = min_noise_intensity
-        self.decay = decay
+        if not 0 <= min_noise_intensity <= max_noise_intensity or not np.isfinite(max_noise_intensity):
+            raise ValueError('noise intensities must be finite and 0 <= min <= max')
+        if not np.isfinite(decay) or decay <= 0:
+            raise ValueError('noise decay must be positive and finite')
+        self.max_noise_intensity, self.min_noise_intensity, self.decay = max_noise_intensity, min_noise_intensity, decay
         return self
 
     def with_total_variation_loss(self, reg_weight=0.005, start_epoch=3):
-        self._use_total_variation_loss = True
-        self.total_variation_start_epoch = start_epoch
         self.total_variation_reg_weight = reg_weight
+        self.total_variation_start_epoch = start_epoch
         return self
 
-    def with_pull_away_term_loss(sef, loss_weight=0.1):
+    def with_pull_away_term_loss(self, loss_weight=0.1):
+        self._pull_away_weight = loss_weight
+        return self
 
-        def pullaway_loss():
-            embeddings = None
-            traindata = self.discriminator.training_context['train_data']
-            if 'embeddings' in self.discriminator._model._modules:
-                embeddings = self.discriminator._model.embeddings._output_tensor
-            elif 'fake_feature' in traindata:
-                embeddings = traindata['fake_feature']
-            if embeddings is not None:
-                embeddings = Flatten()(embeddings)
-                norm = sqrt(sum(embeddings ** 2.0, -1, keepdim=True))
-                normalized_emb = embeddings / norm
-                similarity = matmul(normalized_emb, normalized_emb, transpose_b=True)
-                batch_size = int_shape(embeddings)[0]
-                loss_pt = (sum(similarity) - batch_size) / (batch_size * (batch_size - 1))
-                return loss_pt
-            else:
-                return to_tensor(0.0)
-
-        self._use_pull_away_term_loss = True
-        self.generator.with_loss(pullaway_loss, loss_weight=loss_weight)
+    def with_feature_matching(self, loss_weight=0.5, start_epoch=10, *, layer=None):
+        self._feature_matching_weight = loss_weight
+        self._feature_matching_start = start_epoch
+        self._feature_layer = layer
         return self
 
     def with_gradient_penalty(self, lambda_term=10):
+        if not np.isfinite(lambda_term) or lambda_term < 0:
+            raise ValueError('gradient penalty weight must be finite and nonnegative')
+        self._penalty_weight = lambda_term
+        if self.generator is None and self.discriminator is not None and not hasattr(self.discriminator, 'training_context'):
+            # A standalone critic can also register the differentiable penalty as an objective.
+            def gradient_penalty(img_real, img_fake):
+                return gan.gradient_penalty(self.discriminator, img_real, img_fake, self._rng)
 
-        def gradient_penalty(img_real, img_fake):
-            shp = int_shape(img_real)
-
-            eta = random_uniform((shp[0], 1, 1, 1), 0.0, 1.0).to(get_device())
-            interpolated = eta * img_real + ((1 - eta) * img_fake)
-
-            if get_backend() == 'pytorch':
-                from torch import autograd
-                interpolated = interpolated.detach().requires_grad_(True)
-
-                # calculate probability of interpolated examples
-                prob_interpolated = self.discriminator(interpolated)
-
-                # calculate gradients of probabilities with respect to examples
-                gradients = autograd.grad(outputs=prob_interpolated, inputs=interpolated,
-                                          grad_outputs=ones_like(prob_interpolated, requires_grad=False).to(
-                                              get_device()),
-                                          create_graph=True, retain_graph=True, only_inputs=True)[0]
-                return ((sqrt(reduce_sum(gradients.reshape(gradients.shape[0], -1) ** 2, axis=1) + 1e-12) - 1.0) ** 2).mean()
-            elif get_backend() == 'tensorflow':
-                with tf.GradientTape() as t:
-                    t.watch(interpolated)
-                    prob_interpolated = self.discriminator(interpolated)
-                gradients = t.gradient(prob_interpolated, interpolated)
-                return ((tf.sqrt(tf.reduce_sum(tf.square(tf.reshape(gradients, (tf.shape(gradients)[0], -1))), axis=1) + 1e-12) - 1.0) ** 2).mean()
-
-        for modual in self.discriminator.model.children():
-            if 'BatchNorm' in modual.__class__.__name__:
-                sys.stdout.write(
-                    'Your discriminator already use batch normalization, suggest not use gradient_penalty.' + '\n\r')
-                break
-        self.discriminator.with_loss(gradient_penalty, loss_weight=lambda_term)
-        return self
-
-    def with_feature_matching(self, loss_weight=0.5,start_epoch=10):
-        self._use_feature_matching = True
-        moduals = list(self.discriminator.model.children())
-        moduals.reverse()
-        for i in range(len(moduals)):
-            if 'conv' in moduals[i].__class__.__name__.lower():
-                moduals[i].keep_output = True
-                self.discriminator_feature_uuid = moduals[i].uuid
-                break
-        def feature_matching(real_features, fake_features):
-            if fake_features is not None and real_features is not None:
-                return L2Loss()(fake_features, real_features)
-
-            return to_tensor(0.0)
-
-        self.generator.with_loss(feature_matching, loss_weight=loss_weight,start_epoch=start_epoch)
+            self.discriminator.with_loss(gradient_penalty, loss_weight=lambda_term)
         return self
 
     def with_ttur(self, multiplier=2.5):
-        d_lr = self.discriminator.optimizer.lr
-        g_lr = self.generator.optimizer.lr
-        self.discriminator.optimizer.lr = g_lr * multiplier
-        self.discriminator.optimizer.base_lr = g_lr * multiplier
-        return self
-
-    def with_gan_type(self, gan_type='lsgan'):
-        self.gan_type = gan_type
-
-        def metric_dfake(d_fake):
-            return d_fake.mean()
-
-        def metric_dreal(d_real):
-            return d_real.mean()
-
-        def g_loss(d_fake):
-            global real_label
-            return BCELoss(from_logits=True)(d_fake, real_label)
-
-        def real_loss(d_real):
-            global real_label
-            return BCELoss(from_logits=True)(d_real, real_label)
-
-        def fake_loss(d_fake):
-            global fake_label
-            return BCELoss(from_logits=True)(d_fake, fake_label)
-
-        if self.gan_type == 'gan':
-
-            self.generator.with_loss(g_loss)
-            self.discriminator.with_loss(real_loss, loss_weight=0.5)
-            self.discriminator.with_loss(fake_loss, loss_weight=0.5)
-
-        elif self.gan_type == 'dcgan':
-            self.generator.with_loss(g_loss)
-            self.discriminator.with_loss(real_loss, loss_weight=0.5)
-            self.discriminator.with_loss(fake_loss, loss_weight=0.5)
-
-
-        elif self.gan_type == 'wgan':
-            if isinstance(self.discriminator.model[-1], Sigmoid):
-                self.discriminator.model.remove_at(-1)
-
-            def g_loss(d_fake):
-                return -d_fake.mean()
-
-            self.generator.with_loss(g_loss)
-
-        elif self.gan_type == 'wgan-gp':
-            if isinstance(self.discriminator.model[-1], Sigmoid):
-                self.discriminator.model.remove_at(-1)
-
-            def g_loss(d_fake):
-                return -d_fake.mean()
-
-            self.generator.with_loss(g_loss)
-
-        elif self.gan_type == 'wgan-div':
-            if isinstance(self.discriminator.model[-1], Sigmoid):
-                self.discriminator.model.remove_at(-1)
-
-            def g_loss(d_fake):
-                return -d_fake.mean()
-
-            self.generator.with_loss(g_loss)
-        elif self.gan_type == 'began':  # Boundary Equilibrium GAN
-            if self.is_generator_first:
-                self.generator.training_context['retain_graph'] = True
-
-            def g_loss(img_fake, d_fake):
-                return L1Loss()(img_fake, d_fake)
-
-            self.generator.with_loss(g_loss)
-
-            def real_loss(img_real, d_real):
-                return L1Loss()(img_real, d_real)
-
-            def fake_loss(img_fake, d_fake):
-                return L1Loss()(img_fake, d_fake)
-
-            def weight_fake_loss(img_fake, d_fake):
-                return - self.k_t * L1Loss()(img_fake.detach(), d_fake)
-
-            # if self.is_generator_first:
-            # self.generator.training_context['retain_graph']=True
-            self.k_t = 0
-            self.measure = 1
-            self.discriminator.training_context['train_data']['k_t'] = 0
-            self.discriminator.training_context['train_data']['measure'] = 1
-            self.discriminator.with_loss(real_loss)
-            self.discriminator.with_loss(weight_fake_loss, name='weight_fake_loss')
-        elif self.gan_type == 'ebgan':  # Energy-based GAN
-            if self.is_generator_first:
-                self.generator.training_context['retain_graph'] = True
-
-            def g_loss(img_fake, d_fake):
-                return L2Loss()(img_fake, d_fake)
-
-            self.generator.with_loss(g_loss)
-
-            def real_loss(img_real, d_real):
-                return L2Loss()(img_real, d_real)
-
-            def fake_loss(img_fake, d_fake):
-                return L2Loss()(img_fake, d_fake)
-
-            def weight_fake_loss(img_fake, d_fake):
-                return clip(self.margin - L2Loss(reduction='mean')(img_fake.detach(), d_fake), min=0)
-
-            # if self.is_generator_first:
-            # self.generator.training_context['retain_graph']=True
-            self.margin = 0.1
-            self.discriminator.with_loss(real_loss, loss_weight=0.5)
-            self.discriminator.with_loss(weight_fake_loss, name='weight_fake_loss', loss_weight=0.5)
-        elif self.gan_type == 'lsgan':  # least squared
-            # if isinstance(self.discriminator.model[-1], Sigmoid):
-            #     self.discriminator.model.remove_at(-1)
-
-            def g_loss(d_fake,real_label):
-
-                return ((d_fake-real_label)**2).mean()
-
-            self.generator.with_loss(g_loss)
-
-            def real_loss(d_real,real_label):
-                return ((d_real-real_label)**2).mean()
-
-            def fake_loss(d_fake,fake_label):
-
-                return ((d_fake-fake_label)**2).mean()
-
-            self.discriminator.with_loss(real_loss, loss_weight=0.5)
-            self.discriminator.with_loss(fake_loss, loss_weight=0.5)
-            #self.discriminator.training_context['retain_graph'] = False
-        elif self.gan_type == 'lsgan1':  # loss sensitive
-            def g_loss(d_fake, real_label):
-                return MSELoss(d_fake, real_label)
-
-            self.generator.with_loss(g_loss)
-        elif self.gan_type == 'rasgan':
-            if isinstance(self.discriminator.model[-1], Sigmoid):
-                self.discriminator.model.remove_at(-1)
-
-            def g_loss(d_fake, d_real, real_label, fake_label):
-                d_fake_logit = d_fake - d_real.mean()
-                d_real_logit = d_real - d_fake.mean()
-                return (binary_cross_entropy(d_real_logit,fake_label.detach(),from_logits=True).mean()+binary_cross_entropy(d_fake_logit,real_label.detach(),from_logits=True).mean())
-
-            self.generator.with_loss(g_loss, loss_weight=1)
-            def real_loss(d_real, d_fake, real_label):
-                d_real_logit = d_real - d_fake.mean()
-                return binary_cross_entropy(d_real_logit,real_label.detach(),from_logits=True).mean()
-
-            def fake_loss(d_fake, d_real, fake_label):
-                d_fake_logit = d_fake - d_real.mean()
-                return binary_cross_entropy(d_fake_logit,fake_label.detach(),from_logits=True).mean()
-
-            self.discriminator.with_loss(real_loss)
-            self.discriminator.with_loss(fake_loss)
-
-
-
-        if self.gan_type == 'began':
-            def metric_k_t():
-                return self.k_t
-
-            def metric_measure():
-                return self.measure
-
-            self.generator.with_metric(g_loss, name='g_loss')
-            self.discriminator.with_metric(real_loss, name='real_loss')
-            self.discriminator.with_metric(fake_loss, name='fake_loss')
-            self.discriminator.with_metric(metric_k_t, name='k_t')
-            self.discriminator.with_metric(metric_measure, name='measure')
-
-        elif self.gan_type == 'ebgan':
-            self.generator.with_metric(g_loss, name='g_loss')
-            self.discriminator.with_metric(real_loss, name='real_loss')
-            self.discriminator.with_metric(fake_loss, name='fake_loss')
-        elif self.gan_type == 'rasgan':
-            def metric_dfake_logit(d_real,d_fake):
-                return sigmoid(d_fake - d_real.mean().detach())
-
-            self.generator.with_metric(metric_dfake_logit,name='dfake_logit')
-            self.discriminator.with_metric(metric_dfake_logit, name='dfake_logit')
-
-            def metric_dreal_logit(d_real,d_fake):
-                return  sigmoid(d_real - d_fake.mean().detach())
-
-            self.discriminator.with_metric(metric_dreal_logit, name='dreal_logit')
+        if not np.isfinite(multiplier) or multiplier <= 0:
+            raise ValueError('TTUR multiplier must be positive and finite')
+        if len(self.training_items) != 2:
+            self._register_players()
+        if _backend == 'jax':
+            if self.discriminator.optimizer is not None:
+                raise ValueError('Set the learning rate in the custom discriminator optimizer')
+            self.discriminator.lr = self.generator.lr * multiplier
         else:
-            self.generator.with_metric(metric_dfake, name='d_fake')
-            self.discriminator.with_metric(metric_dfake, name='d_fake')
-            self.discriminator.with_metric(metric_dreal, name='d_real')
-
+            lr = self.generator.optimizer.lr * multiplier
+            self.discriminator.optimizer.lr = lr
+            self.discriminator.optimizer.base_lr = lr
         return self
+
+    def with_gan_type(self, gan_type='lsgan', *, from_logits=None, r1_gamma=None):
+        if gan_type not in self._GAN_TYPES:
+            raise ValueError(f'Unknown GAN type {gan_type!r}; expected one of {self._GAN_TYPES}')
+        if from_logits is False and gan_type not in ('gan', 'dcgan'):
+            raise ValueError('from_logits=False is only supported for gan and dcgan')
+        if r1_gamma is not None:
+            if gan_type != 'gan-r1':
+                raise ValueError('r1_gamma is only supported for gan-r1')
+            if not np.isfinite(r1_gamma) or r1_gamma < 0:
+                raise ValueError('r1_gamma must be finite and nonnegative')
+        self.gan_type, self._from_logits = gan_type, from_logits
+        self._r1_gamma = (10. if r1_gamma is None else r1_gamma) if gan_type == 'gan-r1' else 0.
+        return self
+
+    def _register_players(self):
+        if self.generator is None or self.discriminator is None or self.generator is self.discriminator:
+            raise ValueError('The GAN needs separate generator and discriminator models')
+        if not any(item is self.generator for item in self.training_items.values()):
+            self.with_generator(self.generator)
+        if not any(item is self.discriminator for item in self.training_items.values()):
+            self.with_discriminator(self.discriminator)
+        if len(self.training_items) != 2:
+            raise ValueError('GanTrainingPlan accepts exactly two training items')
 
     def generate_datafeed(self, data_provider):
-        if data_provider.signature is None:
-            _ = data_provider.next()
-        # data_input=data_provider.traindata.data.symbol
-        self.is_condition_gan = False
-        if len(data_provider.traindata.unpair) > 0:
-            data_unpair = data_provider.traindata.unpair
-            data_provider.traindata.unpair.symbol = 'noise'
+        train = data_provider.traindata
 
-        elif isinstance(data_provider.traindata.label, ImageDataset) and len(data_provider.traindata.data) == len(
-                data_provider.traindata.label):
-            self.is_condition_gan = True
+        def single(group):
+            symbol = group.symbol
+            return symbol if isinstance(symbol, str) else None
 
-        self.generator.data_feed = OrderedDict()
-        self.generator.data_feed['x'] = data_provider.traindata.data.symbol if self.is_condition_gan else data_provider.traindata.unpair.symbol
-        self.generator.data_feed['img_fake'] = 'output'
-        self.generator.data_feed['img_real'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
-        self.generator.data_feed['d_fake'] = 'd_fake'
-        self.generator.data_feed['d_real'] = 'd_real'
-        self.generator.data_feed['real_label'] = 'real_label'
-        self.generator.data_feed['fake_label'] = 'fake_label'
-        if self.is_condition_gan:
-            self.generator.data_feed[
-                'target'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
-        if self._use_feature_matching:
-            self.generator.data_feed['real_features'] = 'real_features'
-            self.generator.data_feed['fake_features'] = 'fake_features'
-        ctx.print('generator data_feed:{0}'.format(self.generator.data_feed))
+        if self._batch_fields is not None:
+            real, generator_input, condition = self._batch_fields
+        elif single(train.unpair):
+            real, generator_input, condition = single(train.data), single(train.unpair), None
+        elif single(train.data) and single(train.label):
+            real, generator_input, condition = single(train.label), single(train.data), single(train.data)
+        else:
+            raise ValueError('Specify GAN batch fields with with_batch_fields() or supply real data and unpaired noise')
+        if not real or not generator_input:
+            raise ValueError('GAN real data and generator inputs must each identify a single field')
+        self.is_condition_gan = condition is not None
+        self._real_field, self._generator_field, self._condition_field = real, generator_input, condition
+        if _backend == 'jax':
+            if not self.discriminator.accepts_condition:
+                self._condition_field = None
+            return
+        for item, source in ((self.generator, generator_input), (self.discriminator, real)):
+            inputs = list(item.signature.inputs)
+            count = len(inputs)
+            if count != 1 and not (item is self.discriminator and count == 2 and condition):
+                raise ValueError(f'{item.name} has input fields {inputs}; GAN models need one input, '
+                                 'or two critic inputs with a condition field')
+            feed = item.training_context.get('data_feed') or {}
+            if hasattr(feed, 'explicit_fields'):
+                feed = feed.explicit_fields()
+            item.data_feed = OrderedDict(feed)
+            item.data_feed[inputs[0]] = source
+            if count == 2:
+                item.data_feed[inputs[1]] = condition
+            item.data_feed.setdefault('target', real)
+            item._provider_fields = ((source,) if count == 1 else (source, condition), (real,))
+        self._condition_field = condition if len(self.discriminator.signature.inputs) == 2 else None
 
-        self.discriminator.data_feed = OrderedDict()
-        self.discriminator.data_feed['x'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
-        self.discriminator.data_feed[
-            'img_real'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
-        self.discriminator.data_feed['img_fake'] = 'img_fake'
-        self.discriminator.data_feed['d_real'] = "output"
-        self.discriminator.data_feed['d_fake'] = "d_fake"
+    def _labels(self, score, positive, smooth=False):
+        value = float(positive)
+        if smooth and self.use_label_smoothing:
+            if positive:
+                value = self._rng.uniform(0.8, 1.)
+            elif self.use_label_smoothing == 'two_side':
+                value = self._rng.uniform(0., 0.2)
+        return gan.stop_gradient(gan.float_loss(score)) * 0 + value
 
-        if self.gan_type == 'began':
-            self.discriminator.optimizer.lr = 2e-4
-            self.generator.optimizer.lr = 2e-4
-            self.discriminator.data_feed['k_t'] = 'k_t'
-            self.discriminator.data_feed['measure'] = 'measure'
+    def _scores_and_features(self, result):
+        if isinstance(result, (tuple, list)) and len(result) == 2:
+            return result[0], result[1]
+        if isinstance(result, dict) and 'scores' in result:
+            return result['scores'], result.get('features')
+        if isinstance(result, dict) and len(result) == 1:
+            result = next(iter(result.values()))
+        layer = getattr(self, '_captured_feature_layer', None)
+        return result, layer.output if layer is not None else None
 
-        self.discriminator.data_feed['real_label'] = 'real_label'
-        self.discriminator.data_feed['fake_label'] = 'fake_label'
-        ctx.print('discriminator data_feed:{0}'.format(self.discriminator.data_feed))
+    def _adversarial_loss(self, generator, real, fake, d_real, d_fake, real_label, fake_label):
+        kind = self.gan_type or 'lsgan'
+        if kind in ('gan', 'dcgan', 'gan-r1'):
+            fake_term = gan.binary_loss(d_fake, real_label if generator else fake_label, self._logits)
+            if generator:
+                return fake_term
+            real_term = gan.binary_loss(d_real, real_label, self._logits)
+            return (real_term + fake_term) * (1. if kind == 'gan-r1' else 0.5)
+        if kind == 'hinge':
+            if generator:
+                return -gan.mean(d_fake)
+            return gan.hinge_loss(d_real, real_label) + gan.hinge_loss(d_fake, fake_label)
+        if kind in ('lsgan', 'lsgan1'):
+            fake_term = gan.mean((gan.float_loss(d_fake) - (real_label if generator else fake_label)) ** 2)
+            return fake_term if generator else (gan.mean((gan.float_loss(d_real) - real_label) ** 2) + fake_term) * 0.5
+        if kind == 'rsgan':
+            if d_real.shape != d_fake.shape:
+                raise ValueError(f'rsgan requires paired real and fake score shapes, got {d_real.shape} and {d_fake.shape}')
+            return gan.binary_loss(gan.float_loss(d_real) - gan.float_loss(d_fake),
+                                   fake_label if generator else real_label)
+        if kind in ('rasgan', 'ralsgan', 'rahinge'):
+            d_real, d_fake = gan.float_loss(d_real), gan.float_loss(d_fake)
+            real_relative, fake_relative = d_real - gan.mean(d_fake), d_fake - gan.mean(d_real)
+            pos_real, pos_fake = (fake_label, real_label) if generator else (real_label, fake_label)
+            if kind == 'ralsgan':
+                return (gan.mean((real_relative - (2 * pos_real - 1)) ** 2) +
+                        gan.mean((fake_relative - (2 * pos_fake - 1)) ** 2))
+            if kind == 'rahinge':
+                return gan.hinge_loss(real_relative, pos_real) + gan.hinge_loss(fake_relative, pos_fake)
+            return (gan.binary_loss(real_relative, pos_real) + gan.binary_loss(fake_relative, pos_fake)) * 0.5
+        if kind in ('began', 'ebgan'):
+            if fake.shape != d_fake.shape or real.shape != d_real.shape:
+                raise ValueError(f'{kind} requires a discriminator that reconstructs its input shape')
+            fake_error = gan.float_loss(d_fake) - gan.float_loss(gan.stop_gradient(fake) if not generator else fake)
+            if kind == 'began':
+                fake_loss = gan.mean(abs(fake_error))
+                return fake_loss if generator else gan.mean(abs(gan.float_loss(d_real) - gan.float_loss(real))) - self.k_t * fake_loss
+            fake_loss = gan.mean(fake_error ** 2)
+            return fake_loss if generator else (gan.mean((gan.float_loss(d_real) - gan.float_loss(real)) ** 2) +
+                                                 gan.relu(self.margin - fake_loss)) * 0.5
+        return -gan.mean(d_fake) if generator else gan.mean(d_fake) - gan.mean(d_real)
+
+    def _phase_fields(self, item, data, active, peer, epoch):
+        real, generator_input = data[self._real_field], data[self._generator_field]
+        condition = data[self._condition_field] if self._condition_field is not None else None
+        if len(real) != len(generator_input) or (condition is not None and len(real) != len(condition)):
+            raise ValueError('GAN real, generator input, and condition batch sizes must match')
+        critic_args = () if condition is None else (condition,)
+        generator = item is self.generator
+        if generator:
+            fake = active(generator_input)
+            d_fake, fake_features = self._scores_and_features(peer(fake, *critic_args))
+            d_real, real_features = self._scores_and_features(peer(real, *critic_args))
+            d_real = gan.stop_gradient(d_real)
+        else:
+            def critic(inputs):
+                return self._scores_and_features(active(inputs, *critic_args))[0]
+
+            fake = gan.stop_gradient(peer(generator_input))
+            critic_real = real
+            if self.max_noise_intensity:
+                intensity = self.min_noise_intensity + (self.max_noise_intensity - self.min_noise_intensity) * math.exp(-self.steps / self.decay)
+                noise = self._rng.standard_normal(real.shape, dtype=np.float32)
+                critic_real = real + intensity * gan.as_like(noise, real)
+            if self._r1_gamma:
+                clean_scores, norm_squared = gan.scores_and_input_gradient_norm_squared(critic, real)
+                d_real = clean_scores if critic_real is real else critic(critic_real)
+            else:
+                d_real = critic(critic_real)
+            d_fake = critic(fake)
+
+        flipped = not generator and self.use_label_flipping and self._rng.random() < self.use_label_flipping
+        # The generator always learns toward the real class, independent of discriminator label noise.
+        real_label = self._labels(d_fake if generator else d_real, not flipped, not generator)
+        fake_label = self._labels(d_real if generator else d_fake, bool(flipped), not generator)
+        loss = self._adversarial_loss(generator, real, fake, d_real, d_fake, real_label, fake_label)
+        if generator:
+            if self.total_variation_reg_weight and epoch >= self.total_variation_start_epoch:
+                loss = loss + self.total_variation_reg_weight * gan.total_variation(fake)
+            if self._feature_matching_weight and epoch >= self._feature_matching_start:
+                if fake_features is None or real_features is None:
+                    raise ValueError('Feature matching requires critic features')
+                difference = gan.mean(fake_features, axis=0) - gan.mean(gan.stop_gradient(real_features), axis=0)
+                loss = loss + self._feature_matching_weight * gan.mean(difference ** 2)
+            if self._pull_away_weight:
+                embeddings = fake_features if fake_features is not None else d_fake
+                loss = loss + self._pull_away_weight * gan.pull_away(embeddings)
+        else:
+            kind = self.gan_type
+            weight = self._penalty_weight
+            if weight is None:
+                weight = {'wgan-gp': 10., 'wgan-div': 2.}.get(kind, 0.)
+            if weight:
+                loss = loss + weight * gan.gradient_penalty(critic, real, fake, self._rng, kind == 'wgan-div')
+            if self._r1_gamma:
+                loss = loss + 0.5 * self._r1_gamma * gan.mean(norm_squared)
+
+        return dict(output=fake if generator else d_real, img_real=real, img_fake=fake,
+                    d_real=d_real, d_fake=d_fake, real_label=real_label, fake_label=fake_label,
+                    gan_adversarial_loss=loss)
+
+    @staticmethod
+    def _store_gan_fields(data, fields):
+        collisions = {name for name, value in fields.items() if name in data and data[name] is not value}
+        if collisions:
+            raise ValueError(f'GAN reserved fields collide with batch fields: {sorted(collisions)}')
+        data.update(fields)
+        return data
+
+    def _legacy_output(self, model, training_context, is_training=True, is_autocast_enabled=False):
+        item = model
+        data = training_context['train_data']
+        generator = item is self.generator
+        partner = self.discriminator if generator else self.generator
+        active = item.model
+        if _backend == 'tensorflow' and isinstance(active, tf.keras.Model):
+            active = lambda *args: item.model(*args, training=is_training)
+        else:
+            for layer in active.modules():
+                layer.training = is_training
+        output_name = next(iter(item.signature.outputs), 'output')
+        with gan.frozen_model(partner.model, differentiate_input=generator) as peer:
+            with gan.autocast(is_autocast_enabled):
+                fields = self._phase_fields(item, data, active, peer, training_context['current_epoch'])
+        if output_name != 'output':
+            fields[output_name] = fields['output']
+        self._store_gan_fields(data, fields)
+        term = fields['gan_adversarial_loss']
+        if not gan.finite(term):
+            raise FloatingPointError('Nonfinite GAN loss; optimizer was not updated')
+        item._add_loss_term(term, 'mean')
+        training_context['tmp_losses'].collect('gan_loss', self.steps, gan.stop_gradient(term))
+        training_context['tmp_metrics'].collect('d_fake', self.steps, gan.stop_gradient(gan.mean(fields['d_fake'])))
+        if not generator:
+            training_context['tmp_metrics'].collect('d_real', self.steps, gan.stop_gradient(gan.mean(fields['d_real'])))
+        if item.use_output_as_loss:
+            output = gan.float_loss(fields['output'])
+            total = tf.reduce_sum(output) if _backend == 'tensorflow' else output.sum()
+            item._add_loss_term(total, 'sum')
+
+    def _step(self, item, batch, epoch, index, total_batches, collect, weights, gradients, last):
+        training = item.training_context
+        item.steps = self.steps
+        waiting = epoch < item.start_epoch
+        training.update(steps=self.steps, current_epoch=epoch, current_batch=index,
+                        total_epoch=self.num_epochs, total_batch=total_batches, waiting_to_start=waiting,
+                        is_collect_data=collect)
+        if _backend == 'jax':
+            data = {name: gan.jnp.asarray(value) for name, value in batch.items()}
+            partner = self.discriminator if item is self.generator else self.generator
+            weight_clip = 0.01 if self.gan_type == 'wgan' and item is self.discriminator else None
+            self._item_event(item, 'on_batch_start')
+            item._step(lambda active: self._store_gan_fields(dict(data), self._phase_fields(item, data, active, partner, epoch)),
+                       epoch, waiting, collect, gradients, weights, weight_clip)
+            self._item_event(item, 'on_batch_end')
+        else:
+            progress = self.print_progress_unit == 'batch' and (index + 1) % self.print_progress_frequency == 0
+            epoch_progress = self.print_progress_unit == 'epoch' and last and (epoch + 1) % self.print_progress_frequency == 0
+            item.train_model(OrderedDict(batch), None, epoch, index, self.num_epochs, total_batches,
+                             is_collect_data=collect, is_print_batch_progress=progress,
+                             is_print_epoch_progress=epoch_progress, log_weights=weights, log_gradients=gradients,
+                             accumulate_grads=not last and (index + 1) % item.accumulation_steps != 0,
+                             preserve_steps=True)
+        if item is self.discriminator and self.gan_type == 'began' and not waiting:
+            data = training['train_data']
+            real = float(gan.mean(abs(gan.float_loss(data['img_real']) - gan.stop_gradient(gan.float_loss(data['d_real'])))))
+            fake = float(gan.mean(abs(gan.float_loss(data['img_fake']) - gan.stop_gradient(gan.float_loss(data['d_fake'])))))
+            balance = 0.5 * real - fake
+            self.k_t = builtins.min(1., builtins.max(0., self.k_t + 0.001 * balance))
+            self.measure = real + builtins.abs(balance)
+
+    @staticmethod
+    def _item_event(item, event):
+        for callback in item.callbacks:
+            if not callback.is_shared:
+                getattr(callback, event)(item.training_context)
+
+    def _finish_epoch(self):
+        for item in self.training_items.values():
+            if _backend == 'jax':
+                if item.optimizer is None and (self.epochs + 1) % 5 == 0:
+                    item.lr *= 0.75
+                self._item_event(item, 'on_epoch_end')
+            else:
+                item.do_on_epoch_end()
+            if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (self.epochs + 1) % self.save_model_frequency == 0:
+                self._save_player(item)
+        for callback in self.callbacks:
+            if callback.is_shared:
+                callback.on_overall_epoch_end(self.__dict__)
+
+    @staticmethod
+    def _save_player(item):
+        item.save_model(item.training_context['save_path'])
 
     def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
-        print('is generator first: {0}'.format(self.is_generator_first))
-        print('use label flipping: {0}'.format(self.use_label_flipping))
-        print('real_label' if not self.use_label_flipping else 'fake_label'+': ',1)
-        print('fake_label' if not self.use_label_flipping else 'real_label'+': ',0)
-
-        def g_get_dfake(training_context):
-
-            traindata = training_context['train_data']
-            traindata['d_fake'] = self.discriminator(self.generator(traindata['noise'])).to(get_device())
-            if self._use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
-                traindata['fake_features'] = self.discriminator.nodes[self.discriminator_feature_uuid].output
-
-            traindata['real_label' if not self.use_label_flipping else 'fake_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
-            traindata['fake_label' if not self.use_label_flipping else 'real_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
-
-
-        def g_get_dreal(training_context):
-            traindata = training_context['train_data']
-
-            if (self.is_generator_first and 'output' not in self.discriminator.training_context[
-                'train_data']) or self._use_feature_matching:
-                traindata['d_real'] = self.discriminator(traindata[training_context['data_feed']['img_real']]).detach()
-            else:
-                traindata['d_real'] = self.discriminator.training_context['train_data']['output'].detach()
-
-            if self._use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
-                traindata['real_features'] = self.discriminator.nodes[self.discriminator_feature_uuid].output
-
-        def d_get_dfake(training_context):
-
-            traindata = training_context['train_data']
-            if self.gan_type == 'began':
-                traindata['k_t'] = to_tensor(self.k_t)
-                traindata['measure'] = to_tensor(self.measure)
-
-            if not self.is_generator_first and 'output' not in self.generator.training_context['train_data']:
-                traindata[training_context['data_feed']['img_fake']] = self.generator(traindata[data_provider.traindata.data.symbol if self.is_condition_gan else 'noise']).detach()
-            else:
-                traindata[training_context['data_feed']['img_fake']] = self.generator.training_context['train_data']['output'].detach()
-            traindata['d_fake'] = self.discriminator(traindata[training_context['data_feed']['img_fake']].detach())
-
-            traindata['real_label' if not self.use_label_flipping else 'fake_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
-            if self.use_label_smoothing is not None:
-                traindata['real_label' if not self.use_label_flipping else 'fake_label'] = clip(random_normal_like(traindata['d_fake'], mean=1, std=0.2), 0.8, 1.2).detach().to(get_device())
-            traindata['fake_label' if not self.use_label_flipping else 'real_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
-            if self.use_label_smoothing == 'two_side':
-                traindata['fake_label' if not self.use_label_flipping else 'real_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.2)), 0.0, 0.2).detach().to(get_device())
-
-
-        def d_get_dreal(training_context):
-
-            traindata = training_context['train_data']
-            imagedata =traindata['image']
-
-            if self.max_noise_intensity > 0:
-                _mean, _variance = moments(imagedata, axis=[0, 1, 2, 3])
-                _std = sqrt(_variance) if _variance > 0 else 0.2
-                current_intensity =self.min_noise_intensity + builtins.max((self.max_noise_intensity - self.min_noise_intensity) * math.exp(  -1.0 * self.steps / self.decay),0)
-
-                imagedata = traindata['image'] + random_normal(imagedata.shape, mean=_mean.item(),    std=_std.item()) * current_intensity
-                traindata['d_real'] = self.discriminator(imagedata.detach())
-            else:
-                traindata['d_real'] = self.discriminator(traindata['image'])
-            traindata['output'] = traindata['d_real']
-
-            traindata['real_label' if not self.use_label_flipping else 'fake_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
-            if self.use_label_smoothing is not None:
-                traindata['real_label' if not self.use_label_flipping else 'fake_label'] = clip(random_normal_like(traindata['d_fake'], mean=1, std=0.2), 0.8, 1.2).detach().to(get_device())
-            traindata['fake_label' if not self.use_label_flipping else 'real_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
-            if self.use_label_smoothing == 'two_side':
-                traindata['fake_label' if not self.use_label_flipping else 'real_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.2)), 0.0, 0.2).detach().to(get_device())
-
-        data_provider = self._dataloaders.value_list[0]
-
-        data_provider.batch_size = self.batch_size
-        previous_mode = data_provider.mode
-        data_provider.mode = 'dict'
-        # generate data feed
-        self.generate_datafeed(data_provider)
+        self._register_players()
+        if not self._dataloaders:
+            raise ValueError('GanTrainingPlan requires a training data provider')
+        if not isinstance(collect_data_inteval, (int, np.integer)) or collect_data_inteval < 1:
+            raise ValueError('collect_data_inteval must be a positive integer')
+        if only_steps and (not isinstance(max_batches, (int, np.integer)) or max_batches < 1):
+            raise ValueError('only_steps requires a positive integer batch count')
+        if _backend == 'jax' and self.save_model_frequency > 0:
+            for item in self.training_items.values():
+                if 'save_path' not in item.training_context:
+                    raise ValueError('Set a save path for each JaxGanModel before scheduling GAN saves')
+        provider = self._dataloaders.value_list[-1]
+        provider.batch_size = self.batch_size
+        previous_mode = provider.mode
+        originals = []
+        self._captured_feature_layer = None
+        first_step = self.steps
+        first_epoch = self.epochs + 1 if is_resume and first_step else 0
         try:
+            provider.mode = 'dict'
+            self.generate_datafeed(provider)
             self.execution_id = get_time_suffix()
-            exception_cnt = 0
-            abnormal_num_count = 0
-            # update callback
-            if ctx.enable_tensorboard:
-                for idx, (item, item_name) in enumerate(
-                        zip(self.training_items.value_list, self.training_names.value_list)):
-                    if hasattr(item, 'training_context'):
-                        for context_item in list(item.training_context.values()):
-                            if isinstance(context_item, HistoryBase):
-                                context_item.training_name = item_name
+            self._logits = self._from_logits if self._from_logits is not None else not gan.has_sigmoid_head(self.discriminator)
+            if self.gan_type in self._RAW_SCORE_GAN_TYPES and not self._logits:
+                raise ValueError(f'{self.gan_type} requires an unrestricted critic output; remove its sigmoid')
+            if _backend != 'jax':
+                if gan.shared_parameters(self.generator.model, self.discriminator.model):
+                    raise ValueError('The generator and discriminator cannot share trainable parameters')
+                if self._feature_matching_weight or self._pull_away_weight:
+                    self._captured_feature_layer = gan.feature_layer(self.discriminator.model, getattr(self, '_feature_layer', None))
+                    if self._captured_feature_layer is not None:
+                        self._captured_feature_layer.keep_output = True
+            transforms = getattr(provider, '_batch_transform_funcs', ())
+            if transforms:
+                provider.traindata.batch_sampler._batch_transform_funcs = transforms
 
-                        item.training_context['training_name'] = item_name
-
-                make_dir_if_need(os.path.join(working_directory, 'Logs'))
-
-                sys.stdout.writelines(
-                    [
-                        'Please execute the command to initial tensorboard:  tensorboard --logdir={0}  --port 6006 \n\r'.format(
-                            os.path.join(working_directory, 'Logs'))])
-                sys.stdout.writelines(
-                    ['Tensorboard is initialized. You can access tensorboard at http://localhost:6006/   \n\r'])
-
-            if not is_resume or only_steps == True:
-                max_name_length = builtins.max([len(name) for name in self.training_names.value_list])
-                for item in self.training_items.values():
-                    # sysnc device
-                    item.model.train()
-                    item.model.to(get_device())
-                    item.training_context['execution_id'] = self.execution_id
-                    item.training_context['max_name_length'] = max_name_length
-                    for callback in self.callbacks:
-                        if callback not in item.callbacks:
-                            # private callback
-                            if not callback.is_shared:
-                                item.with_callbacks(deepcopy(callback))
-                            else:
-                                # shared callback
-                                item.with_callbacks(callback)
-                self.generator.trigger_when(when='on_loss_calculation_start', action=g_get_dfake)
-                if self.gan_type in ('rasgan') or self._use_feature_matching:
-                    self.generator.trigger_when(when='on_loss_calculation_start', action=g_get_dreal)
-                if self.gan_type in ('began'):
-                    def update_k_t(training_context):
-                        traindata = training_context['train_data']
-                        if 'k_t' not in traindata:
-                            traindata['k_t'] = 0
-                        if len(self.discriminator.training_context['losses']) > 0 and len(
-                                self.discriminator.training_context['metrics']) > 0:
-                            d_real_loss = self.discriminator.training_context['losses']['real_loss'][-1][1]
-                            d_fake_loss = self.discriminator.training_context['metrics']['fake_loss'][-1][1]
-                            gamma = 0.5
-                            lambda_k = 0.001
-                            g_d_balance = (gamma * d_real_loss - d_fake_loss)
-                            self.k_t += lambda_k * g_d_balance
-                            self.k_t = max(min(1, self.k_t), 0)
-                            self.measure = d_real_loss + abs(g_d_balance)
-                        traindata['k_t'] = to_tensor(self.k_t)
-
-                        traindata['measure'] = to_tensor(self.measure)
-
-                    self.discriminator.trigger_when(when='on_loss_calculation_end', action=update_k_t)
-
-                self.discriminator.trigger_when(when='on_loss_calculation_start', action=d_get_dfake)
-                self.discriminator.trigger_when(when='on_loss_calculation_start', action=d_get_dreal)
-                # shared callbacks will access training plan dict instead of training_context
+            for item, name in zip(self.training_items.values(), self.training_names.values()):
+                state = item.training_context
+                state.update(steps=self.steps, training_name=name, model_name=name,
+                             max_name_length=builtins.max(map(len, self.training_names.values())),
+                             data_template=provider.traindata.data_template, execution_id=self.execution_id,
+                             collect_data_inteval=collect_data_inteval, only_steps=only_steps)
+                for history in state.values():
+                    if isinstance(history, HistoryBase):
+                        history.training_name = name
                 for callback in self.callbacks:
-                    if callback.is_shared:
-                        callback.on_training_start(self.__dict__)
+                    if not callback.is_shared and (id(item), id(callback)) not in self._plan_callbacks:
+                        copy = deepcopy(callback)
+                        item.with_callbacks(copy)
+                        self._plan_callbacks[id(item), id(callback)] = copy
+                if _backend != 'jax':
+                    clip = gan.CriticWeightClip() if self.gan_type == 'wgan' and item is self.discriminator else None
+                    originals.append((item, item.output_fn, clip))
+                    item.output_fn = self._legacy_output
+                    if _backend == 'pytorch' or not isinstance(item.model, tf.keras.Model):
+                        item.model.to(get_device())
+                    if clip is not None:
+                        item.with_callbacks(clip)
+                self._item_event(item, 'on_training_start')
+            for callback in self.callbacks:
+                if callback.is_shared:
+                    callback.on_training_start(self.__dict__)
 
-            if not is_resume or only_steps == True:
-                if collect_data_inteval == 1 and len(data_provider.batch_sampler) * self.num_epochs > 1000:
-                    collect_data_inteval = self.default_collect_data_inteval
-            first_step = self.steps
-
-            for epoch in self._epochs_to_run(only_steps, max_batches):
-                for mbs, return_data in enumerate(self._epoch_batches(data_provider)):
-
+            for local_epoch in self._epochs_to_run(only_steps, max_batches):
+                epoch = self.epochs = first_epoch + local_epoch
+                start_step = self.steps
+                provider_batches = len(provider.batch_sampler)
+                total_batches = provider_batches
+                if only_steps:
+                    total_batches = builtins.min(total_batches, max_batches - (start_step - first_step))
+                for item in self.training_items.values():
+                    item.training_context.update(current_epoch=epoch, current_batch=0, steps=self.steps)
+                    if _backend == 'jax':
+                        self._item_event(item, 'on_epoch_start')
+                    else:
+                        item.do_on_epoch_start()
+                for index, raw in enumerate(self._epoch_batches(provider)):
                     if self.is_terminate:
+                        self._finish_epoch()
+                        for item in self.training_items.values():
+                            self._item_event(item, 'on_training_terminated')
                         for callback in self.callbacks:
                             if callback.is_shared:
                                 callback.on_training_terminated(self.__dict__)
-
-                        for k, trainitem in self.training_items.items():
-
-                            for callback in trainitem.training_context['callbacks']:
-                                if not callback.is_shared:
-                                    callback.on_training_terminated(trainitem.training_context)
-                        data_provider.mode = 'tuple'
-                    else:
-
-                        iter_data = OrderedDict()
-
-                        if isinstance(return_data, OrderedDict):
-                            for spec, data in return_data.item_list:
-                                iter_data[spec.name] = data
-                        elif isinstance(return_data, tuple):
-                            for i in range(len(return_data)):
-                                iter_data[data_provider.traindata.data_template.key_list[i].name] = return_data[i]
-
-                        # check weather need out-of-sample evaluation
-                        need_out_sample_evaluation = False
-
-                        # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
-
-                        for trainitem_name, trainitem in zip(self.training_names.value_list,
-                                                             self.training_items.value_list):
-                            train_data = deepcopy(iter_data)
-                            trainitem.training_context['data_template'] = data_provider.traindata.data_template
-                            trainitem.training_context['collect_data_inteval'] = collect_data_inteval
-                            trainitem.training_context['model_name'] = trainitem_name
-                            trainitem.training_context['waiting_to_start'] = epoch < int(trainitem.start_epoch)
-                            trainitem.training_context['only_steps'] = only_steps
-
-
-                            # if self.is_generator_first:
-                            #     trainitem.model.zero_grad()
-                            should_collect_data = True
-
-                            dis_k = 1
-                            if self.gan_type not in ['began', 'ebgan'] and trainitem.training_context['gan_role'] == 'discriminator' and 'd_fake' in trainitem.training_context[ 'tmp_metrics'] and len(trainitem.training_context[ 'tmp_metrics']['d_fake'])>0:
-
-                                if trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
-                                        trainitem.training_context['tmp_metrics'].get_last('d_fake')[-1] < 0.1:
-                                    dis_k = 1
-                                elif trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
-                                        trainitem.training_context['tmp_metrics'].get_last('d_fake')[-1] > 0.3:
-                                    dis_k = 1
-                            if (trainitem.training_context['gan_role'] == 'discriminator' and mbs % dis_k == 0) or (
-                                    trainitem.training_context['gan_role'] == 'generator' and mbs % 1 == 0):
-                                trainitem.training_context['stop_update'] = 0
-                            else:
-                                trainitem.training_context['stop_update'] = 1
-                                should_collect_data = False
-                            if self._use_total_variation_loss and trainitem.training_context[
-                                'gan_role'] == 'generator' and epoch == self.total_variation_start_epoch and mbs == 0:
-                                self.generator.with_regularizer('total_variation_norm_reg',
-                                                                reg_weight=self.total_variation_reg_weight)
-
-                            trainitem.train_model(train_data, None,
-                                                  epoch if only_steps == False else 0,
-                                                  mbs if only_steps == False else self.steps - first_step,
-                                                  self.num_epochs if only_steps == False else 1,
-                                                  len(data_provider.batch_sampler) if only_steps == False else max_batches,
-                                                  is_collect_data=mbs == 0 or (
-                                                          should_collect_data and mbs % collect_data_inteval) == 0,
-                                                  is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
-                                                  is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
-                                                  log_gradients=keep_gradient_history,
-                                                  log_weights=keep_weights_history,
-                                                  accumulate_grads=False,
-                                                  is_out_sample_evaluation=need_out_sample_evaluation)
-                            trainitem.steps += 1
-                        self.steps += 1
-
-                        if ctx.enable_tensorboard and len(
-                                self.training_items) > 1 and mbs % collect_data_inteval == 0:
-                            compare_dict = OrderedDict()
-                            step = None
-                            for trainitem_name, trainitem in zip(self.training_names.value_list,
-                                                                 self.training_items.value_list):
-                                for k, v in trainitem.training_context["losses"].items():
-                                    if k not in compare_dict:
-                                        compare_dict[k] = OrderedDict()
-                                    compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
-                                    step = v[-1][0]
-                                for k, v in trainitem.training_context["metrics"].items():
-                                    if k not in compare_dict:
-                                        compare_dict[k] = OrderedDict()
-                                    compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
-                            for k, v in compare_dict.items():
-                                ctx.summary_writer.add_scalars(k, v, step)
-
-                        if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
-                                (self.print_progress_unit == 'epoch' and (
-                                        epoch + 1) % self.print_progress_frequency == 0):
-                            if len(self.training_items) > 1:
-                                ctx.print(' \n', flush=True)
-
-                        for k, trainitem in self.training_items.items():
-                            for callback in trainitem.training_context['callbacks']:
-                                if not callback.is_shared:
-                                    callback.on_overall_batch_end(trainitem.training_context)
-                        for callback in self.callbacks:
-                            if callback.is_shared:
-                                callback.on_overall_batch_end(self.__dict__)
-
-                        if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (self.steps + 1) % \
-                                self.save_model_frequency == 0:
-                            for k, trainitem in self.training_items.items():
-                                trainitem.save_model(trainitem.training_context['save_path'], )
-                                if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or
-                                                               trainitem.training_context['upload_onnx'] == False):
-                                    trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                    ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                    trainitem.training_context['upload_onnx'] = True
-                        if only_steps and self.steps - first_step >= max_batches:
-                            for item in self.training_items.values():
-                                item.do_on_epoch_end()
-                            return True
-
-                for item in self.training_items.values():
-                    item.do_on_epoch_end()
-                if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (
-                        epoch + 1) % self.save_model_frequency == 0:
-                    for k, trainitem in self.training_items.items():
-                        trainitem.save_model(trainitem.training_context['save_path'], )
-            data_provider.mode = 'tuple'
-
-
+                        return True
+                    batch = self._named_batch(raw, provider.traindata.data_template)
+                    missing = {self._real_field, self._generator_field, self._condition_field} - set(batch) - {None}
+                    if missing:
+                        raise ValueError(f'GAN batch is missing fields {sorted(missing)}')
+                    collect = self.steps % collect_data_inteval == 0
+                    for item in self.training_items.values():
+                        self._step(item, batch, epoch, index, total_batches, collect, keep_weights_history,
+                                   keep_gradient_history, index + 1 == total_batches)
+                    self.steps += 1
+                    for item in self.training_items.values():
+                        item.steps = self.steps
+                        self._item_event(item, 'on_overall_batch_end')
+                        if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and self.steps % self.save_model_frequency == 0:
+                            self._save_player(item)
+                    for callback in self.callbacks:
+                        if callback.is_shared:
+                            callback.on_overall_batch_end(self.__dict__)
+                    if only_steps and self.steps - first_step >= max_batches and index + 1 < provider_batches:
+                        break
+                if self.steps == start_step:
+                    raise ValueError('the GAN training provider yielded no batches')
+                self._finish_epoch()
+                if only_steps and self.steps - first_step >= max_batches:
+                    break
+            for item in self.training_items.values():
+                self._item_event(item, 'on_training_end')
+            for callback in self.callbacks:
+                if callback.is_shared:
+                    callback.on_training_end(self.__dict__)
+            return True
         except (KeyboardInterrupt, Exception):
             self._notify_training_failure()
             raise
         finally:
-            data_provider.mode = previous_mode
+            for item, output_fn, clip in originals:
+                item.output_fn = output_fn
+                if clip is not None and clip in item.callbacks:
+                    item.callbacks.remove(clip)
+            provider.mode = previous_mode
 
 
 class CycleGanTrainingPlan(TrainingPlan):

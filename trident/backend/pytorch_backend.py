@@ -1691,7 +1691,7 @@ class Layer(nn.Module):
                         self._signature.inputs["input_{0}".format(i)] = TensorSpec(
                             shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
             else:
-                for arg in inspect_args:
+                for arg in (inspect_args,) if isinstance(inspect_args, str) else inspect_args:
                     self._signature.inputs[arg] = TensorSpec(shape=None)
 
             if self._output_shape is not None:

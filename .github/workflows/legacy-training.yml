@@ -6,6 +6,7 @@ on:
       - 'trident/**'
       - 'tests/test_legacy_*.py'
       - 'tests/test_loss_parity.py'
+      - 'tests/test_gan_training.py'
       - 'tests/loss_backend_probe.py'
       - 'tests/test_training_save_guardrails.py'
       - 'requirements.txt'
@@ -15,6 +16,7 @@ on:
       - 'trident/**'
       - 'tests/test_legacy_*.py'
       - 'tests/test_loss_parity.py'
+      - 'tests/test_gan_training.py'
       - 'tests/loss_backend_probe.py'
       - 'tests/test_training_save_guardrails.py'
       - 'requirements.txt'
@@ -30,7 +32,7 @@ jobs:
           python-version: '3.10'
       - run: python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
       - run: python -m pip install -r requirements.txt pytest 'tensorflow-cpu==2.20.*' 'jax[cpu]==0.4.35'
-      - run: python -m pytest -q tests/test_loss_parity.py
+      - run: python -m pytest -q tests/test_loss_parity.py tests/test_gan_training.py
 
   cpu:
     runs-on: ubuntu-latest

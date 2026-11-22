@@ -40,9 +40,11 @@ except ImportError:
     import queue as Queue
 from trident.backend.numpy_ops import DTYPE_MAPPING
 if get_backend() == 'pytorch':
-    from trident.backend.pytorch_ops import tensor_to_shape, expand_dims, cast,to_tensor
+    from trident.backend.pytorch_ops import tensor_to_shape, to_tensor
 elif get_backend() == 'tensorflow':
-    from trident.backend.tensorflow_ops import tensor_to_shape, expand_dims, cast,to_tensor
+    from trident.backend.tensorflow_ops import tensor_to_shape, to_tensor
+elif get_backend() == 'jax':
+    from trident.backend.jax_ops import tensor_to_shape, to_tensor
 
 __all__ = ['Dataset', 'ZipDataset', 'ImageDataset', 'MaskDataset','DepthDataset', 'TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'LandmarkDataset', 'Iterator', 'MetricIterator',
            'NumpyDataset', 'RandomNoiseDataset', 'ArrayDataset','IndexDataset']
@@ -854,9 +856,9 @@ class RandomNoiseDataset(Dataset):
 
     def __getitem__(self, index: int):
         if self.random_mode == 'normal':
-            return np.random.standard_normal(self.shape)
+            return np.random.standard_normal(self.shape).astype(self.dtype, copy=False)
         elif self.random_mode == 'uniform':
-            return np.random.uniform(-1, 1, self.shape)
+            return np.random.uniform(-1, 1, self.shape).astype(self.dtype, copy=False)
 
     def __len__(self):
         return self.length
@@ -1372,7 +1374,7 @@ class Iterator(object):
                 if len(ds) > 0:
                     dataitem = ds[k]
                     if isinstance(dataitem,np.ndarray):
-                        ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
+                        ds.element_spec = TensorSpec.tensor_to_spec(np.expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
                     elif isinstance(dataitem,numbers.Number):
                         ds.element_spec =TensorSpec(shape=TensorShape([None,1]),object_type=ObjectType.regression_label,name=ds.symbol)
                     else:

@@ -198,3 +198,50 @@ model.with_metric(head_accuracy, name="color_accuracy",
 範例中的 `color_criterion`、`size_criterion` 和 `accuracy` 是使用者選定的損失與指標函式。字典左側為函式參數，右側為實際欄位。單次註冊可覆寫裝飾器的對應，其次採用 trainer 的 `data_feed`。同名欄位可直接使用；常見的 `output`、`target` 也可使用角色與形狀相容的唯一候選。若有兩個候選，例外會列出欄位名稱與指定方式。
 
 函式可用 Trident 的 `TensorSpec` 實例註解參數，例如 `pred: TensorSpec(shape=TensorShape([None, 3]))`。這表示第二維固定為 3，batch 大小可變。`as_metric=True` 會把這次運算的原始 loss 數值脫離梯度後寫入指標紀錄；`loss_weight` 僅影響訓練用的加權損失。
+
+## 使用 GanTrainingPlan 訓練 GAN
+
+啟動 Python 前，將 `TRIDENT_BACKEND` 設為 `pytorch`、`tensorflow` 或 `jax`。PyTorch 和 TensorFlow 使用各自的 Trident `Model`。以下範例使用提供 `real` 和 `latent` 欄位的資料批次。
+
+```python
+from trident.optims.trainers import GanTrainingPlan
+
+plan = (GanTrainingPlan(seed=42)
+        .with_discriminator(discriminator)
+        .with_generator(generator)
+        .with_batch_fields(real='real', generator_input='latent')
+        .with_gan_type('wgan-gp')
+        .with_data_loader(provider)
+        .with_batch_size(32)
+        .repeat_epochs(10))
+plan.start_now()
+```
+
+加入模型的先後決定每批的更新順序。成對資料可用 `condition` 指定條件欄位，雙輸入判別器依序接收樣本和條件。`wgan-gp` 預設使用權重 10 的梯度懲罰，可用 `with_gradient_penalty()` 調整。Wasserstein critic 應輸出無界分數，且每個樣本的分數應獨立於批內其他樣本。`gan` 和 `dcgan` 可以用 `from_logits=False` 搭配輸出機率的判別器。
+
+### 其他對抗目標
+
+以下種類可直接傳入 `with_gan_type()`。判別器輸出未經 sigmoid 的分數。
+
+| 設定 | 目標 |
+| --- | --- |
+| `hinge` | 判別器使用單位間隔的 hinge loss，生成器提高生成樣本的分數 |
+| `rsgan` | 對同一批內逐筆配對的真實與生成分數差使用 logistic loss，兩邊輸出形狀須相同 |
+| `ralsgan` | 將各樣本分數與另一組的批次平均比較，再使用平方損失 |
+| `rahinge` | 對相對於另一組批次平均的分數使用 hinge loss |
+| `gan-r1` | 非飽和 logistic GAN，每次判別器更新在真實樣本上加入 R1 梯度正則化 |
+
+`gan-r1` 預設 `r1_gamma=10`。用 `with_gan_type('gan-r1', r1_gamma=5)` 可調整強度。R1 使用真實樣本分數對輸入的梯度範數平方，逐樣本計算後平均，再乘上 `r1_gamma / 2`。判別器的逐樣本分數應彼此獨立。[Hinge 與相對式目標](https://arxiv.org/html/1807.00734) · [R1 正則化](https://arxiv.org/abs/1801.04406)
+
+### JAX 模型
+
+JAX 使用函數式模型。以下兩個 `apply` 函式接收參數 PyTree 和輸入，訓練後可從 `generator.params` 取得更新權重。
+
+```python
+from trident.optims.trainers import JaxGanModel
+
+generator = JaxGanModel(generator_apply, generator_params)
+discriminator = JaxGanModel(discriminator_apply, discriminator_params)
+```
+
+兩個模型預設各自使用 Adam，並將梯度全域範數裁剪到 10。PyTorch 和 TensorFlow 可用模型既有的 `with_grad_clipping()` 和 `with_accumulate_grads()` 調整。JAX 也接受 `with_grad_clipping()`，並可在建立時傳入 Optax 相容的 `optimizer`。JAX 模型的 `apply` 使用純函式，功能範圍為無可變模型狀態的前向運算。

@@ -931,8 +931,9 @@ class Model(ModelBase,Layer):
             if self.training_context['current_batch'] == 0:
                 if self.training_context['current_epoch'] == 0:
                     # epoch is not the logical inteval for us to control the flow
-                    self.training_context['steps'] = 0
-                    self._clear_gradient_window()
+                    if not kwargs.get('preserve_steps', False):
+                        self.training_context['steps'] = 0
+                        self._clear_gradient_window()
 
                     self.training_context['grads_state'] = OrderedDict()
                     self.training_context['grads_state']['first_layer'] = []

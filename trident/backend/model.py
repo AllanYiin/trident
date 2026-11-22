@@ -1200,10 +1200,10 @@ class ModelBase(object):
         if self.training_context['current_batch'] == 0:
             if self.training_context['current_epoch'] == 0:
                 # epoch is not the logical inteval for us to control the flow
-                self.training_context['steps'] = 0
-                # on_epoch_start
-                for callback in self.callbacks:
-                    callback.on_epoch_start(self.training_context)
+                if not kwargs.get('preserve_steps', False):
+                    self.training_context['steps'] = 0
+                    for callback in self.callbacks:
+                        callback.on_epoch_start(self.training_context)
 
                 self.training_context['grads_state'] = OrderedDict()
                 self.training_context['grads_state']['first_layer'] = []
