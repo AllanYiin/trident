@@ -2,46 +2,49 @@
 
 ## SNAPSHOT — 當前狀態
 
-最後更新：2026-11-23T00:32+08:00
+最後更新：2026-11-23T04:03+08:00
 交接狀態：verified
 
 ### 目標與授權範圍
 
-檢查 loss 基礎類、對齊 PyTorch／TensorFlow／JAX 定義與梯度，補上 JAX loss 入口與必要的損失函數。
+確認活化函數及相關已提交變更已推送到 origin/master。
 
 ### 目前進度
 
-新增 trident/optims/jax_losses.py，三後端共用 34 個公開 loss 名稱（含 TripletMarginLoss 別名）。工作樹包含共用公式、trainer 可訓練中心參數、文件及 CI 測試。
+遠端 master 已包含低記憶體功能 91d6438a、活化函數 cd259666，以及三後端 loss 對齊 bf968a27。
 
 ### 下一步
 
-JAX loss 模組與跨後端對齊已驗證。ToolRegistry 子程序逾時仍是獨立的已知問題。
+本次推送已完成。
 
 ### DECISIONS
 
-- 以 Trident PyTorch 的 reduction、加權分類平均分母及 SoftIoU 符號為對照。保留 PyTorch 的 channels-first 與 TensorFlow/JAX 的 channels-last 慣例。
-- 加入 BCEWithLogitsLoss、HuberLoss、TverskyLoss。JAX 用顯式參數或 PRNG key 處理可訓練中心與隨機影像／梯度懲罰。
-- 測試在獨立程序依 TRIDENT_BACKEND 載入，TensorFlow 以 tf.function、JAX 以 jax.jit 與自動微分比對。
+- 既有 model.pt 適用同一載入入口。分片檔使用不可變名稱與原子索引切換；預設保留舊分片給進行中的讀取。
+- 原生 NF4 以 64 個值分塊，直接載入 packed weights。HF/bitsandbytes 權重透過既有 from_huggingface。分層/offload 配置用於推論。
+- 分塊 CausalLM/SFT 在詞表投影前選取有效目標並分塊，保留原有 shift、MoE 輔助 loss、梯度正規化與舊自訂 objective。
 
 ### LANDMINES
 
-- JAX 驗證為 Windows CPU 的 jax/jaxlib 0.4.35，未驗證 JAX GPU 或 TPU。
-- AdaCos 為 PyTorch 舊檔案中的實驗性分數頭，未列入 34 個公開 loss 名稱。
+- Windows 單張 RTX 5090 Laptop GPU 驗證 CPU/GPU/disk offload。跨多張實體顯卡未測。
+- 顯存結果取決於模型尺寸、序列與精度。分片目錄的舊代占用磁碟。
+- Windows 的 ToolRegistry 子程序 10 秒逾時仍存在；JAX 選用依賴本輪未啟用。
 
 ### 證據索引
 
-- trident/optims/jax_losses.py、trident/optims/losses.py、trident/optims/loss_kernels.py、trident/optims/loss_weights.py
-- trident/optims/pytorch_losses.py、trident/optims/tensorflow_losses.py、trident/optims/tensorflow_trainer.py
-- tests/loss_backend_probe.py、tests/test_loss_parity.py、tests/test_legacy_gradients.py、tests/test_legacy_tf_gradients.py
-- docs/zh-tw/losses.md、.github/workflows/legacy-training.yml
+- trident/optims/language/pretrained.py、quantization.py、trainer.py、objectives.py、generation.py
+- trident/models/pytorch_causal_lm.py、tests/test_language_low_memory.py、tests/test_language_memory_cuda.py
+- docs/zh-tw/low-memory.md、.github/workflows/language.yml
+- git log、git ls-remote、git merge-base；tests/test_llm_activations.py、tests/test_loss_parity.py
 
 ### VALIDATION
 
-- Windows 完整 tests/ 回歸 — FAIL：178 passed、1 skipped、1 failed。唯一失敗 test_tool_execution_timeout_and_registry 是先前已記錄的 10 秒工具子程序逾時。獨立 TensorFlow 後端已另測。
-- JAX 公開入口 — PASS：trident.get_loss 可取得全部 34 個名稱。三類等分布交叉熵 1.0986123085，對零 logits 的梯度為 [1/3, -2/3, 1/3]。
-- TensorFlow 訓練與動態形狀 — PASS：tests/test_legacy_fit.py 與 tests/test_legacy_tf_gradients.py 合計 19 passed，包括兩種 optimizer/loss 設定順序的 CenterLoss 更新及圖模式的有效分母。
-- 三後端數值、形狀與反向傳播 — PASS：tests/test_loss_parity.py 的兩組跨後端比較通過。最終 80 組案例，涵蓋 34 個公開名稱與 3 個函數式 API。比對輸出形狀、值、預測梯度和中心梯度，rtol=3e-5、atol=2e-6。
-- 語法與差異格式 — PASS：變更與新增共 18 個 Python 檔案通過 AST 解析，git diff --check 通過。
+- CPU 與 CUDA 七項功能及尖峰顯存 — PASS：tests/test_language_low_memory.py 與 tests/test_language_memory_cuda.py 共 9 passed；單批量 512 tokens、32768 詞表、FP32，訓練增量 215543808 → 64969728 bytes，prefill 增量 68433408 → 3565568 bytes。
+- 分片載入額外尖峰工作集 — PASS：兩個獨立 Windows CPU 程序載入同一個 26,219,520 參數模型；首次推論前舊路徑增加 212975616 bytes、meta＋mmap 分片增加 1286144 bytes。映射頁面延遲讀取，未計首次 forward。
+- 分層推論與舊入口 — PASS：最終 dispatcher 的 auto、CPU/GPU/disk 與預量化分支通過 3 項；自訂 objective、HF logits/export、adapter 匯出等 5 項通過；NF4＋LoRA＋分塊 loss＋activation offload 組合 CPU/CUDA 2 項通過。舊 model.pt 載回後覆寫原目錄亦成功。
+- 語法與差異格式 — PASS：12 個變更 Python 檔通過 AST 解析，git diff --check 成功。
+- Windows tests/ 完整回歸 — FAIL：188 passed、3 skipped、1 failed。唯一失敗為先前已記錄的 test_tool_execution_timeout_and_registry。完整記錄 .pytest_cache/lowmem-all-final.log。
+- 遠端分支與提交祖先 — PASS：git ls-remote origin refs/heads/master 回傳 bf968a27；git merge-base --is-ancestor 91d6438a bf968a27 結束碼 0。
+- 遠端 master 與活化函數提交 — PASS：git push 回報 Everything up-to-date，ls-remote 與本機 HEAD 均為 bf968a27，cd259666 是其祖先。
 
 # HISTORY
 
@@ -126,3 +129,24 @@ JAX loss 模組與跨後端對齊已驗證。ToolRegistry 子程序逾時仍是�
 <!-- devnote-review:d51e73fa95cdef51d7ffda77 -->
 
 將 34 個公開 loss 名稱接到三後端，補齊穩定二元 logits、Huber 及 Tversky，修正 TensorFlow 歸約與軟標籤、PyTorch GP 回傳值和 hinge 反傳。
+
+
+## [2026-11-23T01:15+08:00] 七項低記憶體語言模型功能與 CUDA 驗證
+
+<!-- devnote-review:5e35253272b68aa325f29ebb -->
+
+補齊低峰值載入、分層推論、4-bit adapter 微調與分塊詞表投影。比對原生模型的梯度、生成與預量化權重重載。上一筆 checkpoint 的 warmup 與 JAX loss 事實已由既有提交與前次交接涵蓋。
+
+
+## [2026-11-23T04:02+08:00] 確認低記憶體功能已推送至 master
+
+<!-- devnote-review:3b607206d6548c736015bfb6 -->
+
+遠端 master 指向 bf968a27；Git 祖先檢查確認包含 91d6438a，兩者之間另有活化函數提交 cd259666。
+
+
+## [2026-11-23T04:03+08:00] 確認三後端活化函數與 loss 已推送
+
+<!-- devnote-review:7c1e213cb7d48e302a4cf8a3 -->
+
+核對本機及遠端 master 均為 bf968a27，並確認其包含 cd259666。
