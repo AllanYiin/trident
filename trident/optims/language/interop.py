@@ -50,24 +50,37 @@ def to_huggingface(model):
     else:
         config = Qwen3Config(**values)
         target = Qwen3ForCausalLM(config)
-    target.load_state_dict(model.state_dict(), strict=True)
+    from .quantization import NF4Linear
+    state = model.state_dict()
+    quantized = set()
+    for name, module in model.named_modules():
+        if isinstance(module, NF4Linear):
+            state.pop(name + ".packed_weight")
+            state.pop(name + ".absmax")
+            quantized.add(name + ".weight")
+            with torch.no_grad():
+                target.get_submodule(name).weight.copy_(module.unpack(target.dtype))
+    missing, unexpected = target.load_state_dict(state, strict=False)
+    if set(missing) != quantized or unexpected:
+        raise ValueError("incompatible native weights for Hugging Face export")
     return target.eval()
 
 
-def export_model(model, tokenizer, directory, format="native"):
+def export_model(model, tokenizer, directory, format="native", *, max_shard_size=None):
     directory = Path(directory)
     if format not in ("native", "huggingface"):
         raise ValueError("format must be native or huggingface")
     directory.mkdir(parents=True, exist_ok=True)
     if format == "huggingface":
         exported = to_huggingface(model)
-        exported.save_pretrained(str(directory), safe_serialization=True)
+        options = {} if max_shard_size is None else {"max_shard_size": max_shard_size}
+        exported.save_pretrained(str(directory), safe_serialization=True, **options)
         if tokenizer is not None:
             to_hf_tokenizer(tokenizer).save_pretrained(str(directory))
     else:
         if not isinstance(model, CausalLM):
             raise TypeError("external models must be exported as huggingface")
-        model.save_pretrained(directory)
+        model.save_pretrained(directory, max_shard_size=max_shard_size)
         if tokenizer is not None:
             tokenizer.save_pretrained(directory)
     (directory / "trident_export.json").write_text(json.dumps({"format": format, "version": 1}), encoding="utf-8")

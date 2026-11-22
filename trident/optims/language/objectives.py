@@ -31,6 +31,8 @@ def forward_model(model, batch, **extra):
                   if getattr(result, key, None) is not None}
     else:
         raise TypeError("causal model must return logits or an output containing logits")
+    if "loss_labels" in extra and "nll_sum" in output:
+        return output
     if "logits" not in output or output["logits"].ndim != 3:
         raise ValueError("logits must have shape [batch, sequence, vocabulary]")
     return output
@@ -73,6 +75,14 @@ def _freeze_auxiliary(model, policy, device):
 
 
 class CausalLMObjective:
+    # Existing custom objectives may supply their own constructor.
+    logits_chunk_size = None
+
+    def __init__(self, logits_chunk_size=None):
+        if logits_chunk_size is not None and (type(logits_chunk_size) is not int or logits_chunk_size < 1):
+            raise ValueError("logits_chunk_size must be a positive token count")
+        self.logits_chunk_size = logits_chunk_size
+
     def normalization_weight(self, batch):
         return int((torch.as_tensor(batch["labels"])[:, 1:] != -100).sum())
 
@@ -80,7 +90,10 @@ class CausalLMObjective:
         pass
 
     def config_dict(self):
-        return {"type": type(self).__name__}
+        config = {"type": type(self).__name__}
+        if self.logits_chunk_size is not None:
+            config["logits_chunk_size"] = self.logits_chunk_size
+        return config
 
     def state_dict(self):
         return {}
@@ -90,14 +103,21 @@ class CausalLMObjective:
             raise ValueError("unexpected objective state")
 
     def __call__(self, model, batch):
-        output = forward_model(model, batch, use_cache=False)
-        log_probs, valid = token_log_probs(output["logits"], batch["labels"])
-        count = int(valid.sum())
-        loss_sum = -log_probs.sum()
+        if self.logits_chunk_size is None:
+            output = forward_model(model, batch, use_cache=False)
+            log_probs, valid = token_log_probs(output["logits"], batch["labels"])
+            count, nll = int(valid.sum()), -log_probs.sum()
+        else:
+            if "loss_labels" not in inspect.signature(unwrap_model(model).forward).parameters:
+                raise ValueError("logits_chunk_size requires a model supporting chunked projection and loss")
+            output = forward_model(model, batch, use_cache=False, loss_labels=batch["labels"],
+                                   logits_chunk_size=self.logits_chunk_size)
+            count, nll = self.normalization_weight(batch), output["nll_sum"]
+        loss_sum = nll
         auxiliary = output.get("aux_loss")
         if auxiliary is not None:
             loss_sum = loss_sum + auxiliary * count
-        return ObjectiveResult(loss_sum, count, {"nll": float((-log_probs.sum()).detach()) / max(count, 1),
+        return ObjectiveResult(loss_sum, count, {"nll": float(nll.detach()) / max(count, 1),
                                                 "valid_tokens": count}, output)
 
 

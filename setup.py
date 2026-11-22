@@ -43,6 +43,7 @@ setup(name=NAME,
       extras_require={
           'llm': ['torch>=2.3', 'tokenizers>=0.20'],
           'llm-hf': ['torch>=2.3', 'transformers>=4.51,<5', 'safetensors>=0.4'],
+            'llm-offload': ['torch>=2.3', 'accelerate>=1.10'],
           'llm-serve': ['fastapi>=0.110', 'uvicorn>=0.27'],
           'llm-loggers': ['wandb>=0.17', 'swanlab>=0.6'],
           'visualize': ['pydot>=1.2.4',],

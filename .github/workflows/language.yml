@@ -45,9 +45,10 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: python -m pip install -e '.[llm,llm-hf,llm-serve]' pytest httpx
+      - run: python -m pip install -e '.[llm,llm-hf,llm-serve,llm-offload]' pytest httpx
       - run: >-
           python -m pytest -q
           tests/test_language_core.py tests/test_language_extended.py
           tests/test_language_runtime.py tests/test_language_examples.py
+          tests/test_language_low_memory.py tests/test_language_memory_cuda.py
           --basetemp '${{ runner.temp }}/trident-language'

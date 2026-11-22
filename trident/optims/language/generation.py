@@ -1,4 +1,5 @@
 """Shared native/Hugging Face generation with explicit padding and sampling."""
+import inspect
 import torch
 
 from .objectives import forward_model, unwrap_model
@@ -58,10 +59,13 @@ def generate_tokens(model, input_ids, attention_mask=None, max_new_tokens=32,
     model.eval()
     cache = None
     sampled_log_probs = []
+    last_only = "logits_to_keep" in inspect.signature(unwrap_model(model).forward).parameters
     try:
         for _ in range(max_new_tokens):
             data = {"input_ids": output if cache is None else output[:, -1:], "attention_mask": mask}
             extra = {"use_cache": True}
+            if last_only:
+                extra["logits_to_keep"] = 1
             if cache is not None:
                 extra["past_key_values"] = cache
             result = forward_model(model, data, **extra)

@@ -53,9 +53,18 @@ class CausalLanguageModel(LanguageModel):
 
     @property
     def device(self):
+        hook = getattr(self._model, "_hf_hook", None)
+        if getattr(hook, "execution_device", None) is not None:
+            return torch.device(hook.execution_device)
+        if self._uses_offload():
+            devices = unwrap_model(self._model).hf_device_map.values()
+            main = next((device for device in devices if str(device) not in ("cpu", "disk")), "cpu")
+            return torch.device("cuda", main) if isinstance(main, int) else torch.device(main)
         return next(self._model.parameters()).device
 
     def to(self, device):
+        if self._uses_offload():
+            raise RuntimeError("reload with a different device_map to move a dispatched model")
         if self._prepared:
             raise RuntimeError("move the model before starting training")
         self._model.to(device)
@@ -69,13 +78,23 @@ class CausalLanguageModel(LanguageModel):
         self.objective = objective
         return self
 
-    def with_lora(self, rank=8, alpha=16, target_modules=("q_proj", "v_proj"), dropout=0.0):
+    def _uses_offload(self):
+        placement = getattr(unwrap_model(self._model), "hf_device_map", {})
+        devices = set(placement.values())
+        return "disk" in devices or len(devices) > 1
+
+    def with_lora(self, rank=8, alpha=16, target_modules=("q_proj", "v_proj"), dropout=0.0,
+                  adapter_dtype=None):
+        if self._uses_offload():
+            raise ValueError("load the base on one device before installing trainable adapters")
         if self.optimizer is not None:
             raise RuntimeError("install LoRA before constructing the optimizer")
-        self.lora_config = inject_lora(self._model, rank, alpha, target_modules, dropout)
+        self.lora_config = inject_lora(self._model, rank, alpha, target_modules, dropout, adapter_dtype)
         return self
 
     def with_optimizer(self, optimizer=torch.optim.AdamW, **kwargs):
+        if self._uses_offload():
+            raise ValueError("multi-device/offloaded inference model cannot be trained; reload on one device")
         if self._prepared:
             raise RuntimeError("cannot replace optimizer during a training run")
         parameters = [value for value in self._model.parameters() if value.requires_grad]
@@ -121,11 +140,17 @@ class CausalLanguageModel(LanguageModel):
         self.grad_clipping_by_norm = True
         return self
 
-    def with_gradient_checkpointing(self):
+    def with_gradient_checkpointing(self, offload_to_cpu=False):
         method = getattr(self._model, "gradient_checkpointing_enable", None)
         if not callable(method):
             raise ValueError("model does not support gradient checkpointing")
-        method()
+        if offload_to_cpu:
+            import inspect
+            if "offload_to_cpu" not in inspect.signature(method).parameters:
+                raise ValueError("this model does not support checkpoint activation offload")
+            method(offload_to_cpu=True)
+        else:
+            method()
         return self
 
     def with_learning_rate_scheduler(self, lr_schedule=None, warmup=0, **kwargs):
@@ -221,14 +246,19 @@ class CausalLanguageModel(LanguageModel):
         load_adapter_state_dict(self._model, state["state_dict"])
         return self
 
-    def export(self, directory, format="native", merge_adapter=True):
+    def export(self, directory, format="native", merge_adapter=True, *, max_shard_size=None):
         from .interop import export_model
-        network = copy.deepcopy(unwrap_model(self._model)).cpu()
+        network = unwrap_model(self._model)
         if self.lora_config:
             if not merge_adapter:
                 raise ValueError("use save_adapter for an unmerged adapter export")
-            merge_lora(network)
-        return export_model(network, self.tokenizer, directory, format)
+            network = merge_lora(copy.deepcopy(network).cpu())
+        elif format == "huggingface":
+            # External save_pretrained implementations may mutate their config.
+            from trident.models.pytorch_causal_lm import CausalLM
+            if not isinstance(network, CausalLM):
+                network = copy.deepcopy(network).cpu()
+        return export_model(network, self.tokenizer, directory, format, max_shard_size=max_shard_size)
 
     def save_model(self, save_path=None, **kwargs):
         path = save_path or self.training_context.get("save_path")

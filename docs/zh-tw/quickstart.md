@@ -100,6 +100,8 @@ net1.with_learning_rate_scheduler(CosineLR(period=2000), warmup=warmup)
 
 `CausalLanguageModel` 接受相同的 `warmup`，主排程沿用 PyTorch 原生 scheduler。語言模型的訓練 checkpoint 會自動保存進度。一般模型的 `save_model()` 用於儲存模型權重。自訂訓練 checkpoint 時，請一併保存 `model.optimizer.state_dict()` 和 `model.lr_scheduler.state_dict()`，並依相同順序載回。
 
+原生 PyTorch 語言模型的分片載入、模組權重選取、分層推論與低顯存微調範例，請見[低記憶體模型設定](low-memory.md)。
+
 ## 成果
 
 ```python

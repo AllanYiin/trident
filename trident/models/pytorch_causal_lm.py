@@ -3,12 +3,11 @@
 No Transformers dependency is required for training or generation. Parameter
 names deliberately follow the Qwen3 dense/MoE layout for optional conversion.
 """
-import json
 import math
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
 from contextvars import ContextVar
+from contextlib import nullcontext
 
 import torch
 from torch import nn
@@ -175,7 +174,7 @@ class SparseMoE(nn.Module):
             rows, slots = torch.where(indices == index)
             if rows.numel():
                 result.index_add_(0, rows, expert(flat[rows]) * weights[rows, slots, None].to(flat.dtype))
-            else:
+            elif self.training and torch.is_grad_enabled():
                 # Keep all expert parameters in the DDP autograd graph.
                 result = result + sum(parameter.sum() * 0 for parameter in expert.parameters())
         valid = valid.reshape(-1).float()
@@ -228,6 +227,7 @@ class CausalLM(nn.Module):
         self.model = DecoderBackbone(self.config)
         self.lm_head = nn.Linear(self.config.hidden_size, self.config.vocab_size, bias=False)
         self.gradient_checkpointing = False
+        self.offload_checkpoint_inputs = False
         self.apply(self._initialize)
         if self.config.tie_word_embeddings:
             self.lm_head.weight = self.model.embed_tokens.weight
@@ -237,11 +237,13 @@ class CausalLM(nn.Module):
         if isinstance(module, (nn.Linear, nn.Embedding)):
             nn.init.normal_(module.weight, std=0.02)
 
-    def gradient_checkpointing_enable(self):
+    def gradient_checkpointing_enable(self, offload_to_cpu=False):
         self.gradient_checkpointing = True
+        self.offload_checkpoint_inputs = offload_to_cpu
 
     def forward(self, input_ids, attention_mask=None, position_ids=None,
-                past_key_values=None, use_cache=False, segment_ids=None):
+                past_key_values=None, use_cache=False, segment_ids=None,
+                logits_to_keep=0, loss_labels=None, logits_chunk_size=None):
         if input_ids.ndim != 2 or input_ids.shape[1] == 0:
             raise ValueError("input_ids must have shape [batch, nonempty sequence]")
         batch, length = input_ids.shape
@@ -277,16 +279,37 @@ class CausalLM(nn.Module):
                 def run(hidden, block=layer):
                     result, aux, _ = block(hidden, position_ids, mask, valid[:, -length:])
                     return result, aux
-                value, aux = checkpoint(run, value, use_reentrant=False)
+                # The non-reentrant checkpoint saves its inputs through autograd hooks.
+                storage = (torch.autograd.graph.save_on_cpu(pin_memory=True)
+                           if self.offload_checkpoint_inputs and value.is_cuda else nullcontext())
+                with storage:
+                    value, aux = checkpoint(run, value, use_reentrant=False)
                 cache = None
             else:
                 value, aux, cache = layer(value, position_ids, mask, valid[:, -length:], past, use_cache)
-            auxiliary = auxiliary + aux
+            auxiliary = auxiliary + aux.to(auxiliary.device)
             if use_cache:
                 caches.append(cache)
         hidden = self.model.norm(value)
-        return {"logits": self.lm_head(hidden), "hidden_states": hidden,
-                "aux_loss": auxiliary, "past_key_values": tuple(caches) if use_cache else None}
+        output = {"hidden_states": hidden, "aux_loss": auxiliary,
+                  "past_key_values": tuple(caches) if use_cache else None}
+        if loss_labels is not None:
+            if loss_labels.shape != input_ids.shape or not isinstance(logits_chunk_size, int) or logits_chunk_size < 1:
+                raise ValueError("chunked loss requires aligned labels and positive logits_chunk_size")
+            # Exclude ignored rows before projection. Checkpoint each projection AND
+            # loss so backward never retains a sequence of full vocabulary tensors.
+            targets = loss_labels[:, 1:]
+            valid = targets != -100
+            rows, targets = hidden[:, :-1][valid], targets[valid]
+            def project_loss(block, labels):
+                return F.cross_entropy(self.lm_head(block).float(), labels, reduction="sum")
+            loss_sum = hidden.reshape(-1)[:0].sum().float()
+            for block, labels in zip(rows.split(logits_chunk_size), targets.split(logits_chunk_size)):
+                loss_sum = loss_sum + checkpoint(project_loss, block, labels, use_reentrant=False)
+            output["nll_sum"] = loss_sum
+        else:
+            output["logits"] = self.lm_head(hidden[:, -logits_to_keep:] if logits_to_keep else hidden)
+        return output
 
     @torch.no_grad()
     def generate(self, input_ids, attention_mask=None, max_new_tokens=32,
@@ -296,16 +319,13 @@ class CausalLM(nn.Module):
         return generate_tokens(self, input_ids, attention_mask, max_new_tokens,
                                temperature, top_k, top_p, eos_token_id, pad_token_id, generator)
 
-    def save_pretrained(self, directory):
-        from trident.optims.language.checkpoint import atomic_torch_save
-        directory = Path(directory)
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / "trident_config.json").write_text(json.dumps(self.config.to_dict(), indent=2), encoding="utf-8")
-        atomic_torch_save(self.state_dict(), directory / "model.pt")
+    def save_pretrained(self, directory, *, max_shard_size=None):
+        from trident.optims.language.pretrained import save_pretrained
+        save_pretrained(self, directory, max_shard_size)
 
     @classmethod
-    def from_pretrained(cls, directory, map_location="cpu"):
-        directory = Path(directory)
-        model = cls(CausalLMConfig(**json.loads((directory / "trident_config.json").read_text(encoding="utf-8"))))
-        model.load_state_dict(torch.load(directory / "model.pt", map_location=map_location, weights_only=True))
-        return model.to(map_location)
+    def from_pretrained(cls, directory, map_location="cpu", *, dtype=None, device_map=None,
+                        max_memory=None, offload_folder=None, quantization_config=None):
+        from trident.optims.language.pretrained import load_pretrained
+        return load_pretrained(cls, directory, map_location, dtype, device_map, max_memory,
+                               offload_folder, quantization_config)
