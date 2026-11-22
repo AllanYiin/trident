@@ -5,10 +5,9 @@ from typing import List, Tuple, Union, Sequence
 from functools import wraps
 import numpy as np
 import numbers
-import collections
+from collections.abc import Iterable
 import jax
 import jax.numpy as jnp
-import jaxlib
 from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, \
     TensorShape, get_session_value,is_instance
 from trident.backend import dtype as Dtype
@@ -35,21 +34,13 @@ __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_te
            'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack', 'split', 'bbox_iou', 'bbox_diou']
 
+__all__ += ['swiglu', 'geglu', 'gpt_oss_swiglu', 'squared_relu']
+
 from math import e, nan, inf, pi
 
 __all__.extend(['e', 'pi', 'nan', 'inf'])
 
-print(jax.default_backend())
-Tensor = jaxlib.xla_extension.DeviceArray
-if 'tpu' in jax.default_backend():
-    arr = jnp.array(np.random.normal(0, 1, (3, 3)))
-    print(arr.__class__)
-else:
-    try:
-        jax.config.update('jax_array', True)
-        Tensor =jax.experimental.array.Array
-    except:
-        Tensor = jaxlib.xla_extension.DeviceArray
+Tensor = jax.Array
 
 ctx = context._context()
 
@@ -172,8 +163,7 @@ def is_tpu_available():
          False
 
      """
-    from jax.lib import xla_bridge
-    _default_backend = xla_bridge.get_backend().platform
+    _default_backend = jax.default_backend()
     if 'tpu' in _default_backend:
         return True
     return False
@@ -322,7 +312,7 @@ def is_tensor(x:Tensor)->_bool:
 
     """
 
-    if isinstance(x, jax.xla.DeviceArray):
+    if isinstance(x, jax.Array):
         return True
     return False
 
@@ -423,6 +413,8 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     """
     if x is None:
         return x
+    if isinstance(x, Tensor):
+        return x if dtype is None else x.astype(dtype)
     if device is not None and ('cuda' in device.lower() or 'gpu' in device.lower()):
         device = 'gpu:0'
     else:
@@ -430,7 +422,7 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     input_dtype = dtype
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
-    elif dtype is None and isinstance(x, collections.Iterable) and all(
+    elif dtype is None and isinstance(x, Iterable) and builtins.all(
             [isinstance(item, numbers.Integral) for item in x]):
         dtype = Dtype.int64
     elif dtype is None:
@@ -440,12 +432,7 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     if device is None:
         device = get_session().device
 
-    if isinstance(x, Tensor):
-        if dtype is None:
-            return x
-        else:
-            return x.astype(dtype)
-    elif isinstance(x, np.ndarray):
+    if isinstance(x, np.ndarray):
         npdtype = x.dtype
 
         if 'int' in str(npdtype):
@@ -617,7 +604,7 @@ def cast(x: Tensor, cast_dtype):
     """
 
     cast_dtype = str2dtype(cast_dtype)
-    if isinstance(x, (jnp.ndarray, jax.xla.DeviceArray)) and isinstance(cast_dtype, (
+    if isinstance(x, (jnp.ndarray, jax.Array)) and isinstance(cast_dtype, (
             jnp.dtype, jax._src.numpy.lax_numpy._ScalarMeta)):
         return jnp.array(x, dtype=cast_dtype)
     elif isinstance(x, np.ndarray) and isinstance(cast_dtype, np.dtype):
@@ -2685,7 +2672,7 @@ def gelu(x:Tensor)->Tensor:
         <Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32>
 
     """
-    return jax.nn.gelu(x)
+    return jax.nn.gelu(x, approximate=False)
 
 
 def gpt_gelu(x:Tensor)->Tensor:
@@ -2699,7 +2686,35 @@ def gpt_gelu(x:Tensor)->Tensor:
 
 
     """
-    return 0.5 * x * (1 + jax.n.tanh(jnp.sqrt(2 / jnp.pi) * (x + 0.044715 * jnp.power(x, 3))))
+    return jax.nn.gelu(x, approximate=True)
+
+
+def squared_relu(x):
+    """Elementwise squared ReLU (ReLU²)."""
+    return jnp.square(jax.nn.relu(x))
+
+
+def swiglu(x):
+    """Compute SiLU(gate) * up for packed [..., gate | up] projections."""
+    gate, up = jnp.split(x, 2, axis=-1)
+    return silu(gate) * up
+
+
+def geglu(x, approximate=False):
+    """Compute GELU(gate) * up. Set approximate=True for Gemma's tanh GELU."""
+    gate, up = jnp.split(x, 2, axis=-1)
+    return jax.nn.gelu(gate, approximate=approximate) * up
+
+
+def gpt_oss_swiglu(x):
+    """gpt-oss gate for interleaved [..., gate0, up0, gate1, up1, ...]."""
+    if x.ndim == 0 or x.shape[-1] % 2:
+        raise ValueError("Gated activations require an even final dimension")
+    gate, up = x[..., ::2], x[..., 1::2]
+    # Match torch.clamp's unit gradient at the endpoints.
+    gate = jnp.where(gate > 7, 7, gate)
+    up = jnp.where(up > 7, 7, jnp.where(up < -7, -7, up))
+    return gate * jax.nn.sigmoid(1.702 * gate) * (up + 1)
 
 
 def silu(x:Tensor)->Tensor:
@@ -3772,9 +3787,5 @@ _FUN_NAMES = [
 
 for target_fun_name, source_fun in _FUN_NAMES:
     if not hasattr(Tensor, target_fun_name):
-        setattr(Tensor, target_fun_name, source_fun)
-    elif not hasattr(Tensor, target_fun_name):
-        setattr(Tensor, target_fun_name, source_fun)
-    elif target_fun_name in ["to", "float", "int", "long", "sum", "mean"]:
         setattr(Tensor, target_fun_name, source_fun)
 del _FUN_NAMES

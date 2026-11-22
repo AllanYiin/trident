@@ -17,10 +17,14 @@ import jaxlib
 from trident.backend.common import get_function, get_class, camel2snake,snake2camel, enforce_singleton,TensorShape
 from trident.backend.jax_backend import Layer,Parameter
 from trident.backend.jax_ops import *
+from trident.layers.activation_names import llm_activation_name
 
 __all__ = ['Identity', 'Sigmoid', 'Tanh','TanhExp','ExpTanh', 'Relu', 'Relu6','SquaredRelu', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu','CRelu','Silu', 'PRelu', 'Swish',
            'Elu', 'HardSigmoid', 'HardSwish', 'Selu', 'LecunTanh', 'SoftSign', 'SoftPlus', 'HardTanh', 'Logit',
            'LogLog', 'Mish','HardMish', 'Softmax', 'Gelu', 'GptGelu','SIREN', 'LogSoftmax', 'get_activation']
+
+
+__all__ += ['SwiGLU', 'GeGLU', 'GptOssSwiGLU']
 
 
 class Identity(Layer):
@@ -759,6 +763,40 @@ class GptGelu(Layer):
         return gpt_gelu(x)
 
 
+class SwiGLU(Layer):
+    """SiLU(gate) * up, splitting the final feature axis into equal halves."""
+
+    def __init__(self, keep_output=False, name=None):
+        super().__init__(keep_output=keep_output, name=name)
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return swiglu(x)
+
+
+class GeGLU(Layer):
+    """GELU(gate) * up on packed halves. Gemma uses approximate=True."""
+
+    def __init__(self, approximate=False, keep_output=False, name=None):
+        super().__init__(keep_output=keep_output, name=name)
+        self.approximate = approximate
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return geglu(x, approximate=self.approximate)
+
+
+class GptOssSwiGLU(Layer):
+    """Clipped gpt-oss SwiGLU on interleaved gate/up feature pairs."""
+
+    def __init__(self, keep_output=False, name=None):
+        super().__init__(keep_output=keep_output, name=name)
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return gpt_oss_swiglu(x)
+
+
 class SIREN(Layer):
     """SIREN leverages periodic activation functions for implicit neural representations and demonstrate
     that these networks are ideally suited for representing complex natural signals and their derivatives.
@@ -806,6 +844,7 @@ def get_activation(fn_name,only_layer=False):
         trident_fn_modules = ['trident.layers.jax_activations']
     try:
         if isinstance(fn_name, str):
+            fn_name = llm_activation_name(fn_name, only_layer)
             if not only_layer and (camel2snake(fn_name)== fn_name or fn_name.lower()== fn_name):
                 if fn_name == 'p_relu' or fn_name == 'prelu':
                     return PRelu()
@@ -827,8 +866,7 @@ def get_activation(fn_name,only_layer=False):
                 return fn_name
         elif inspect.isfunction(fn_name) and getattr(fn_name, '__module__', None) == 'trident.backend.jax_ops':
             if only_layer:
-                activation_layer = get_class(snake2camel(fn_name.__name__), trident_fn_modules)
-                return activation_layer()
+                return get_activation(fn_name.__name__, only_layer=True)
             else:
                 return fn_name
 

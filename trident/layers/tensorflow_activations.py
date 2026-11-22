@@ -15,9 +15,13 @@ import tensorflow as tf
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import Layer, Sequential
 from trident.backend.tensorflow_ops import *
+from trident.layers.activation_names import llm_activation_name
 
 __all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SquaredRelu','SmoothRelu','CRelu','Silu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','HardMish','Softmax', 'Gelu', 'GptGelu','SIREN', 'get_activation']
 
+
+
+__all__ += ['SwiGLU', 'GeGLU', 'GptOssSwiGLU']
 
 
 class Identity(Layer):
@@ -609,27 +613,47 @@ class Gelu(Layer):
 
 
 class GptGelu(Layer):
-    """Self Regularized Non-Monotonic Neural Activation Function.
-    it follows:
-    ::
+    """GELU with the tanh approximation used by GPT."""
 
-        f(x) =  x * hard_tanh(softplus(x))
-
-
-    References:
-        Mish: A Self Regularized Non-Monotonic Neural Activation Function
-        https://arxiv.org/abs/1908.08681
-
-    Examples:
-        >>> HardMish()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
-        <tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)>
-
-    """
     def __init__(self,name=None):
         super(GptGelu, self).__init__(name=name)
         self._built = True
     def forward(self, x,**kwargs):
         return gpt_gelu(x)
+
+
+class SwiGLU(Layer):
+    """SiLU(gate) * up, splitting the final feature axis into equal halves."""
+
+    def __init__(self, keep_output=False, name=None):
+        super().__init__(keep_output=keep_output, name=name)
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return swiglu(x)
+
+
+class GeGLU(Layer):
+    """GELU(gate) * up on packed halves. Gemma uses approximate=True."""
+
+    def __init__(self, approximate=False, keep_output=False, name=None):
+        super().__init__(keep_output=keep_output, name=name)
+        self.approximate = approximate
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return geglu(x, approximate=self.approximate)
+
+
+class GptOssSwiGLU(Layer):
+    """Clipped gpt-oss SwiGLU on interleaved gate/up feature pairs."""
+
+    def __init__(self, keep_output=False, name=None):
+        super().__init__(keep_output=keep_output, name=name)
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return gpt_oss_swiglu(x)
 
 
 class SIREN(Layer):
@@ -677,6 +701,7 @@ def get_activation(fn_name,only_layer=False):
         trident_fn_modules = ['trident.layers.tensorflow_activations']
     try:
         if isinstance(fn_name, str):
+            fn_name = llm_activation_name(fn_name, only_layer)
             if not only_layer and (camel2snake(fn_name)== fn_name or fn_name.lower()== fn_name):
                 if fn_name == 'p_relu' or fn_name == 'prelu':
                     return PRelu()
@@ -698,8 +723,7 @@ def get_activation(fn_name,only_layer=False):
                 return fn_name
         elif inspect.isfunction(fn_name) and getattr(fn_name, '__module__', None) == 'trident.backend.tensorflow_ops':
             if only_layer:
-                activation_layer = get_class(snake2camel(fn_name.__name__), trident_fn_modules)
-                return activation_layer()
+                return get_activation(fn_name.__name__, only_layer=True)
             else:
                 return fn_name
 

@@ -15,7 +15,6 @@ import gc
 import jax
 import jaxlib
 import jax.numpy as jnp
-from jax.lib import xla_bridge
 from trident.backend import common
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, \
     get_session, set_session, get_session_value, \

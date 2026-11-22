@@ -133,6 +133,8 @@ __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_te
            'xyxy2xywh', 'bbox_iou',
            'bbox_giou', 'bbox_ciou', 'bbox_diou', 'nms']
 
+__all__ += ['swiglu', 'geglu', 'gpt_oss_swiglu', 'squared_relu']
+
 from math import e, nan, inf, pi
 
 __all__.extend(['e', 'pi', 'nan', 'inf'])
@@ -3181,7 +3183,40 @@ def gpt_gelu(x):
 
 
     """
-    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+    return nn.functional.gelu(x, approximate='tanh')
+
+
+def squared_relu(x):
+    """Elementwise squared ReLU (ReLU²)."""
+    return torch.square(torch.relu(x))
+
+
+def _split_gate(x, interleaved=False):
+    if x.ndim == 0 or x.shape[-1] % 2:
+        raise ValueError("Gated activations require an even final dimension")
+    if interleaved:
+        return x[..., ::2], x[..., 1::2]
+    return x.chunk(2, dim=-1)
+
+
+def swiglu(x):
+    """Compute SiLU(gate) * up for packed [..., gate | up] projections."""
+    gate, up = _split_gate(x)
+    return silu(gate) * up
+
+
+def geglu(x, approximate=False):
+    """Compute GELU(gate) * up. Set approximate=True for Gemma's tanh GELU."""
+    gate, up = _split_gate(x)
+    return nn.functional.gelu(gate, approximate='tanh' if approximate else 'none') * up
+
+
+def gpt_oss_swiglu(x):
+    """gpt-oss gate for interleaved [..., gate0, up0, gate1, up1, ...]."""
+    gate, up = _split_gate(x, interleaved=True)
+    gate = gate.clamp(max=7)
+    up = up.clamp(-7, 7)
+    return gate * torch.sigmoid(1.702 * gate) * (up + 1)
 
 
 def silu(x):

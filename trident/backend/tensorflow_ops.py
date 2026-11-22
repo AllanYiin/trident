@@ -50,6 +50,8 @@ __all__ = ['get_graph', 'Tensor', 'CompositeTensor', 'is_gpu_available', 'is_ten
            'shuffle', 'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like',
            'multinomial', 'binary_cross_entropy']
 
+__all__ += ['swiglu', 'geglu', 'gpt_oss_swiglu', 'squared_relu', 'silu']
+
 from math import e, nan, inf, pi
 
 __all__.extend(['e', 'pi', 'nan', 'inf'])
@@ -3201,12 +3203,43 @@ def gelu(x: Tensor, name='gelu'):
         <Tensor: shape=(4,), dtype=float32, numpy=array([-3.6374e-03, -1.5881e-01, 0.0000e+00, 1.9546e+00], dtype=float32)>
 
     """
-    return x * 0.5 * (1.0 + tf.nn.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
+    return tf.nn.gelu(x, approximate=False, name=name)
 
 
 @numpy_compatible
 def gpt_gelu(x: Tensor, name='gpt_gelu'):
-    return 0.5 * x * (1 + tf.math.tanh(tf.math.sqrt(2 / np.pi) * (x + 0.044715 * tf.math.pow(x, 3))))
+    return tf.nn.gelu(x, approximate=True, name=name)
+
+
+def silu(x):
+    """SiLU (Swish) activation."""
+    return tf.nn.silu(x)
+
+
+def squared_relu(x):
+    """Elementwise squared ReLU (ReLU²)."""
+    return tf.square(tf.nn.relu(x))
+
+
+def swiglu(x):
+    """Compute SiLU(gate) * up for packed [..., gate | up] projections."""
+    gate, up = tf.split(x, 2, axis=-1)
+    return silu(gate) * up
+
+
+def geglu(x, approximate=False):
+    """Compute GELU(gate) * up. Set approximate=True for Gemma's tanh GELU."""
+    gate, up = tf.split(x, 2, axis=-1)
+    return tf.nn.gelu(gate, approximate=approximate) * up
+
+
+def gpt_oss_swiglu(x):
+    """gpt-oss gate for interleaved [..., gate0, up0, gate1, up1, ...]."""
+    tf.debugging.assert_equal(tf.shape(x)[-1] % 2, 0, message="gpt-oss SwiGLU requires an even final dimension")
+    gate, up = x[..., ::2], x[..., 1::2]
+    gate = tf.minimum(gate, 7)
+    up = tf.clip_by_value(up, -7, 7)
+    return gate * tf.math.sigmoid(1.702 * gate) * (up + 1)
 
 
 ############################

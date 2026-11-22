@@ -66,6 +66,8 @@ elif get_backend() == 'tensorflow':
     import tensorflow as tf
     Tensor=tf.Tensor
     from trident.backend.tensorflow_ops import *
+elif get_backend() == 'jax':
+    from trident.backend.jax_ops import *
 
 
 
