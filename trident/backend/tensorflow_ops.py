@@ -4554,30 +4554,17 @@ def random_bernoulli(x: Tensor) -> Tensor:
 
 @numpy_compatible
 def binary_cross_entropy(output, target, from_logits=False):
-    """Binary crossentropy between an output tensor and a target tensor.
-      Args:
-          target: A tensor with the same shape as `output`.
-          output: A tensor.
-          from_logits: Whether `output` is expected to be a logits tensor.
-              By default, we consider that `output`
-              encodes a probability distribution.
-      Returns:
-          A tensor.
-      """
-    output = tf.convert_to_tensor(output)
-    target = tf.broadcast_to(tf.cast(target, output.dtype), tf.shape(output))
-    if from_logits:
-        return tf.nn.sigmoid_cross_entropy_with_logits(labels=target, logits=output)
-    probability = tf.clip_by_value(output, 1e-7, 1.0 - 1e-7)
-    return -(target * tf.math.log(probability) + (1 - target) * tf.math.log1p(-probability))
+    """Elementwise binary cross entropy with the PyTorch endpoint convention."""
+    from trident.optims.loss_kernels import binary_cross_entropy as bce
+    return bce(output, target, from_logits)
 
 
 def cross_entropy(output, target, from_logits=False):
     if not from_logits:
-        output = output.sigmoid()
-    output = output.clamp(epsilon(), 1.0 - epsilon())
-    target = target.clamp(epsilon(), 1.0 - epsilon())
-    loss = -target * tf.log(output)  # (1.0 - target) * tf.log(1.0 - output)
+        output = tf.math.sigmoid(output)
+    output = tf.clip_by_value(output, epsilon(), 1.0 - epsilon())
+    target = tf.clip_by_value(target, epsilon(), 1.0 - epsilon())
+    loss = -target * tf.math.log(output)  # (1.0 - target) * tf.log(1.0 - output)
     return loss
 
 
@@ -4593,7 +4580,7 @@ def binary_hinge(output, target, margin=1, pos_weight=1.0):
             of class imbalance.
     """
     target_shifted = 2 * target - 1  # [0, 1] -> [-1, 1]
-    hinge = (margin - output * target_shifted).relu()
+    hinge = tf.nn.relu(margin - output * target_shifted)
     hinge *= target * pos_weight + (1 - target)
     return hinge  # reduction == mean
 

@@ -2,12 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import sys
 from typing import Callable, Any
 
-import numpy as np
-import torch
-import trident.backend.dtype as Dtype
 from trident.backend.common import get_session, OrderedDict
 from trident.backend.tensorspec import *
 
@@ -30,51 +26,31 @@ elif _backend == 'jax':
 __all__ = ['Loss','_check_logit','_check_logsoftmax_logit','_check_softmax']
 
 
+PUBLIC_LOSSES = (
+    'ActiveContourLoss', 'AdaptiveWingLoss', 'BCELoss', 'BCEWithLogitsLoss',
+    'CenterLoss', 'CosineSimilarityLoss', 'CrossEntropyLoss', 'DiceLoss',
+    'EdgeLoss', 'ExponentialLoss', 'F1ScoreLoss', 'FocalLoss',
+    'GPLoss', 'GeneralizedDiceLoss', 'HardTripletLoss', 'HuberLoss',
+    'IoULoss', 'ItakuraSaitoLoss', 'KLDivergenceLoss', 'L1Loss',
+    'L2Loss', 'LovaszSoftmax', 'MSELoss', 'MS_SSIMLoss',
+    'NLLLoss', 'PerceptionLoss', 'SmoothL1Loss', 'SoftIoULoss',
+    'StyleLoss', 'TransformInvariantLoss', 'TripletLoss', 'TripletMarginLoss',
+    'TverskyLoss', 'WingLoss',
+)
+
+
 class Loss(object):
-    """Loss base class.
-    To be implemented by subclasses:
-    * `call()`: Contains the logic for loss calculation using `y_true`, `y_pred`.
-    Example subclass implementation:
-    ```python
-    class MeanSquaredError(Loss):
-      def call(self, y_true, y_pred):
-        y_pred = tf.convert_to_tensor_v2(y_pred)
-        y_true = tf.cast(y_true, y_pred.dtype)
-        return tf.reduce_mean(math_ops.square(y_pred - y_true), axis=-1)
-    ```
-    When used with `tf.distribute.Strategy`, outside of built-in training loops
-    such as `tf.keras` `compile` and `fit`, please use 'SUM' or 'NONE' reduction
-    types, and reduce losses explicitly in your training loop. Using 'AUTO' or
-    'SUM_OVER_BATCH_SIZE' will raise an error.
-    Please see this custom training [tutorial](
-      https://www.tensorflow.org/tutorials/distribute/custom_training) for more
-    details on this.
-    You can implement 'SUM_OVER_BATCH_SIZE' using global batch size like:
-    ```python
-    with strategy.scope():
-      loss_obj = tf.keras.losses.CategoricalCrossentropy(
-          reduction=tf.keras.losses.Reduction.NONE)
-      ....
-      loss = (tf.reduce_sum(loss_obj(labels, predictions)) *
-              (1. / global_batch_size))
-    ```
+    """Base for Trident losses called as loss(output, target).
+
+    Subclasses implement forward(). batch_sum sums over examples and averages
+    the remaining coordinates. batch_mean averages all coordinates.
     """
 
     def __init__(self, reduction='mean', sample_weight=None, axis=None, enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,name=None, **kwargs):
-        """Initializes `Loss` class.
-        Args:
-          reduction: (Optional) Type of `tf.keras.losses.Reduction` to apply to
-            loss. Default value is `AUTO`. `AUTO` indicates that the reduction
-            option will be determined by the usage context. For almost all cases
-            this defaults to `SUM_OVER_BATCH_SIZE`. When used with
-            `tf.distribute.Strategy`, outside of built-in training loops such as
-            `tf.keras` `compile` and `fit`, using `AUTO` or `SUM_OVER_BATCH_SIZE`
-            will raise an error. Please see this custom training [tutorial](
-              https://www.tensorflow.org/tutorials/distribute/custom_training)
-            for more details.
-          name: Optional name for the op.
-        """
-        assert reduction.lower() in ['mean', 'sum', 'batch_sum', 'batch_mean', 'none']
+        if not isinstance(reduction, str) or reduction.lower() not in ('mean', 'sum', 'batch_sum', 'batch_mean', 'batchmean', 'none'):
+            raise ValueError("unknown loss reduction: {!r}".format(reduction))
+        if enable_ohem and not 0 < ohem_thresh <= 1:
+            raise ValueError("ohem_thresh must be in (0, 1]")
         self.reduction = reduction.lower()
         self.name = name
         self._built = False
@@ -93,12 +69,12 @@ class Loss(object):
         return self._built
 
     def build(self, output,target,**kwargs):
-        pass
+        self._built = True
 
     def __call__(self, output: Tensor, target: Tensor, **kwargs):
-        target.to(output.device)
-        result = self.forward(output, target, **kwargs)
-        return result
+        if _backend == 'pytorch' and isinstance(target, torch.Tensor):
+            target = target.to(output.device)
+        return self.forward(output, target, **kwargs)
 
     def _forward_unimplemented(self, output: Any, target: Any, **kwargs) -> None:
         r"""Defines the computation performed at every call.
@@ -115,47 +91,44 @@ class Loss(object):
 
     forward: Callable[..., Any] = _forward_unimplemented
 
-    # def forward(self, output: Tensor, target: Tensor,**kwargs):
-    #   """Invokes the `Loss` instance.
-    #   Args:
-    #      output: The predicted values. shape = `[batch_size, d0, .. dN]`
-    #     target: Ground truth values. shape = `[batch_size, d0, .. dN]`, except
-    #       sparse loss functions such as sparse categorical crossentropy where
-    #       shape = `[batch_size, d0, .. dN-1]`
-    #
-    #   Returns:
-    #     Loss values with the shape `[batch_size, d0, .. dN-1]`.
-    #   """
-    #   NotImplementedError('Must be implemented in subclasses.')
-
-    def _get_reduction(self, loss:'Tensor'):
-        reduction_axis = list(range(ndim(loss)))
-        if ndim(loss) == 0 or self.reduction == 'none':
+    def _get_reduction(self, loss):
+        if self.reduction == 'none':
             return loss
-        if ndim(loss) >= 2 and self.reduction == 'batch_sum':
-            loss = reshape(loss, (int_shape(loss)[0], -1))
-            return loss.sum(0).mean()
-        elif ndim(loss) >= 2 and self.reduction == 'batch_mean':
-            loss = reshape(loss, (int_shape(loss)[0], -1))
-            return loss.mean(0).mean()
-        elif self.reduction in ('mean', 'batch_mean'):
-            if loss.data.dtype == Dtype.float16:
-                loss=loss.view(-1)
-                loss=loss/len(loss)
-                return loss.sum()
-            else:
-                return loss.mean()
-        elif self.reduction in ('sum', 'batch_sum'):
-            return loss.sum()
-        else:
+        if self.reduction == 'batchmean' and len(loss.shape):
+            if _backend == 'tensorflow':
+                return tf.reduce_sum(loss) / tf.cast(tf.shape(loss)[0], loss.dtype)
+            return loss.sum() / loss.shape[0]
+        if _backend == 'tensorflow':
+            if self.reduction in ('mean', 'batch_mean'):
+                return tf.reduce_mean(loss)
+            if self.reduction == 'batch_sum' and loss.shape.rank != 0:
+                return tf.reduce_mean(tf.reduce_sum(loss, axis=0))
+            return tf.reduce_sum(loss)
+        if self.reduction in ('mean', 'batch_mean'):
             return loss.mean()
+        if self.reduction == 'batch_sum' and loss.ndim > 0:
+            return loss.sum(axis=0).mean()
+        return loss.sum()
 
     def _handel_abnormal(self, loss):
-        if any_abnormal_number(loss):
+        if _backend == 'tensorflow':
+            return tf.debugging.check_numerics(loss, "{} produced nonfinite loss".format(self.name))
+        if _backend == 'jax':
+            # Traced values cannot be inspected in Python. Preserve NaN/Inf for
+            # the caller's compiled finite-gradient checks.
+            if isinstance(loss, jax.core.Tracer):
+                return loss
+            finite = jax.numpy.all(jax.numpy.isfinite(loss))
+        else:
+            finite = torch.isfinite(loss).all()
+        if not finite:
             raise FloatingPointError("{} produced nonfinite loss".format(self.name))
         return loss
 
-    def _do_ohem(self, loss: Tensor):
+    def _do_ohem(self, loss):
+        if self.enable_ohem and len(loss.shape):
+            from trident.optims.loss_kernels import hard_examples
+            return hard_examples(loss, self.ohem_thresh)[0]
         return loss
 
     @property
@@ -191,45 +164,25 @@ class Loss(object):
            self._signature.outputs=new_output
 
 
-def _check_logsoftmax_logit(x:Tensor,axis=1):
+def _class_axis(axis):
+    return (1 if _backend == 'pytorch' else -1) if axis is None else axis
+
+
+def _check_logsoftmax_logit(x: Tensor, axis=1):
     if _backend == 'pytorch':
-        if axis is None:
-            axis = 1
+        bounded = torch.clamp_max(x, 0)
     elif _backend == 'tensorflow':
-        if axis is None:
-            axis = -1
-
-    if reduce_max(x) <= 0:
-        output_exp = exp(x).sum(axis=axis)
-        return reduce_mean(abs(1-output_exp))<0.2
-    return False
+        bounded = tf.minimum(x, tf.zeros_like(x))
+    else:
+        bounded = jax.numpy.minimum(x, 0)
+    return (reduce_max(x) <= 0) & (reduce_mean(abs(1 - reduce_sum(exp(bounded), axis=_class_axis(axis)))) < .2)
 
 
-def _check_softmax(x:Tensor,axis=1):
-    if _backend == 'pytorch':
-        if axis is None:
-            axis = 1
-    elif _backend == 'tensorflow':
-        if axis is None:
-            axis = -1
-
-    if reduce_min(x) >=0 and reduce_max(x) <=1:
-        output= x.sum(axis=axis)
-        return reduce_mean(abs(1-output))<0.2
-    return False
-
-def _check_logit(x:Tensor,axis=None):
-    if _backend == 'pytorch':
-        if axis is None:
-            axis = 1
-    elif _backend == 'tensorflow':
-        if axis is None:
-            axis = -1
-    x = to_numpy(x)
-    if 0 <= reduce_min(x)<= reduce_max(x) <= 1:
-        return abs(1 - x.sum(axis=axis)).mean() < 0.05
-    return False
+def _check_softmax(x: Tensor, axis=1):
+    return ((reduce_min(x) >= 0) & (reduce_max(x) <= 1)
+            & (reduce_mean(abs(1 - reduce_sum(x, axis=_class_axis(axis)))) < .2))
 
 
-
-
+def _check_logit(x: Tensor, axis=None):
+    return ((reduce_min(x) >= 0) & (reduce_max(x) <= 1)
+            & (reduce_mean(abs(1 - reduce_sum(x, axis=_class_axis(axis)))) < .05))

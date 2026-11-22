@@ -60,6 +60,8 @@ plan.start_now()
 
 
 
+設定 `with_loss()` 時，各後端的類別軸、權重與 reduction 可查閱[跨後端 loss 定義](losses.md)。
+
 ## 設定 learning rate warmup
 
 在設定 optimizer 後、呼叫 `plan.start_now()` 前，可以替每個模型分別設定暖身。例如，讓第一組模型先暖身 500 次參數更新，再進入 cosine 排程，第二組則在暖身後維持固定 LR。

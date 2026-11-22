@@ -38,7 +38,7 @@ __all__ += ['swiglu', 'geglu', 'gpt_oss_swiglu', 'squared_relu']
 
 from math import e, nan, inf, pi
 
-__all__.extend(['e', 'pi', 'nan', 'inf'])
+__all__.extend(['e', 'pi', 'nan', 'inf', 'binary_cross_entropy'])
 
 Tensor = jax.Array
 
@@ -3565,27 +3565,20 @@ def split(x: Tensor, num_splits=2, axis=-1):
 #         onehot = jnp.transpose(axes)
 #     return onehot
 
-@numpy_compatible
 def binary_cross_entropy(output, target, from_logits=False):
-    """Binary crossentropy between an output tensor and a target tensor.
-      Args:
-          target: A tensor with the same shape as `output`.
-          output: A tensor.
-          from_logits: Whether `output` is expected to be a logits tensor.
-              By default, we consider that `output`
-              encodes a probability distribution.
-      Returns:
-          A tensor.
-      """
-    if from_logits:
-        pass
-    else:
-        output = sigmoid(output)
-    if isinstance(target,(_float,_int )):
-        target=(ones_like(output)*float(target)).to(output.dtype).to(output.device)
-    bce = target *  jnp.log(jnp.clip(output,1e-7,1))
-    bce =bce+ (1 - target) * jnp.log(jnp.clip(1 - output,1e-7,1))
-    return -bce
+    """Elementwise binary cross entropy with the PyTorch endpoint convention."""
+    from trident.optims.loss_kernels import binary_cross_entropy as bce
+    return bce(output, target, from_logits)
+
+
+def cross_entropy(output, target, from_logits=False):
+    # Historical elementwise Trident helper, distinct from CrossEntropyLoss.
+    probability = output if from_logits else jax.nn.sigmoid(output)
+    return -jnp.clip(target, epsilon(), 1 - epsilon()) * jnp.log(jnp.clip(probability, epsilon(), 1 - epsilon()))
+
+
+def binary_hinge(output, target, margin=1, pos_weight=1.0):
+    return jax.nn.relu(margin - output * (2 * target - 1)) * (target * pos_weight + 1 - target)
 
 
 def bbox_iou(bboxes1: Tensor, bboxes2: Tensor):

@@ -14,6 +14,30 @@ from trident.optims.pytorch_regularizers import l1_reg, l2_reg
 from trident.callbacks import ConstantWarmup, CosineLR, CosineWarmup, ExponentialWarmup, LinearWarmup
 
 
+@pytest.mark.parametrize('kind', ['nll', 'bce', 'huber', 'kl'])
+def test_native_loss_definitions_and_gradients(kind):
+    from trident.optims import pytorch_losses as losses
+
+    x = torch.tensor([[.1, -.6, .3], [.8, .4, -1.]], dtype=torch.float64, requires_grad=True)
+    y = torch.tensor([[.2, 0., .8], [.1, .6, .3]], dtype=x.dtype)
+    weights = x.new_tensor([.25, .5, 2.])
+    if kind == 'nll':
+        labels = torch.tensor([2, -100])
+        actual = losses.NLLLoss(sample_weight=weights)(x.log_softmax(1), labels)
+        expected = F.nll_loss(x.log_softmax(1), labels, weight=weights)
+    elif kind == 'bce':
+        actual = losses.BCEWithLogitsLoss(pos_weight=weights)(x, y)
+        expected = F.binary_cross_entropy_with_logits(x, y, pos_weight=weights)
+    elif kind == 'huber':
+        actual = losses.HuberLoss(delta=.3)(x, y)
+        expected = F.huber_loss(x, y, delta=.3)
+    else:
+        actual = losses.KLDivergenceLoss(reduction='batchmean')(x.log_softmax(1), y)
+        expected = F.kl_div(x.log_softmax(1), y, reduction='batchmean')
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(torch.autograd.grad(actual, x)[0], torch.autograd.grad(expected, x)[0])
+
+
 @pytest.mark.parametrize('policy, expected', [
     (LinearWarmup, [.0625, .296875, .53125, .765625, 1]),
     (CosineWarmup, [.0625, .1997936963, .53125, .8627063037, 1]),

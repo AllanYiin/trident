@@ -294,7 +294,7 @@ class Optimizer(Trackable):
 
         param_set = set()
         for group in self.param_groups:
-            param_set.update(set([p.ref() for p in param_group['params']]))
+            param_set.update(p.ref() for p in group['params'])
 
         if not param_set.isdisjoint(set([p.ref() for p in param_group['params']])):
             raise ValueError("some parameters appear in more than one parameter group")

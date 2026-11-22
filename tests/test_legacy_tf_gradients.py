@@ -15,6 +15,22 @@ from trident.optims.tensorflow_optimizers import Adam, AdamW, LARS, PlainRAdam, 
 from trident.optims.trainers import TrainingPlan
 
 
+def test_dynamic_classification_uses_valid_weight_on_each_batch():
+    from trident.optims.tensorflow_losses import CrossEntropyLoss
+    criterion = CrossEntropyLoss(from_logits=True, sample_weight=[1., 3., .5])
+
+    @tf.function(input_signature=[tf.TensorSpec((None, None, 3), tf.float32),
+                                  tf.TensorSpec((None, None), tf.int64)])
+    def compute(scores, labels):
+        return criterion(scores, labels), criterion.gradient_denominator
+
+    for labels, denominator in [([[0, 1]], 4.), ([[2], [-100]], .5), ([[-100]], 0.)]:
+        indices = tf.constant(labels, tf.int64)
+        value, weight = compute(tf.zeros((*indices.shape, 3)), indices)
+        assert float(weight) == pytest.approx(denominator)
+        assert float(value) == pytest.approx(np.log(3.) if denominator else 0.)
+
+
 def collect_gradients(batch_size, accumulate, threshold=None, rates=None, warmup=None):
     schema = DatasetSchema([FieldSpec("x", metadata={"role": "input"}),
                             FieldSpec("target", kind="label", metadata={"role": "target"})])
@@ -59,6 +75,28 @@ def test_tf_warmup_only_counts_actual_updates(warmup, expected):
     rates = []
     collect_gradients(1, 2, rates=rates, warmup=warmup)
     assert rates == pytest.approx(expected)
+
+
+@pytest.mark.parametrize('configure_optimizer_first', [True, False])
+def test_center_loss_parameters_are_registered_and_updated(configure_optimizer_first):
+    from trident.optims.tensorflow_losses import CenterLoss
+
+    schema = DatasetSchema([FieldSpec("x", metadata={"role": "input"}),
+                            FieldSpec("target", kind="label", metadata={"role": "target"})])
+    samples = [dict(x=np.ones(1, np.float32), target=np.int64(1)) for _ in range(2)]
+    provider = DataProvider(train=Dataset(samples, schema=schema)).for_trident_trainer("train", batch_size=2)
+    item = Model(input_shape=(1,), output=Dense(2, use_bias=False))
+    criterion = CenterLoss(num_classes=2, feat_dim=2)
+    if configure_optimizer_first:
+        item.with_optimizer('Adam')
+    item.with_loss(criterion)
+    if not configure_optimizer_first:
+        item.with_optimizer('Adam')
+    before = criterion.centers.numpy().copy()
+    assert any(p is criterion.centers for g in item.optimizer.param_groups for p in g['params'])
+    TrainingPlan().add_training_item(item).with_data_loader(provider).with_batch_size(2).start_now()
+    np.testing.assert_array_equal(criterion.centers.numpy()[0], before[0])
+    assert not np.array_equal(criterion.centers.numpy()[1], before[1])
 
 
 @pytest.mark.parametrize('optimizer', [Adam, AdamW, RAdam, PlainRAdam, SGD, LARS])

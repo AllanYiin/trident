@@ -4529,8 +4529,7 @@ def binary_hinge(output, target, margin=1, pos_weight=1.0):
     """
     target_shifted = 2 * target - 1  # [0, 1] -> [-1, 1]
     hinge = (margin - output * target_shifted).relu()
-    hinge *= target * pos_weight + (1 - target)
-    return hinge  # reduction == mean
+    return hinge * (target * pos_weight + (1 - target))
 
 
 ############################

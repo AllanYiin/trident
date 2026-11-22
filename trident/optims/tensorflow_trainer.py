@@ -403,10 +403,20 @@ class Model(ModelBase,Layer):
         else:
             self.optimizer = optimizer(params, **kwargs)
 
+        for loss in self._losses.values():
+            self._register_loss_parameters(loss)
         self.base_lr = kwargs.get('lr', kwargs.get('learning_rate', 1e-3))
         self.training_context['current_lr'] = self.base_lr
 
         return self
+
+    def _register_loss_parameters(self, loss):
+        if self.optimizer is None:
+            return
+        owned = {id(p) for group in self.optimizer.param_groups for p in group['params']}
+        new = [v for v in getattr(loss, 'trainable_variables', ()) if id(v) not in owned]
+        if new:
+            self.optimizer.add_param_group({'params': new})
 
     def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
         alias = name
@@ -482,6 +492,7 @@ class Model(ModelBase,Layer):
                         -1].activation == log_softmax and k in self._losses[alias].signature.inputs:
                         self._losses[alias].is_logsoftmax = True
 
+        self._register_loss_parameters(self._losses[alias])
         self.loss_weights[alias] = float(loss_weight)
         self._losses[alias].__name__ = alias
         # self._losses[alias].signature = argnames
@@ -1235,6 +1246,8 @@ class Model(ModelBase,Layer):
             if need_backward:
                 owned = {id(variable if isinstance(variable, tf.Variable) else variable.value)
                          for variable in self._model.trainable_variables}
+                for loss in self._losses.values():
+                    owned.update(id(v) for v in getattr(loss, 'trainable_variables', ()))
                 variables = tuple(variable for variable in grad_tape.watched_variables()
                                   if id(variable) in owned)
                 accumulated = context.setdefault('gradient_terms', {})

@@ -85,6 +85,7 @@ elif get_backend()=='jax':
     from trident.backend.jax_serialization import *
     from trident.layers.jax_activations import *
     from trident.layers.jax_layers import *
+    from trident.optims.jax_losses import *
 
 elif get_backend()=='onnx':
     import_or_install('onnx_runtime')

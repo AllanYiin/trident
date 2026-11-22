@@ -2,44 +2,46 @@
 
 ## SNAPSHOT — 當前狀態
 
-最後更新：2026-11-22T17:07+08:00
+最後更新：2026-11-23T00:32+08:00
 交接狀態：verified
 
 ### 目標與授權範圍
 
-在既有 with_learning_rate_scheduler 提供四種暖身策略與更新預算比例，完成跨 trainer 驗證。
+檢查 loss 基礎類、對齊 PyTorch／TensorFlow／JAX 定義與梯度，補上 JAX loss 入口與必要的損失函數。
 
 ### 目前進度
 
-四種策略、舊整數 epoch 與線性 checkpoint 相容功能已在工作樹。已補上 optimizer 配置後新增參數群組時的雙重暖身檢查及回歸測試。
+新增 trident/optims/jax_losses.py，三後端共用 34 個公開 loss 名稱（含 TripletMarginLoss 別名）。工作樹包含共用公式、trainer 可訓練中心參數、文件及 CI 測試。
 
 ### 下一步
 
-暖身功能驗收完成。ToolRegistry 子程序逾時在原始 HEAD 也能重現，可另案處理。
+JAX loss 模組與跨後端對齊已驗證。ToolRegistry 子程序逾時仍是獨立的已知問題。
 
 ### DECISIONS
 
-- LinearWarmup、CosineWarmup、ExponentialWarmup 和 ConstantWarmup 共用每個 optimizer 的成功更新計數。
-- from_ratio 依明示的 optimizer 更新預算向上取整。固定暖身維持指定倍率直到下一步交接。
-- 設定時、首次更新前及群組數改變時檢查內建暖身衝突。一般模型自訂訓練 checkpoint 同時保存 optimizer 和 scheduler，語言模型由訓練 checkpoint 自動保存。
+- 以 Trident PyTorch 的 reduction、加權分類平均分母及 SoftIoU 符號為對照。保留 PyTorch 的 channels-first 與 TensorFlow/JAX 的 channels-last 慣例。
+- 加入 BCEWithLogitsLoss、HuberLoss、TverskyLoss。JAX 用顯式參數或 PRNG key 處理可訓練中心與隨機影像／梯度懲罰。
+- 測試在獨立程序依 TRIDENT_BACKEND 載入，TensorFlow 以 tf.function、JAX 以 jax.jit 與自動微分比對。
 
 ### LANDMINES
 
-- 舊 test/ 示範另需 vocabs.txt。
-- Windows 環境中 ToolRegistry 的加法工具逾時，工作樹及原始 HEAD 單獨執行皆同樣失敗。
+- JAX 驗證為 Windows CPU 的 jax/jaxlib 0.4.35，未驗證 JAX GPU 或 TPU。
+- AdaCos 為 PyTorch 舊檔案中的實驗性分數頭，未列入 34 個公開 loss 名稱。
 
 ### 證據索引
 
-- trident/callbacks/warmup.py、trident/backend/model.py、trident/optims/language/trainer.py
-- tests/test_legacy_gradients.py、tests/test_legacy_tf_gradients.py、tests/test_language_core.py
-- docs/zh-tw/quickstart.md
+- trident/optims/jax_losses.py、trident/optims/losses.py、trident/optims/loss_kernels.py、trident/optims/loss_weights.py
+- trident/optims/pytorch_losses.py、trident/optims/tensorflow_losses.py、trident/optims/tensorflow_trainer.py
+- tests/loss_backend_probe.py、tests/test_loss_parity.py、tests/test_legacy_gradients.py、tests/test_legacy_tf_gradients.py
+- docs/zh-tw/losses.md、.github/workflows/legacy-training.yml
 
 ### VALIDATION
 
-- Windows 完整 tests/ 與基準比對 — FAIL：170 passed、1 skipped、1 failed。唯一失敗是 test_tool_execution_timeout_and_registry 的 10 秒逾時，已在獨立解出的 HEAD 同條件重現。暖身與 checkpoint 測試通過。
-- TensorFlow CPU — PASS：tests/test_legacy_fit.py 和 tests/test_legacy_tf_gradients.py 共 15 passed。
-- 動態參數群組暖身衝突 — PASS：修正前，首次更新前及訓練中加入帶 warmup 的 AdamW 參數群組，兩個案例均未報錯。回歸測試檢查錯誤發生時各組 LR 與成功更新計數。
-- 語法與差異格式 — PASS：變更程式與測試 py_compile、git diff --check 通過。
+- Windows 完整 tests/ 回歸 — FAIL：178 passed、1 skipped、1 failed。唯一失敗 test_tool_execution_timeout_and_registry 是先前已記錄的 10 秒工具子程序逾時。獨立 TensorFlow 後端已另測。
+- JAX 公開入口 — PASS：trident.get_loss 可取得全部 34 個名稱。三類等分布交叉熵 1.0986123085，對零 logits 的梯度為 [1/3, -2/3, 1/3]。
+- TensorFlow 訓練與動態形狀 — PASS：tests/test_legacy_fit.py 與 tests/test_legacy_tf_gradients.py 合計 19 passed，包括兩種 optimizer/loss 設定順序的 CenterLoss 更新及圖模式的有效分母。
+- 三後端數值、形狀與反向傳播 — PASS：tests/test_loss_parity.py 的兩組跨後端比較通過。最終 80 組案例，涵蓋 34 個公開名稱與 3 個函數式 API。比對輸出形狀、值、預測梯度和中心梯度，rtol=3e-5、atol=2e-6。
+- 語法與差異格式 — PASS：變更與新增共 18 個 Python 檔案通過 AST 解析，git diff --check 通過。
 
 # HISTORY
 
@@ -117,3 +119,10 @@
 <!-- devnote-review:b229e09680d6bfc5471ce54b -->
 
 以兩個失敗案例重現 AdamW 在新增群組後可繞過雙重暖身檢查，修正後執行完整 tests/ 與獨立 TensorFlow 測試。
+
+
+## [2026-11-23T00:32+08:00] 補上 JAX loss 模組並驗證三後端值與梯度
+
+<!-- devnote-review:d51e73fa95cdef51d7ffda77 -->
+
+將 34 個公開 loss 名稱接到三後端，補齊穩定二元 logits、Huber 及 Tversky，修正 TensorFlow 歸約與軟標籤、PyTorch GP 回傳值和 hinge 反傳。
