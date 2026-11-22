@@ -4,6 +4,7 @@ from pathlib import Path
 
 import torch
 
+from trident.callbacks.warmup import WarmupScheduler, resolve_warmup
 from trident.optims.pytorch_trainer import LanguageModel
 
 from .checkpoint import atomic_torch_save, cpu_state, tokenizer_config
@@ -127,12 +128,21 @@ class CausalLanguageModel(LanguageModel):
         method()
         return self
 
-    def with_learning_rate_scheduler(self, lr_schedule, **kwargs):
+    def with_learning_rate_scheduler(self, lr_schedule=None, warmup=0, **kwargs):
         if self.optimizer is None:
             raise RuntimeError("configure optimizer before scheduler")
-        self._language_scheduler = lr_schedule(self.optimizer, **kwargs) if callable(lr_schedule) else lr_schedule
-        if getattr(self._language_scheduler, "optimizer", None) is not self.optimizer:
+        warmup = resolve_warmup(warmup, self.optimizer)
+        if kwargs and not callable(lr_schedule):
+            raise TypeError("scheduler options require a scheduler factory")
+        if warmup:
+            # Native scheduler constructors may immediately set their first LR.
+            base_lrs = [float(g['lr'] if callable(lr_schedule) else g.get('initial_lr', g['lr']))
+                        for g in self.optimizer.param_groups]
+        scheduler = lr_schedule(self.optimizer, **kwargs) if callable(lr_schedule) else lr_schedule
+        if scheduler is not None and getattr(scheduler, "optimizer", None) is not self.optimizer:
             raise ValueError("scheduler must own this optimizer")
+        self._language_scheduler = WarmupScheduler(warmup, self.optimizer, scheduler, base_lrs) if warmup else scheduler
+        self.lr_scheduler = self._language_scheduler
         return self
 
     def with_loss(self, loss, loss_weight=1.0, name="", **kwargs):
@@ -230,12 +240,15 @@ class CausalLanguageModel(LanguageModel):
     def config_dict(self):
         model = unwrap_model(self._model)
         config = getattr(model, "config", None)
+        scheduler = self._language_scheduler
+        scheduler_config = scheduler.config_dict() if isinstance(scheduler, WarmupScheduler) else (
+            None if scheduler is None else type(scheduler).__name__)
         return {"model_type": type(model).__module__ + "." + type(model).__name__,
                 "model": config.to_dict() if hasattr(config, "to_dict") else None,
                 "objective": self.objective.config_dict(), "lora": self.lora_config,
                 "precision": self.precision, "accumulation_steps": self.accumulation_steps,
                 "optimizer": self._optimizer_config,
-                "scheduler": None if self._language_scheduler is None else type(self._language_scheduler).__name__,
+                "scheduler": scheduler_config,
                 "grad_clipping": self.grad_clipping_threshold if self.grad_clipping_by_norm else None,
                 "tokenizer": tokenizer_config(self.tokenizer),
                 "extra_losses": {name: weight for name, (_, weight) in self.extra_losses.items()},

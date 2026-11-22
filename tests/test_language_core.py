@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import torch
 
+from trident.callbacks import ConstantWarmup, CosineWarmup, ExponentialWarmup, LinearWarmup
 from trident.data.pipeline import (ByteTokenizer, CausalLMCollator, Dataset, Iterator,
                                    PackedCollator, PreferenceCollator, SFTCollator)
 from trident.optims.language import (CausalLM, CausalLMConfig, CausalLanguageModel,
@@ -151,24 +152,34 @@ def test_preference_mismatched_prompt_and_truncation_rejected():
                    "rejected": [{"role": "user", "content": "y"}, {"role": "assistant", "content": "b"}]}])
 
 
-def test_exact_resume_with_rng_and_scheduler(tmp_path):
+@pytest.mark.parametrize("warmup", [0, LinearWarmup(2), LinearWarmup(4), CosineWarmup(4),
+                                    ExponentialWarmup(4), ConstantWarmup(4), "cosine"])
+def test_exact_resume_with_rng_and_scheduler(tmp_path, warmup):
+    explicit = CosineWarmup.from_ratio(.03, total_updates=12_000) if warmup == "cosine" else warmup
     initial = tiny(attention_dropout=0.15)
     baseline_model, partial_model = copy.deepcopy(initial), copy.deepcopy(initial)
     baseline_plan, baseline = plan_for(baseline_model, batches(), accumulation=2)
-    baseline.with_learning_rate_scheduler(torch.optim.lr_scheduler.StepLR, step_size=1, gamma=0.9)
+    baseline.with_learning_rate_scheduler(torch.optim.lr_scheduler.StepLR, warmup=explicit, step_size=1, gamma=0.9)
     baseline_plan.repeat_epochs(2)
     torch.manual_seed(99)
     baseline_plan.start_now()
     partial_plan, partial = plan_for(partial_model, batches(), accumulation=2)
-    partial.with_learning_rate_scheduler(torch.optim.lr_scheduler.StepLR, step_size=1, gamma=0.9)
+    partial.with_learning_rate_scheduler(torch.optim.lr_scheduler.StepLR, warmup=warmup, step_size=1, gamma=0.9)
     partial_plan.repeat_epochs(2).with_checkpointing(tmp_path / "ckpt", every_updates=1).limit_updates(2)
     torch.manual_seed(99)
     partial_plan.start_now()
     resume_plan, resumed = plan_for(tiny(attention_dropout=0.15), batches(), accumulation=2)
-    resumed.with_learning_rate_scheduler(torch.optim.lr_scheduler.StepLR, step_size=1, gamma=0.9)
+    resumed.with_learning_rate_scheduler(torch.optim.lr_scheduler.StepLR, warmup=explicit, step_size=1, gamma=0.9)
     resume_plan.repeat_epochs(2).resume_from(partial_plan.last_checkpoint).start_now()
     assert baseline.optimizer_updates == resumed.optimizer_updates == 6
     assert baseline.optimizer.param_groups[0]["lr"] == resumed.optimizer.param_groups[0]["lr"]
+    if warmup:
+        assert [event["lr"] for event in resumed.history] == [event["lr"] for event in baseline.history]
+        assert baseline.history[0]["lr"] == pytest.approx(.05 * .01)
+        if explicit.steps < len(baseline.history):
+            last_factor = .01 if isinstance(explicit, ConstantWarmup) else 1
+            assert baseline.history[explicit.steps - 1]["lr"] == pytest.approx(.05 * last_factor)
+            assert baseline.history[explicit.steps]["lr"] == pytest.approx(.05)
     for left, right in zip(baseline_model.parameters(), resumed.model.parameters()):
         torch.testing.assert_close(left, right, atol=0, rtol=0)
 

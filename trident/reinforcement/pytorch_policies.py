@@ -468,10 +468,6 @@ class PolicyBase(Model):
     def do_on_batch_end(self):
         self.training_context['time_batch_progress'] += (time.time() - self.training_context['time_batch_start'])
         self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_batch_start'])
-        if (self.training_context['steps'] + 1) % ctx.epoch_equivalent == 0:
-            if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // ctx.epoch_equivalent:
-                self.adjust_learning_rate(self.training_context['base_lr'])
-                self.warmup = 0
 
     def with_tensorboard(self):
         make_dir_if_need(os.path.join(working_directory, 'Logs'))
@@ -1021,10 +1017,6 @@ class ActorCriticPolicy(MuiltiNetwork):
     def do_on_batch_end(self):
         self.training_context['time_batch_progress'] += (time.time() - self.training_context['time_batch_start'])
         self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_batch_start'])
-        if (self.training_context['steps'] + 1) % ctx.epoch_equivalent == 0:
-            if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // ctx.epoch_equivalent:
-                self.adjust_learning_rate(self.training_context['base_lr'])
-                self.warmup = 0
 
     def do_on_get_observation_start(self):
         for callback in self.training_context['callbacks']:

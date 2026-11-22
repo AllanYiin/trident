@@ -60,6 +60,46 @@ plan.start_now()
 
 
 
+## 設定 learning rate warmup
+
+在設定 optimizer 後、呼叫 `plan.start_now()` 前，可以替每個模型分別設定暖身。例如，讓第一組模型先暖身 500 次參數更新，再進入 cosine 排程，第二組則在暖身後維持固定 LR。
+
+```python
+from trident.callbacks import CosineLR, LinearWarmup
+
+warmup = LinearWarmup(steps=500, start_factor=0.01)
+net1.with_learning_rate_scheduler(CosineLR(period=2000), warmup=warmup)
+net2.with_learning_rate_scheduler(warmup=warmup)
+```
+
+第一次更新使用各參數群組基準 LR 的 1%，第 500 次更新達到 100%。可依希望 LR 如何變化選擇暖身方式。
+
+| 希望的更新方式 | 暖身設定 | 前五次更新的基準 LR 倍率（約） |
+|---|---|---|
+| 每次增加相同的量 | `LinearWarmup(5, .01)` | .01、.258、.505、.753、1 |
+| 起步與收尾平緩，中段增幅最大 | `CosineWarmup(5, .01)` | .01、.155、.505、.855、1 |
+| 從很小的 LR 按固定倍數放大 | `ExponentialWarmup(5, .01)` | .01、.032、.1、.316、1 |
+| 先用固定低 LR 訓練，再切換到主排程 | `ConstantWarmup(5, .01)` | .01、.01、.01、.01、.01 |
+
+前三種曲線在最後一次暖身更新達到基準 LR，因此 `steps=1` 時直接使用基準 LR。固定暖身會用指定倍率完成全部更新，下一次才交給主排程。指數暖身需要大於零的 `start_factor`。
+
+知道訓練預計會執行幾次 optimizer 更新時，也可以用比例設定長度。以下設定把 12,000 次更新的前 3%（360 次）分配給暖身。四種曲線都支援 `from_ratio()`。比例範圍為 `0 < ratio <= 1`，遇到不足一步時向上取整。
+
+```python
+from trident.callbacks import CosineWarmup
+
+warmup = CosineWarmup.from_ratio(0.03, total_updates=12_000, start_factor=0.01)
+net1.with_learning_rate_scheduler(CosineLR(period=2000), warmup=warmup)
+```
+
+這組設定也可簡寫為 `net1.with_learning_rate_scheduler(CosineLR(period=2000), warmup="cosine")`。從 INI 讀取 `warmup="cosine"` 時，可將讀到的值直接傳給同一個參數。此簡寫固定使用 360 次成功更新，從各參數群組基準 LR 的 1% 升至 100%。若要依其他訓練預算計算暖身長度，使用上面的 `from_ratio()` 傳入自己的 `total_updates`。
+
+`total_updates` 填入該 optimizer 的預計更新次數。梯度累積完成一次才計一步，AMP overflow 跳過的更新不計步。串流資料或更新總數未知時，可直接指定 `steps`。整數寫法 `warmup=5` 的單位仍是 epoch。
+
+使用外部暖身時，請將 AdamW 或 Ranger21 的內建 warmup 關閉。若在設定後才新增參數群組，trainer 會在下一次 optimizer 更新前檢查新群組的暖身設定。
+
+`CausalLanguageModel` 接受相同的 `warmup`，主排程沿用 PyTorch 原生 scheduler。語言模型的訓練 checkpoint 會自動保存進度。一般模型的 `save_model()` 用於儲存模型權重。自訂訓練 checkpoint 時，請一併保存 `model.optimizer.state_dict()` 和 `model.lr_scheduler.state_dict()`，並依相同順序載回。
+
 ## 成果
 
 ```python

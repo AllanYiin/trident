@@ -689,6 +689,7 @@ class TrainingPlan(object):
                         trainitem.training_context['model_name'] = trainitem_name
                         start_epoch = 0 if not hasattr(trainitem, 'start_epoch') else trainitem.start_epoch
                         trainitem.training_context['waiting_to_start'] = epoch < start_epoch
+                        trainitem.training_context['only_steps'] = only_steps
 
                         if current_batch == 0:
                             trainitem.do_on_epoch_start()
@@ -822,7 +823,8 @@ class GanTrainingPlan(TrainingPlan):
         generator.training_context['gan_role'] = 'generator'
         if generator.optimizer is None:
             generator.with_optimizer(Adam, lr=2e-4, betas=(0.5, 0.999))
-        generator.with_callbacks(StepLR(frequency=5, unit='epoch', gamma=0.75))
+        if generator.lr_scheduler is None:
+            generator.with_learning_rate_scheduler(StepLR(frequency=5, unit='epoch', gamma=0.75))
         if not any([isinstance(cb, GanTileImageCallback) for cb in generator.callbacks]):
             generator.with_callbacks(GanTileImageCallback(frequency=50, unit='batch', imshow=True))
 
@@ -838,7 +840,8 @@ class GanTrainingPlan(TrainingPlan):
         discriminator.training_context['gan_role'] = 'discriminator'
         if discriminator.optimizer is None:
             discriminator.with_optimizer(Adam, lr=2e-4, betas=(0.5, 0.999))
-        discriminator.with_callbacks(StepLR(frequency=5, unit='epoch', gamma=0.75))
+        if discriminator.lr_scheduler is None:
+            discriminator.with_learning_rate_scheduler(StepLR(frequency=5, unit='epoch', gamma=0.75))
         self.discriminator = discriminator
 
         if not self.is_generator_first:
@@ -1383,6 +1386,7 @@ class GanTrainingPlan(TrainingPlan):
                             trainitem.training_context['collect_data_inteval'] = collect_data_inteval
                             trainitem.training_context['model_name'] = trainitem_name
                             trainitem.training_context['waiting_to_start'] = epoch < int(trainitem.start_epoch)
+                            trainitem.training_context['only_steps'] = only_steps
 
 
                             # if self.is_generator_first:
@@ -2076,6 +2080,7 @@ class CycleGanTrainingPlan(TrainingPlan):
                             trainitem.training_context['collect_data_inteval'] = collect_data_inteval
                             trainitem.training_context['model_name'] = trainitem_name
                             trainitem.training_context['waiting_to_start'] = epoch < int(trainitem.start_epoch)
+                            trainitem.training_context['only_steps'] = only_steps
                             if self.max_noise_intensity > 0 and trainitem.training_context[
                                 'gan_role'] == 'discriminator':
                                 current_intensity = self.min_noise_intensity + (

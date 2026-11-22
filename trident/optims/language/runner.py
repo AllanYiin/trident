@@ -10,6 +10,8 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
+from trident.callbacks.warmup import WarmupScheduler
+
 from .checkpoint import (atomic_torch_save, capture_rng, cpu_state, data_state,
                          loader_config, read_checkpoint, restore_rng)
 from .objectives import unwrap_model
@@ -262,6 +264,7 @@ def _update_window(plan, item, batches):
     global_loss = _distributed_scalar(loss_sum, item.device)
     global_tokens = int(_distributed_scalar(tokens, item.device))
     updated = False
+    applied_lr = item.optimizer.param_groups[0]["lr"]
     if global_weight and active:
         def unscale():
             for optimizer in active:
@@ -272,8 +275,12 @@ def _update_window(plan, item, batches):
         finite = not _distributed_scalar(not finite, item.device, dist.ReduceOp.MAX)
         if finite:
             def prepare_step():
+                nonlocal applied_lr
                 if item.grad_clipping_by_norm:
                     torch.nn.utils.clip_grad_norm_(parameters, item.grad_clipping_threshold, error_if_nonfinite=True)
+                if isinstance(item._language_scheduler, WarmupScheduler) and item.optimizer in active:
+                    item._language_scheduler.on_optimization_step_start(item.training_context)
+                    applied_lr = item.training_context['current_lr']
                 _notify(plan, item, "on_optimization_step_start")
 
             def step():
@@ -282,8 +289,11 @@ def _update_window(plan, item, batches):
                 item._scaler.update()
                 if any(not bool(torch.isfinite(p).all()) for p in parameters):
                     raise FloatingPointError("optimizer produced nonfinite parameters; checkpoint was not saved")
-                if item._language_scheduler is not None:
-                    item._language_scheduler.step()
+                if item._language_scheduler is not None and item.optimizer in active:
+                    if isinstance(item._language_scheduler, WarmupScheduler):
+                        item._language_scheduler.on_optimization_step_end(item.training_context)
+                    else:
+                        item._language_scheduler.step()
 
             _collective_stage(item, "optimizer preparation", prepare_step)
             _collective_stage(item, "optimizer step", step)
@@ -307,7 +317,8 @@ def _update_window(plan, item, batches):
                for key in keys}
     metrics.update(loss=global_loss / (global_weight or 1), valid_tokens=global_tokens,
                    optimizer_updates=item.optimizer_updates, microbatches=item.microbatches,
-                   lr=item.optimizer.param_groups[0]["lr"], updated=updated,
+                   lr=(applied_lr if isinstance(item._language_scheduler, WarmupScheduler)
+                       else item.optimizer.param_groups[0]["lr"]), updated=updated,
                    tokens_per_second=global_tokens / max(time.perf_counter() - started, 1e-9))
     if item.device.type == "cuda":
         metrics["peak_memory_bytes"] = torch.cuda.max_memory_allocated(item.device)
@@ -453,6 +464,7 @@ def run_language_plan(plan, only_steps=False, max_batches=math.inf, **kwargs):
         raise ValueError("repeat_epochs must be positive")
     if only_steps and (not math.isfinite(max_batches) or max_batches < 1):
         raise ValueError("only_steps requires a finite positive max_batches")
+    item.training_context['only_steps'] = only_steps
     _configure_distributed(plan, item, loader)
     if not item._prepared:
         item.prepare()

@@ -617,7 +617,35 @@ class ModelBase(object):
         self.training_context['callbacks'] = self.callbacks
         return self
 
-    def with_learning_rate_scheduler(self, lr_schedule, warmup=0, **kwargs):
+    def with_learning_rate_scheduler(self, lr_schedule=None, warmup=0, **kwargs):
+        """Configure a main LR callback and optional warmup policy (or integer epochs)."""
+        from trident.callbacks.lr_schedulers import AdjustLRCallbackBase, get_lr_scheduler
+        from trident.callbacks.warmup import WarmupScheduler, resolve_warmup
+
+        warmup = resolve_warmup(warmup, self.optimizer)
+        if lr_schedule is None and not warmup:
+            return self
+        if isinstance(lr_schedule, str):
+            name = lr_schedule
+            lr_schedule = get_lr_scheduler(name)
+            if lr_schedule is None:
+                raise ValueError("unknown learning rate scheduler: " + name)
+        if callable(lr_schedule):
+            lr_schedule = lr_schedule(**kwargs)
+        elif kwargs:
+            raise TypeError("scheduler options require a scheduler factory")
+        if lr_schedule is not None and not isinstance(lr_schedule, AdjustLRCallbackBase):
+            raise TypeError("expected a Trident learning rate scheduler")
+        if warmup:
+            lr_schedule = WarmupScheduler(warmup, self.optimizer, lr_schedule)
+        if self.lr_scheduler is not None and (warmup or isinstance(self.lr_scheduler, WarmupScheduler)):
+            self.callbacks[:] = [cb for cb in self.callbacks if cb is not self.lr_scheduler]
+        self.lr_scheduler = lr_schedule
+        self.warmup = warmup
+        if warmup:
+            self.callbacks.insert(0, lr_schedule)
+        else:
+            self.callbacks.append(lr_schedule)
         return self
 
     def with_automatic_mixed_precision_training(self, **kwargs):
@@ -942,6 +970,7 @@ class ModelBase(object):
 
     @measure_perf
     def on_optimization_step_start(self):
+        self.training_context['gradient_accumulation_steps'] = self.accumulation_steps
         for callback in self.training_context['callbacks']:
             callback.on_optimization_step_start(self.training_context)
 

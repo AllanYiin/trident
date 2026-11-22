@@ -2,46 +2,44 @@
 
 ## SNAPSHOT — 當前狀態
 
-最後更新：2026-11-19T01:34+08:00
+最後更新：2026-11-22T17:07+08:00
 交接狀態：verified
 
 ### 目標與授權範圍
 
-修正 73e08be3 梯度審查列出的斷圖、正規化、optimizer 狀態及分散式更新問題。
+在既有 with_learning_rate_scheduler 提供四種暖身策略與更新預算比例，完成跨 trainer 驗證。
 
 ### 目前進度
 
-已修改 PyTorch／TensorFlow 的 loss、trainer、optimizer、GAN 梯度窗口、TensorFlow LSTM、舊 PPO 及原生語言模型路徑。測試和 CI 變更位於工作樹。
+四種策略、舊整數 epoch 與線性 checkpoint 相容功能已在工作樹。已補上 optimizer 配置後新增參數群組時的雙重暖身檢查及回歸測試。
 
 ### 下一步
 
-提交後可在 CI 另驗 Linux。完整 CycleGAN 舊入口及多機硬體組態仍需獨立整合驗證。
+暖身功能驗收完成。ToolRegistry 子程序逾時在原始 HEAD 也能重現，可另案處理。
 
 ### DECISIONS
 
-- 加權分類 loss 以有效權重正規化，其他自訂 mean loss 可透過 callback 設 accumulation_weight。零有效權重不建立空的 optimizer 更新。
-- DDP 先執行 rank-local 計算，再共同確認是否成功並交換梯度。MoE 使用更新窗口的整體路由統計。
-- rollout 從抽樣當下取得實際 log probability，GRPO／PPO 可對既有未重整的訓練策略做 importance weighting。
+- LinearWarmup、CosineWarmup、ExponentialWarmup 和 ConstantWarmup 共用每個 optimizer 的成功更新計數。
+- from_ratio 依明示的 optimizer 更新預算向上取整。固定暖身維持指定倍率直到下一步交接。
+- 設定時、首次更新前及群組數改變時檢查內建暖身衝突。一般模型自訂訓練 checkpoint 同時保存 optimizer 和 scheduler，語言模型由訓練 checkpoint 自動保存。
 
 ### LANDMINES
 
-- MoE 的精確窗口正規化保留活躍 microbatch 的 forward graph，峰值記憶體可能上升。
-- CycleGAN 的批尾結算已調整，完整 legacy CycleGAN 入口仍含既有初始化缺口。JAX、TPU、多機 NCCL 與遠端 CI 尚未執行。
+- 舊 test/ 示範另需 vocabs.txt。
+- Windows 環境中 ToolRegistry 的加法工具逾時，工作樹及原始 HEAD 單獨執行皆同樣失敗。
 
 ### 證據索引
 
-- trident/backend/model.py、trident/backend/pytorch_ops.py、trident/optims/pytorch_losses.py
-- trident/optims/pytorch_trainer.py、trident/optims/tensorflow_trainer.py、trident/optims/trainers.py、trident/optims/*_optimizers.py
-- trident/optims/language/runner.py、trident/optims/language/generation.py、trident/models/pytorch_causal_lm.py
-- tests/test_legacy_gradients.py、tests/test_legacy_tf_gradients.py、tests/test_language_core.py、tests/test_language_runtime.py
+- trident/callbacks/warmup.py、trident/backend/model.py、trident/optims/language/trainer.py
+- tests/test_legacy_gradients.py、tests/test_legacy_tf_gradients.py、tests/test_language_core.py
+- docs/zh-tw/quickstart.md
 
 ### VALIDATION
 
-- 完整 pytest 測試，PyTorch 主環境 — PASS：Windows Python 3.10.10，150 passed、1 skipped、27 warnings，耗時 187 秒。包含 CUDA AMP、雙 rank Gloo 單 token 與 MoE 一致性及 rank-local callback 例外。唯一 skip 為獨立 TensorFlow 測試模組，已另跑。
-- PyTorch CPU 梯度回歸 — PASS：18 passed、1 skipped，CPU 模式跳過了 CUDA AMP。
-- PyTorch 梯度回歸，CUDA 可用 — PASS：19 passed，包括 overflow 事件、中心參數更新及 WGAN penalty 的解析梯度。
-- TensorFlow CPU 訓練與梯度回歸 — PASS：12 passed，包括不等長尾批、全域裁剪、六款 optimizer 的 momentum 和無效梯度處理，以及 LSTM 跨步梯度。
-- 語法與 diff — PASS：27 個變更或新增 Python 檔經 AST 解析，git diff --check 通過。
+- Windows 完整 tests/ 與基準比對 — FAIL：170 passed、1 skipped、1 failed。唯一失敗是 test_tool_execution_timeout_and_registry 的 10 秒逾時，已在獨立解出的 HEAD 同條件重現。暖身與 checkpoint 測試通過。
+- TensorFlow CPU — PASS：tests/test_legacy_fit.py 和 tests/test_legacy_tf_gradients.py 共 15 passed。
+- 動態參數群組暖身衝突 — PASS：修正前，首次更新前及訓練中加入帶 warmup 的 AdamW 參數群組，兩個案例均未報錯。回歸測試檢查錯誤發生時各組 LR 與成功更新計數。
+- 語法與差異格式 — PASS：變更程式與測試 py_compile、git diff --check 通過。
 
 # HISTORY
 
@@ -98,3 +96,24 @@
 <!-- devnote-review:49d90948c522d3727a66d45d -->
 
 修正上一輪梯度審查的主要缺陷，新增參數與實際梯度的回歸，包括少量有效 token 的 Gloo、MoE 窗口、rank-local 失敗與行為策略機率。
+
+
+## [2026-11-22T16:37+08:00] 新增按 optimizer 更新計步的共用 LR warmup
+
+<!-- devnote-review:5e1e00b371853ad1d84ce7fb -->
+
+移除 trainer 與舊 RL policy 的重複暖身程式，加入參數群組倍率、排程交接、雙重暖身檢查及中斷續訓驗證。
+
+
+## [2026-11-22T16:43+08:00] 新增餘弦、指數、固定暖身及更新預算比例
+
+<!-- devnote-review:64a91dd21652dcd3275595f0 -->
+
+保留線性與整數 epoch 入口，新增三種曲線及 from_ratio。跨後端驗證實際 LR、曲線交接與續訓。
+
+
+## [2026-11-22T17:07+08:00] 驗收四種暖身策略並修正新增參數群組的衝突檢查
+
+<!-- devnote-review:b229e09680d6bfc5471ce54b -->
+
+以兩個失敗案例重現 AdamW 在新增群組後可繞過雙重暖身檢查，修正後執行完整 tests/ 與獨立 TensorFlow 測試。

@@ -6,6 +6,7 @@ if os.environ.get('TRIDENT_BACKEND') != 'tensorflow':
     pytest.skip('run with TRIDENT_BACKEND=tensorflow', allow_module_level=True)
 tf = pytest.importorskip('tensorflow')
 
+from trident.callbacks import ConstantWarmup, CosineWarmup, ExponentialWarmup, LinearWarmup
 from trident.data.pipeline import Dataset, DataProvider, DatasetSchema, FieldSpec
 from trident.layers.tensorflow_layers import Dense
 from trident.layers.tensorflow_rnn import standard_lstm
@@ -14,7 +15,7 @@ from trident.optims.tensorflow_optimizers import Adam, AdamW, LARS, PlainRAdam, 
 from trident.optims.trainers import TrainingPlan
 
 
-def collect_gradients(batch_size, accumulate, threshold=None):
+def collect_gradients(batch_size, accumulate, threshold=None, rates=None, warmup=None):
     schema = DatasetSchema([FieldSpec("x", metadata={"role": "input"}),
                             FieldSpec("target", kind="label", metadata={"role": "target"})])
     samples = [{"x": np.ones(1, np.float32), "target": np.zeros(1, np.float32)} for _ in range(5)]
@@ -26,7 +27,18 @@ def collect_gradients(batch_size, accumulate, threshold=None):
     if threshold is not None:
         model.with_grad_clipping(threshold)
     gradients = []
-    model.optimizer.step = lambda pairs: gradients.extend(float(g.numpy()[0, 0]) for g, _ in pairs)
+    if warmup is not None:
+        model.with_learning_rate_scheduler(warmup=warmup)
+    original_step = model.optimizer.step
+
+    def record(pairs):
+        gradients.extend(float(g.numpy()[0, 0]) for g, _ in pairs)
+        if rates is not None:
+            rates.append(model.optimizer.lr)
+            assert model.training_context['current_lr'] == model.optimizer.lr
+            return original_step(pairs)
+
+    model.optimizer.step = record
     TrainingPlan().add_training_item(model).with_data_loader(provider).with_batch_size(batch_size).start_now()
     return gradients
 
@@ -35,6 +47,18 @@ def test_accumulation_flushes_uneven_window_and_clips():
     assert collect_gradients(5, 1) == pytest.approx([2.])
     assert collect_gradients(2, 4) == pytest.approx([2.])
     assert collect_gradients(2, 4, .01) == pytest.approx([.01])
+
+
+@pytest.mark.parametrize('warmup, expected', [
+    (LinearWarmup(2, .2), [.0002, .001, .001]),
+    (ConstantWarmup(2, .2), [.0002, .0002, .001]),
+    (ExponentialWarmup(3, .01), [.00001, .0001, .001]),
+    ("cosine", [.001 * CosineWarmup(360).factor_at(i) for i in range(3)]),
+])
+def test_tf_warmup_only_counts_actual_updates(warmup, expected):
+    rates = []
+    collect_gradients(1, 2, rates=rates, warmup=warmup)
+    assert rates == pytest.approx(expected)
 
 
 @pytest.mark.parametrize('optimizer', [Adam, AdamW, RAdam, PlainRAdam, SGD, LARS])

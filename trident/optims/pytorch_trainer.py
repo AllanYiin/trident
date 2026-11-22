@@ -56,7 +56,7 @@ from trident.optims.pytorch_regularizers import get_reg
 from trident.callbacks import LambdaCallback
 from trident.layers.pytorch_layers import *
 
-from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase, AdjustLRCallback
+from trident.callbacks.lr_schedulers import AdjustLRCallback
 #from trident.data.image_common import *
 
 __all__ = ['Model', 'MuiltiNetwork', 'ImageClassificationModel', 'ImageRegressionModel', 'ImageDetectionModel',
@@ -657,23 +657,6 @@ class Model(model.ModelBase,Layer):
         self.training_context['save_path'] = save_path
         return self
 
-    def with_learning_rate_scheduler(self, lr_schedule, warmup=0, **kwargs):
-        if lr_schedule is None:
-            return self
-        if isinstance(lr_schedule, str):
-            lr_schedule = get_lr_scheduler(lr_schedule)
-
-        if callable(lr_schedule):
-            lr_scheduler = lr_schedule(**kwargs)
-            self.callbacks.append(lr_scheduler)
-        elif isinstance(lr_schedule, AdjustLRCallbackBase):
-            self.callbacks.append(lr_schedule)
-        self.warmup = warmup
-        if self.warmup > 0:
-            self.optimizer.adjust_learning_rate(1e-6, False)
-            self.training_context['current_lr'] = 1e-6
-        return self
-
     def with_automatic_mixed_precision_training(self, **kwargs):
         """Enable automatic mixed precision training
             only enable when using pytorch 1.6 (or higher) as backend and cuda is available.
@@ -736,15 +719,6 @@ class Model(model.ModelBase,Layer):
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
             gc.collect()
-        if self.optimizer is not None:
-            if self.warmup > 0 and self.training_context['current_epoch'] + 1 < self.warmup:
-                lr = 1e-6 * (self.training_context['current_epoch'] + 1)
-                self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
-                self.training_context['current_lr'] = lr
-            elif 0 < self.warmup == self.training_context['current_epoch'] + 1:
-                self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
-                self.training_context['current_lr'] = self.base_lr
-
 
     def do_on_batch_start(self):
         super().do_on_batch_start()
@@ -767,10 +741,6 @@ class Model(model.ModelBase,Layer):
                 self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
         self.training_context['time_epoch_progress'] += (
                 self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
-        if (self.training_context['steps'] + 1) % ctx.epoch_equivalent == 0:
-            if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // ctx.epoch_equivalent:
-                self.adjust_learning_rate(self.training_context['base_lr'])
-                self.warmup = 0
         if self.training_context['current_batch'] == 0:
             temp = OrderedDict()
             for k in self.training_context['tmp_losses'].key_list:
@@ -1641,9 +1611,11 @@ class MuiltiNetwork(Model):
             self._networks[k].training_context['save_path'] = current_save_path
         return self
 
-    def with_learning_rate_scheduler(self, lr_schedule, warmup=0, **kwargs):
+    def with_learning_rate_scheduler(self, lr_schedule=None, warmup=0, **kwargs):
+        from copy import deepcopy
         for k in self._networks.keys():
-            self._networks[k].with_learning_rate_scheduler(lr_schedule, warmup, **kwargs)
+            schedule = deepcopy(lr_schedule) if warmup else lr_schedule
+            self._networks[k].with_learning_rate_scheduler(schedule, warmup, **kwargs)
         return self
 
     def with_automatic_mixed_precision_training(self, **kwargs):

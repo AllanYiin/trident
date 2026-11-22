@@ -114,10 +114,6 @@ class PolicyBase(Model):
         self.training_context['time_batch_progress']+=( time.time() -self.training_context['time_batch_start'] )
         self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_batch_start'])
         self.training_context['steps']+=1
-        if (self.training_context['steps']+1) % _session.epoch_equivalent == 0:
-            if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:
-                self.adjust_learning_rate(self.training_context['base_lr'])
-                self.warmup = 0
 
 
 class Dqn(PolicyBase):

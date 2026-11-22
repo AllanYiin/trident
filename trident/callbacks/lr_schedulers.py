@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from copy import deepcopy
 import builtins
 
 import matplotlib.pyplot as plt
@@ -15,6 +16,7 @@ import numpy as np
 from trident.backend.common import *
 from trident.backend.common import get_backend
 from trident.callbacks.callback_base import CallbackBase
+from trident.callbacks.warmup import ConstantWarmup, CosineWarmup, ExponentialWarmup, LinearWarmup, set_group_lr
 from trident.context import split_path, make_dir_if_need, sanitize_path
 _session = get_session()
 
@@ -30,7 +32,8 @@ elif get_backend()=='jax':
 
 
 
-__all__ = ['AdjustLRCallback','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','PolyLR','random_cosine_lr','CosineLR','cosine_lr','OnceCycleLR','StepLR']
+__all__ = ['LinearWarmup', 'CosineWarmup', 'ExponentialWarmup', 'ConstantWarmup',
+           'AdjustLRCallback','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','PolyLR','random_cosine_lr','CosineLR','cosine_lr','OnceCycleLR','StepLR']
 
 
 
@@ -42,15 +45,34 @@ class AdjustLRCallbackBase(CallbackBase):
         super(AdjustLRCallbackBase, self).__init__()
         self.base_lr=1e-3
         self.base_lrs = [1e-3]
-    def adjust_learning_rate(self,training_context,new_lr,verbose=True):
-        old_lr = training_context['optimizer'].lr
 
-        if old_lr!=new_lr:
-            training_context['optimizer'].param_groups[0]['lr'] = new_lr
-            training_context['current_lr'] = new_lr
+    def state_dict(self):
+        return {key: deepcopy(value) for key, value in vars(self).items()
+                if key != 'uuid' and not callable(value)}
+
+    def load_state_dict(self, state):
+        vars(self).update(deepcopy(state))
+
+    @staticmethod
+    def _lr(context):
+        bases = context.get('warmup_base_lrs', ())
+        index = next((i for i, lr in enumerate(bases) if lr), 0)
+        return context['optimizer'].param_groups[index]['lr']
+
+    def adjust_learning_rate(self, training_context, new_lr, verbose=True):
+        groups = training_context['optimizer'].param_groups
+        old_lr = self._lr(training_context)
+        if old_lr != new_lr:
+            bases = training_context.get('warmup_base_lrs')
+            if bases is None:
+                groups[0]['lr'] = new_lr
+            else:
+                reference = next((lr for lr in bases if lr), 1.0)
+                for group, base in zip(groups, bases):
+                    set_group_lr(group, float(new_lr) * base / reference)
+            training_context['current_lr'] = groups[0]['lr']
             if verbose:
                 print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
-
 
 
 class AdjustLRCallback(AdjustLRCallbackBase):
@@ -89,13 +111,13 @@ class LRFinder(AdjustLRCallbackBase):
         self.lr_mult = (float(self.end_lr) / float(self.start_lr)) ** (float(1) / float(num_batches))
 
         # Remember the original learning rate
-        self.base_lr =training_context['optimizer'].lr
+        self.base_lr =self._lr(training_context)
         save(training_context['current_model'].state_dict(),'Models/state_dict.pth')
         # Set the initial learning rate
         self.adjust_learning_rate(training_context, self.start_lr)
     def on_batch_end(self, training_context):
         # Log the learning rate
-        lr =training_context['optimizer'].lr
+        lr =self._lr(training_context)
         self.lrs.append(lr)
         loss =training_context['current_loss'].item()
         self.losses.append(loss)
@@ -171,7 +193,9 @@ class OnceCycleLR(AdjustLRCallbackBase):
         self.last_step = last_step
 
     def on_training_start(self, training_context):
-        self.num_steps =training_context['total_epoch']*training_context['total_batch']
+        self.num_steps = training_context.get('schedule_total_steps')
+        if self.num_steps is None:
+            self.num_steps = training_context['total_epoch'] * training_context['total_batch']
         self.num_cycle_steps = int(self.num_steps * (1. - self.annihilation_frac))  # Total number of steps in the cycle
         self.final_lr = self.min_lr * self.reduce_factor
 
@@ -181,7 +205,7 @@ class OnceCycleLR(AdjustLRCallbackBase):
 
         if current_step <= self.num_cycle_steps // 2:
             # Scale up phase
-            scale = current_step / (self.num_cycle_steps // 2)
+            scale = current_step / builtins.max(1, self.num_cycle_steps // 2)
             lr = self.min_lr + (self.max_lr - self.min_lr) * scale
             momentum = self.max_momentum - (self.max_momentum - self.min_momentum) * scale
         elif current_step <= self.num_cycle_steps:
@@ -198,7 +222,7 @@ class OnceCycleLR(AdjustLRCallbackBase):
             # Exceeded given num_steps: do nothing
             return
 
-        training_context['optimizer'].param_groups[0]['lr'] = lr
+        self.adjust_learning_rate(training_context, lr, verbose=False)
         if momentum:
             training_context['optimizer'].param_groups[0]['momentum'] = momentum
 
@@ -216,12 +240,12 @@ class StepLR(AdjustLRCallbackBase):
     def on_epoch_end(self, training_context):
         current_epoch = training_context['current_epoch']
         if self.unit == 'epoch' and (current_epoch + 1) % self.frequency == 0:
-            self.adjust_learning_rate(training_context,training_context['optimizer'].lr*self.gamma,verbose=True)
+            self.adjust_learning_rate(training_context,self._lr(training_context)*self.gamma,verbose=True)
 
     def on_batch_end(self, training_context):
         current_step =training_context['steps']
         if current_step>0 and self.unit=='batch' and (current_step+1)%self.frequency==0:
-            self.adjust_learning_rate(training_context, training_context['optimizer'].lr* self.gamma, verbose=True)
+            self.adjust_learning_rate(training_context, self._lr(training_context)* self.gamma, verbose=True)
 
 
 class PolyLR(AdjustLRCallbackBase):
@@ -333,15 +357,15 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
         if (self.mode == 'min' or
            (self.mode == 'auto' and 'acc' not in self.monitor)):
             self.monitor_op = lambda a, b: np.less(a, b - self.min_delta)
-            self.best = np.Inf
+            self.best = np.inf
         else:
             self.monitor_op = lambda a, b: np.greater(a, b + self.min_delta)
-            self.best = -np.Inf
+            self.best = -np.inf
         self.cooldown_counter = 0
         self.wait = 0
 
     def on_epoch_end(self, training_context):
-        training_context['current_lr']=training_context['optimizer'].lr
+        training_context['current_lr']=self._lr(training_context)
         if self.unit_base == 'epoch'  :
             steps=None
             history=None
@@ -372,7 +396,7 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
                 elif not self.in_cooldown():
                     self.wait += 1
                     if self.wait >= self.patience:
-                        old_lr = float(training_context['optimizer'].lr)
+                        old_lr = float(self._lr(training_context))
                         if old_lr > self.min_lr:
                             new_lr = old_lr * self.factor
                             new_lr = max(new_lr, self.min_lr)
@@ -396,7 +420,7 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
 
         num_batches = training_context['steps']
         if self.unit_base=='epoch' and training_context['steps']>0 and training_context['steps']%_session.epoch_equivalent==0 and  training_context['current_model'].training==True:
-            training_context['current_lr']=training_context['optimizer'].lr
+            training_context['current_lr']=self._lr(training_context)
             history=training_context['losses'].get(self.monitor,training_context['metrics'].get(self.monitor,training_context['losses']['total_losses']))
             steps,values=zip(*history)
             current =to_numpy(values[-min(5,len(values)):]).mean()
@@ -418,7 +442,7 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
                 elif not self.in_cooldown():
                     self.wait += 1
                     if self.wait >= self.patience:
-                        old_lr = float(training_context['optimizer'].lr)
+                        old_lr = float(self._lr(training_context))
                         if old_lr > self.min_lr:
                             new_lr = old_lr * self.factor
                             new_lr = max(new_lr, self.min_lr)
@@ -481,7 +505,7 @@ class LambdaLR(AdjustLRCallbackBase):
 
     def on_epoch_end(self, training_context):
         if  training_context['current_epoch']==0:
-            self.base_lr = training_context['optimizer'].lr
+            self.base_lr = self._lr(training_context)
         n_epochs = training_context['total_epoch']
         epoch = training_context['current_epoch']
         if epoch>=self.decay_start_epoch:
@@ -508,14 +532,17 @@ class RandomCosineLR(AdjustLRCallbackBase):
         if self.max_lr is None:
             self.max_lr = training_context['base_lr']
 
-        self.T_current=training_context['current_epoch'] * training_context['total_batch'] + training_context[ 'current_batch']% (2 * self.T_max)
+        if 'warmup_base_lrs' in training_context:
+            self.T_current = training_context['steps']
+        else:
+            self.T_current=training_context['current_epoch'] * training_context['total_batch'] + training_context[ 'current_batch']% (2 * self.T_max)
 
         if self.T_current == 0:
-            training_context['optimizer'].adjust_learning_rate(self.max_lr,verbose=False)
+            self.adjust_learning_rate(training_context, self.max_lr,verbose=False)
         elif (self.T_current - 1 - self.T_max) % (2 * self.T_max) == 0:
-            training_context['optimizer'].adjust_learning_rate((self.min_lr+ (self.max_lr - self.min_lr)) *(1 - math.cos(math.pi / self.T_max)) / 2+ self.noise_weight * (random.random() - 0.5),verbose=False)
+            self.adjust_learning_rate(training_context, (self.min_lr+ (self.max_lr - self.min_lr)) *(1 - math.cos(math.pi / self.T_max)) / 2+ self.noise_weight * (random.random() - 0.5),verbose=False)
         else:
-            training_context['optimizer'].adjust_learning_rate((( 1 + math.cos(math.pi * (self.T_current / self.T_max)) )*(self.max_lr- self.min_lr)*0.5 + self.min_lr)*(1+self.noise_weight * (random.random()- 0.5)),verbose=False)
+            self.adjust_learning_rate(training_context, (( 1 + math.cos(math.pi * (self.T_current / self.T_max)) )*(self.max_lr- self.min_lr)*0.5 + self.min_lr)*(1+self.noise_weight * (random.random()- 0.5)),verbose=False)
 
 
 
@@ -541,16 +568,16 @@ class CosineLR(AdjustLRCallbackBase):
             self.T_current=float(training_context['steps'])#% self.period
 
             if self.T_current == 0:
-                training_context['optimizer'].adjust_learning_rate(self.max_lr, verbose=False)
+                self.adjust_learning_rate(training_context, self.max_lr, verbose=False)
             elif (self.T_current - 1 - self.T_max) % self.full_period == 0:
                 self.max_lr = self.max_lr * self.cosine_weight
-                training_context['optimizer'].adjust_learning_rate(
-                    training_context['optimizer'].lr + (self.max_lr - self.min_lr) * (
+                self.adjust_learning_rate(training_context,
+                    self._lr(training_context) + (self.max_lr - self.min_lr) * (
                                 1 - math.cos(math.pi / self.T_max)) / 2, verbose=False)
             else:
-                training_context['optimizer'].adjust_learning_rate(
+                self.adjust_learning_rate(training_context,
                     (1 + math.cos(math.pi * self.T_current / self.T_max)) / (1 + math.cos(math.pi * (self.T_current - 1) / self.T_max)) * (
-                                training_context['optimizer'].lr - self.min_lr) + self.min_lr,
+                                self._lr(training_context) - self.min_lr) + self.min_lr,
                     verbose=False)
 
     def on_epoch_end(self, training_context):
@@ -563,13 +590,13 @@ class CosineLR(AdjustLRCallbackBase):
             self.T_current = float(training_context['current_epoch'] ) # % self.period
 
             if self.T_current == 0:
-                training_context['optimizer'].adjust_learning_rate(self.max_lr,verbose=False)
+                self.adjust_learning_rate(training_context, self.max_lr,verbose=False)
             elif (self.T_current - 1 - self.T_max) % self.full_period== 0:
                 self.max_lr=self.max_lr*self.cosine_weight
-                training_context['optimizer'].adjust_learning_rate(training_context['optimizer'].lr+  (self.max_lr - self.min_lr)*(1 - math.cos(math.pi / self.T_max)) / 2,verbose=False)
+                self.adjust_learning_rate(training_context, self._lr(training_context)+  (self.max_lr - self.min_lr)*(1 - math.cos(math.pi / self.T_max)) / 2,verbose=False)
             else:
-                training_context['optimizer'].adjust_learning_rate(
-                    (1 + math.cos(math.pi * self.T_current / self.T_max)) /(1 + math.cos(math.pi * (self.T_current - 1) / self.T_max)) *(training_context['optimizer'].lr - self.min_lr)  + self.min_lr,
+                self.adjust_learning_rate(training_context,
+                    (1 + math.cos(math.pi * self.T_current / self.T_max)) /(1 + math.cos(math.pi * (self.T_current - 1) / self.T_max)) *(self._lr(training_context) - self.min_lr)  + self.min_lr,
                     verbose=False)
 
 def cosine_lr( max_lr=None, min_lr=1e-7,period=1000,cosine_weight=0.2,**kwargs):
