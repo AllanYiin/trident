@@ -21,6 +21,9 @@ stderr.write('trident {0}\n'.format(__version__))
 from trident import context
 from trident import readable_errors
 from trident.backend import *
+if get_backend() in ("pytorch", "tensorflow"):
+    from trident.optims.losses import loss
+    from trident.optims.metrics import metric
 import threading
 import random
 import cv2

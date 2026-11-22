@@ -23,7 +23,10 @@ elif _backend == 'jax':
     import jax
     from trident.backend.jax_ops import *
 
-__all__ = ['Loss','_check_logit','_check_logsoftmax_logit','_check_softmax']
+from collections.abc import Mapping
+from trident.optims.field_binding import FunctionObjective, normalize_names
+
+__all__ = ['loss', 'FunctionLoss', 'Loss','_check_logit','_check_logsoftmax_logit','_check_softmax']
 
 
 PUBLIC_LOSSES = (
@@ -144,6 +147,11 @@ class Loss(object):
     def update_signature(self,input_names,output_names):
         if self._signature is None:
             self._signature = get_signature(self)
+        if isinstance(input_names, Mapping):
+            self._field_names = normalize_names(input_names, self._signature.inputs)
+            input_names = None
+        elif input_names is not None:
+            self._field_names = {}
         if isinstance(input_names,str):
             input_names=[input_names]
         if isinstance(output_names,str):
@@ -162,6 +170,26 @@ class Loss(object):
                new_output[output_names[i]]=self._signature.outputs.value_list[i]
            print('update outputs {0}=>{1} '.format(self._signature.outputs.key_list, new_output.key_list))
            self._signature.outputs=new_output
+
+
+class FunctionLoss(FunctionObjective, Loss):
+    """A Python function registered as a loss with reusable field bindings."""
+
+    forward = FunctionObjective.__call__
+
+    @property
+    def trainable_variables(self):
+        return getattr(self.__wrapped__, 'trainable_variables', ())
+
+    @property
+    def gradient_denominator(self):
+        return getattr(self.__wrapped__, 'gradient_denominator', None)
+
+
+def loss(fn=None, *, input_names=None, name=None):
+    def decorate(func):
+        return FunctionLoss(func, input_names=input_names, name=name)
+    return decorate if fn is None else decorate(fn)
 
 
 def _class_axis(axis):

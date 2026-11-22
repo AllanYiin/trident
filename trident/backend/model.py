@@ -32,15 +32,18 @@ from trident.backend.tensorspec import *
 
 from trident.data.vision_transforms import Unnormalize
 from trident.loggers.history import HistoryBase
+from trident.optims.field_binding import FunctionObjective, ResolvedFeed, resolve_fields
 
 ctx = context._context()
 working_directory = ctx.working_directory
 
 if get_backend() == 'pytorch':
+    import torch
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
 
 elif get_backend() == 'tensorflow':
+    import tensorflow as tf
     from trident.backend.tensorflow_backend import *
     from trident.backend.tensorflow_ops import *
 
@@ -71,6 +74,10 @@ class ModelBase(object):
         self.lr_scheduler = None
         self._losses = OrderedDict()
         self._metrics = OrderedDict()
+        self._field_bindings = {}
+        self._provider_fields = None
+        self._validation_feed = None
+        self._loss_logging = {}
         self.optimizer = None
         self.loss_weights = OrderedDict()
 
@@ -454,8 +461,7 @@ class ModelBase(object):
                         self.output_fn(model=self, training_context=self.training_context,
                                        is_training=False, is_autocast_enabled=self.is_autocast_enabled)
                     for name, metric in self._metrics.items():
-                        value = try_map_args_and_call(metric, data, self.training_context['data_feed'],
-                                                      self.is_autocast_enabled)
+                        value = self._call_objective('metric', name, metric, data)
                         totals[name] += float(np.mean(to_numpy(value))) * size
                     samples += size
             if samples:
@@ -785,12 +791,85 @@ class ModelBase(object):
             callback.on_data_received(self.training_context)
         return train_data, test_data
 
+    def _prepare_model_fields(self, data, preview=False, validation=False):
+        feed = self.training_context.get('data_feed') or {}
+        explicit = feed.explicit_fields() if isinstance(feed, ResolvedFeed) else dict(feed)
+        if self._provider_fields is None:
+            labels = tuple(k for k in data if k in ('label', 'target', 'y_true'))
+            inputs = tuple(k for k in data if k not in labels)
+        else:
+            inputs, labels = self._provider_fields
+        resolved = ResolvedFeed(explicit)
+        if not is_tensor(self._model):
+            fields = resolve_fields(self.signature, data, explicit, owner='model', model=True,
+                                    model_inputs=inputs, preview=preview)
+            resolved.add_defaults(fields)
+        if self._provider_fields is None and not labels:
+            labels = tuple(k for k in data if k not in resolved.values())
+        if len(self.signature.outputs) == 1:
+            resolved.add_defaults({'output': next(iter(self.signature.outputs))})
+        if len(labels) == 1:
+            resolved.add_defaults({'target': labels[0]})
+        if validation:
+            self._validation_feed = resolved
+        else:
+            self.training_context['data_feed'] = resolved
+            self._validation_feed = None
+        return resolved
+
+    def _objective_fields(self, kind, name, fn, data, allow_missing=False):
+        feed = self.training_context.get('data_feed') or {}
+        if data is self.training_context.get('test_data') and self._validation_feed is not None:
+            feed = self._validation_feed
+        outputs = tuple(self.signature.outputs)
+        if self._provider_fields is None:
+            inputs = tuple(feed.get(k, k) for k in self.signature.inputs)
+            labels = tuple(k for k in data if k not in inputs and k not in outputs)
+        else:
+            inputs, labels = self._provider_fields
+        return resolve_fields(
+            fn.signature, data, feed, owner=f"{kind} {name}", model_inputs=inputs,
+            outputs=outputs, labels=labels, local=self._field_bindings.get((kind, name)),
+            fixed=getattr(fn, 'options', ()), allow_missing=allow_missing)
+
+    def _call_objective(self, kind, name, fn, data):
+        mapping = self._objective_fields(kind, name, fn, data)
+        if isinstance(fn, FunctionObjective):
+            values = {arg: to_tensor(data[field], device=get_device()) for arg, field in mapping.items()}
+            autocast = nullcontext()
+            if get_backend() == 'pytorch' and self.is_autocast_enabled and ctx.amp_available:
+                autocast = torch.cuda.amp.autocast()
+            with autocast:
+                return fn.call_fields(values)
+        # Only expose selected fields: optional parameters retain their configured defaults.
+        selected = OrderedDict((field, data[field]) for field in mapping.values())
+        return try_map_args_and_call(fn, selected, mapping, self.is_autocast_enabled)
+
+    def _store_forward_outputs(self, data, output):
+        specs = self.signature.outputs
+        if isinstance(output, dict):
+            named = output
+        elif isinstance(output, (tuple, list)):
+            if len(output) != len(specs):
+                raise ValueError(f"model returned {len(output)} outputs for fields {list(specs)}")
+            named = dict(zip(specs, output))
+        else:
+            key = next(iter(specs), 'output')
+            named = {key: output}
+        collisions = data.keys() & named.keys()
+        if collisions:
+            raise ValueError(f"model output collides with batch fields {sorted(collisions)}; rename one of the fields")
+        for key, value in named.items():
+            if key not in specs:
+                specs[key] = TensorSpec.tensor_to_spec(value)
+        data.update(named)
+
     @measure_perf
     def do_calculate_forward(self, is_training=True):
         data = self.training_context['train_data'] if is_training or self.training_context['test_data'] is None or len(
             self.training_context['test_data']) == 0 else \
             self.training_context['test_data']
-        data_feed = self.training_context['data_feed']
+        data_feed = self._prepare_model_fields(data, validation=not is_training)
         model = self.training_context['current_model']
         if is_tensor(model):
             data['output'] = self._model
@@ -801,25 +880,8 @@ class ModelBase(object):
             else:
                 model.train()
 
-            signature = model.signature
-            # if any_abnormal_number(data['image']):
-            #     print('{0} before calculate forward'.format(''))
             output = try_map_args_and_call(model, data, data_feed, self.is_autocast_enabled)
-            # if any_abnormal_number(output):
-            #     print('{0} after calculate forward'.format(''))
-            output=unpack_singleton(output)
-            if isinstance(output, (list, tuple)) and len(output)==len(signature.outputs):
-                for i in range(len(output)):
-                    data[signature.outputs.key_list[i]] = output[i]
-            elif is_instance(output, 'OrderedDict'):
-                for k, v in output.items():
-                    data[k] = v
-            else:
-                if self._signature.outputs is None or len(self._signature.outputs) == 0:
-                    self._signature.outputs['output'] = TensorSpec.tensor_to_spec(output)
-                    data[self._signature.outputs.key_list[0]] = output
-                else:
-                    data[self._signature.outputs.key_list[0]] = output
+            self._store_forward_outputs(data, output)
         if is_training and self.use_output_as_loss and is_tensor(data['output']):
             this_loss = data['output'].sum()
             self._add_loss_term(this_loss, 'sum')
@@ -887,57 +949,32 @@ class ModelBase(object):
     def do_calculate_losses(self):
         self.do_on_loss_calculation_start()
 
-        # losss
-        for k, v in self._losses.items():
-            if not hasattr(v, 'start_epoch') or (
-                    hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
-
-                loss_weight = to_tensor(1.0)
-                if k in self.loss_weights:
-                    loss_weight = self.loss_weights[k]
-                loss_weight = to_tensor(loss_weight, ctx.float_dtype)
-                # print(-1, 'train_data', self.train_data.value_list[-1].shape, 'abnormal:', any_abnormal_number( self.train_data.value_list[-1]))
-                # print(self.train_data.value_list[-1])
-                this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
-                                                  self.is_autocast_enabled)
-
-                if isinstance(this_loss, tuple):
-                    overall_loss = to_tensor(0.0, requires_grad=True)
-                    for i in range(len(this_loss)):
-                        if any_abnormal_number(this_loss[i]):
-                            raise FloatingPointError("Nonfinite loss: {0}".format(k))
-                        else:
-                            # a leaf Variable that requires grad connotused in an in-place operation.
-                            overall_loss = overall_loss + loss_weight * this_loss[i]
-                    self._add_loss_term(overall_loss, getattr(v, 'reduction', 'mean'), k,
-                                        getattr(v, 'gradient_denominator', None))
-
-                    if hasattr(v, 'as_metric') and v.as_metric == True:
-                        self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],
-                                                                     to_numpy(overall_loss / loss_weight))
-
-                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'], overall_loss)
-
-                else:
-                    this_loss = loss_weight * this_loss
-                    if any_abnormal_number(this_loss):
-                        raise FloatingPointError("Nonfinite loss: {0}".format(k))
-                    else:
-                        # a leaf Variable that requires grad connotused in an in-place operation.
-                        self._add_loss_term(this_loss, getattr(v, 'reduction', 'mean'), k,
-                                            getattr(v, 'gradient_denominator', None))
-
-                    if hasattr(v, 'as_metric') and v.as_metric == True:
-                        self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],
-                                                                     to_numpy(this_loss / loss_weight))
-
-                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'], this_loss)
-
-
-
-
+        for name, fn in self._losses.items():
+            start_epoch, as_metric = self._loss_logging.get(
+                name, (getattr(fn, 'start_epoch', 0), getattr(fn, 'as_metric', False)))
+            if start_epoch > self.training_context['current_epoch']:
+                continue
+            result = self._call_objective('loss', name, fn, self.train_data)
+            terms = result if isinstance(result, tuple) else (result,)
+            if not terms or builtins.any(any_abnormal_number(term) for term in terms):
+                raise FloatingPointError(f"Empty or nonfinite loss: {name}")
+            raw = builtins.sum(terms[1:], terms[0])
+            weighted = raw * self.loss_weights.get(name, 1.)
+            self._add_loss_term(weighted, getattr(fn, 'reduction', 'mean'), name,
+                                getattr(fn, 'gradient_denominator', None))
+            step = self.training_context['steps']
+            if as_metric:
+                snapshot = raw
+                if is_tensor(raw):
+                    snapshot = tf.stop_gradient(raw) if get_backend() == 'tensorflow' else raw.detach()
+                self.training_context['tmp_metrics'].collect(camel2snake(name), step, to_numpy(snapshot))
+            self.training_context['tmp_losses'].collect(name, step, weighted)
 
         self.do_on_loss_calculation_end()
+        # Catch ambiguous metric inputs before updating weights. Callbacks may still
+        # supply additional fields at on_metrics_evaluation_start.
+        for name, fn in self._metrics.items():
+            self._objective_fields('metric', name, fn, self.train_data, allow_missing=True)
 
     @measure_perf
     def do_calculate_regularizations(self):
@@ -998,14 +1035,12 @@ class ModelBase(object):
                 self.training_context['metrics'].regist(k)
             self.training_context['tmp_metrics'].regist(k)
 
-            this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
-                                                self.is_autocast_enabled)
+            this_metric = self._call_objective('metric', k, v, self.train_data)
             self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
 
             if self.training_context['is_out_sample_evaluation'] == True and self.test_data is not None and len(
                     self.test_data) > 0:
-                this_out_metric = try_map_args_and_call(v, self.test_data, self.training_context['data_feed'],
-                                                        self.is_autocast_enabled)
+                this_out_metric = self._call_objective('metric', k, v, self.test_data)
                 self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], this_out_metric)
 
         # ON_EVALUATION_END

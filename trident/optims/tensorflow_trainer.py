@@ -20,6 +20,9 @@ import tensorflow as tf
 
 from trident import __version__
 from trident import context
+from trident.optims.field_binding import prepare_objective
+from trident.optims.losses import FunctionLoss
+from trident.optims.metrics import FunctionMetric
 from trident.context import split_path, make_dir_if_need, sanitize_path
 from trident.backend import dtype
 from trident.backend.common import *
@@ -249,8 +252,9 @@ class Model(ModelBase,Layer):
                                                                                    need_exclude_batch_axis=True,
                                                                                    is_singleton=False) if out is not None else TensorSpec(
                             shape=TensorShape([None]), optional=True, name=k)
-            elif is_instance(out,'OrderedDict'):
-                for k, v in out.__dict__.items():
+            elif isinstance(out, dict):
+                output._signature.outputs.clear()
+                for k, v in out.items():
                     if v is not None or k in output.signature.outputs:
                         spec = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True,is_singleton=False,
                                                          name=k) if v is not None else TensorSpec(
@@ -260,9 +264,12 @@ class Model(ModelBase,Layer):
                             spec.default = output.signature.outputs[k].default
                         output.signature.outputs[k] = spec
             elif isinstance(out, (list, tuple)):
-                for i in range(len(out)):
-                    output.signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]),
-                                                                                 name='output_{0}'.format(i))
+                specs = output._signature.outputs
+                names = list(specs) if len(specs) == len(out) else [f'output{i}' for i in range(len(out))]
+                specs.clear()
+                for key, value in zip(names, out):
+                    specs[key] = TensorSpec.tensor_to_spec(value, name=key)
+
             self._model = output
             # self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
 
@@ -419,54 +426,13 @@ class Model(ModelBase,Layer):
             self.optimizer.add_param_group({'params': new})
 
     def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
-        alias = name
-
-        if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
-            alias = loss.__name__
-
-        if isinstance(loss, str):
-            if loss == 'output':
-                self.use_output_as_loss = True
-                return self
-            else:
-                loss_class = get_loss(loss)
-                alias = loss if loss_class is not None else alias
-                # loss can add mutiple times.
-                if alias in self._losses:
-                    dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
-                    alias = alias + '_' + str(len(dup_keys) + 1)
-                self._losses[alias] = loss_class(**kwargs) if len(kwargs) > 0 else loss_class()
-
-        elif inspect.isclass(
-                loss) and loss.__class__.__name__ == "type":  # The loss is a class but not initialized yet.
-            alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
-            if alias in self._losses:
-                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-
-            self._losses[alias] = loss(**kwargs) if len(kwargs) > 0 else loss()
-
-
-        elif not inspect.isfunction(loss) and callable(loss):  # The loss is a class and initialized yet.
-            alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
-            if alias in self._losses:
-                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._losses[alias] = loss
-
-        elif inspect.isfunction(loss):
-            if alias in self._losses:
-                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            spec = inspect.getfullargspec(loss)
-            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2:
-                self._losses[alias] = loss
-            else:
-                self._losses[alias] = partial(loss, **kwargs)
-
-        signature = self._losses[alias].signature if hasattr(self._losses[alias], "signature") else None
-        self._losses[alias].signature = get_signature(self._losses[alias], alias) if signature is None else signature
-        ctx.print(self._losses[alias].signature)
+        if isinstance(loss, str) and loss == 'output':
+            self.use_output_as_loss = True
+            return self
+        alias, objective, bindings = prepare_objective(
+            loss, name, kwargs.pop('input_names', None), kwargs, self._losses, get_loss, FunctionLoss)
+        self._losses[alias] = objective
+        self._field_bindings['loss', alias] = bindings
 
         # check whether the model is ended by SoftMax
         if isinstance(self._model,Layer):
@@ -496,55 +462,18 @@ class Model(ModelBase,Layer):
         self.loss_weights[alias] = float(loss_weight)
         self._losses[alias].__name__ = alias
         # self._losses[alias].signature = argnames
+        self._loss_logging[alias] = (start_epoch, as_metric)
         self._losses[alias].start_epoch = start_epoch
         self._losses[alias].as_metric = as_metric
 
         return self
 
     def with_metric(self, metric, print_only=False, name='', **kwargs):
-        alias = name
-        argnames = OrderedDict()
-        if (alias is None or len(alias) == 0) and hasattr(metric, '__name__'):
-            alias = metric.__name__
-
-        if isinstance(metric, str):
-            alias = metric if len(alias) == 0 else alias
-            metric_fn = get_metric(metric)
-            if alias in self._metrics:
-                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric
-
-        elif inspect.isclass(metric) and metric.__class__.__name__ == "type":
-            alias = metric.__class__.__name__ if len(alias) == 0 else alias
-            if alias in self._metrics:
-                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric(**kwargs) if len(kwargs) > 0 else metric()
-        elif not inspect.isfunction(metric) and callable(metric):
-            alias = metric.__class__.__name__ if len(alias) == 0 else alias
-            if alias in self._metrics:
-                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric
-        elif inspect.isfunction(metric):
-            if alias in self._metrics:
-                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric
-        args = get_signature(metric, alias)
-        for k in kwargs.keys():
-            if k in args.inputs and kwargs.get(k) is not None:
-                pass
-            else:
-                kwargs.pop(k)
-        if len(kwargs) > 0:
-            self._metrics[alias] = partial(metric, **kwargs)
-        self._metrics[alias].signature = args
-        ctx.print(self._metrics[alias].signature)
-        self._metrics[alias].__name__ = alias
-        # self._metrics[alias].signature = argnames
-        self._metrics[alias].print_only = print_only
+        alias, objective, bindings = prepare_objective(
+            metric, name, kwargs.pop('input_names', None), kwargs, self._metrics, get_metric, FunctionMetric)
+        objective.print_only = print_only
+        self._metrics[alias] = objective
+        self._field_bindings['metric', alias] = bindings
         return self
 
     def with_regularizer(self, reg, reg_weight=None, **kwargs):
@@ -687,127 +616,27 @@ class Model(ModelBase,Layer):
         # for i in range(len(fields)):
         if train_data is None and test_data is None:
             return self.training_context['train_data'], self.training_context['test_data']
-        if self.training_context['steps'] == 0 and (
-                'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or len(
-            [v for v in self.training_context['data_feed'].value_list if v is None]) > 0):
-            try:
+        feed = self._prepare_model_fields(train_data)
+        input_list = {feed[k] for k in self.signature.inputs if k in feed}
+        for item in train_data:
+            if getattr(getattr(train_data[item], 'dtype', None), 'kind', None) in {'U', 'S'}:
+                train_data[item] = train_data[item].astype(str).tolist()
+            else:
+                train_data[item] = to_tensor(train_data[item], device=get_device())
 
-                data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context[
-                    'data_feed']
-                if isinstance(self._model, Layer):
-                    inshapes = self.inputs.value_list
-                    outshapes = self.targets.value_list
-                    available_fields = copy.deepcopy(train_data.key_list)
-                    if train_data is not None:
-                        # check input
-                        for arg in self._model.signature.inputs.key_list:
-                            if arg in data_feed and data_feed[arg] in available_fields:
-                                available_fields.remove(data_feed[arg])
-                            else:
-                                data_feed[arg] = ''
-                                if len(train_data) == 1 and len(self._model.signature.inputs.key_list) == 1:
-                                    data_feed[arg] = train_data.key_list[0]
-                                    available_fields.remove(train_data.key_list[0])
-                                elif arg in available_fields:
-                                    data_feed[arg] = arg
-                                    available_fields.remove(arg)
-                                elif arg in ['x', 'input'] and 'data' in available_fields:
-                                    data_feed[arg] = 'data'
-                                    available_fields.remove('data')
-                                elif arg in ['x', 'input'] and 'image' in available_fields:
-                                    data_feed[arg] = 'image'
-                                    available_fields.remove('image')
-                                elif arg == 'x' and 'input' in available_fields:
-                                    data_feed[arg] = 'input'
-                                    available_fields.remove('input')
-                                elif len(self._model.signature.inputs.key_list) == 1:
-                                    for item in available_fields:
-                                        data_shape = train_data[item].shape if len(
-                                            train_data[item].shape) > 2 else TensorShape([None])
-                                        if 'target' not in item and 'output' != item and data_shape == inshapes[
-                                            0].shape:
-                                            data_feed[arg] = item
-                                            available_fields.remove(item)
-                                            break
-                                else:
-                                    Warning(
-                                        'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-                                            arg))
+            if item in input_list and 'float' in str(getattr(train_data[item], 'dtype', '')):
+                train_data[item].require_grads = True
 
-                        # check for target
-                        if len(available_fields) > 0:
-                            if len(available_fields) == 1:
-                                data_feed['target'] = available_fields[0]
-                            else:
-                                for i in range(len(self.targets)):
-                                    arg = self.targets.key_list[i]
-                                    data_feed[arg] = ''
-                                    if len(train_data) == 1:
-                                        data_feed[self.targets.key_list[0]] = train_data.key_list[0]
-                                    elif arg in available_fields:
-                                        data_feed[arg] = arg
-                                        available_fields.remove(arg)
-                                    elif arg == 'target' and 'label' in available_fields:
-                                        data_feed[arg] = 'label'
-                                        available_fields.remove('label')
-                                    elif arg == 'target' and len(available_fields) == 1:
-                                        data_feed[arg] = available_fields[0]
-                                        available_fields.remove(available_fields[0])
-                                    elif len(available_fields) > 0:
-                                        target_shape = outshapes
-                                        for item in available_fields:
-                                            data_shape = list(train_data[item].shape) if len(
-                                                train_data[item].shape) > 1 else [None]
-                                            if target_shape == data_shape:
-                                                data_feed[arg] = item
-                                                available_fields.remove(item)
-                                            elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
-                                                    train_data[item].dtype)) and target_shape[:-1] == data_shape:
-                                                data_feed[arg] = item
-                                                available_fields.remove(item)
-                                            else:
-                                                Warning(
-                                                    'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-                                                        arg))
-                                # if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
-                                #     self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
-
-                        # if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
-                        #     self.training_context['data_feed'] = data_feed
-                        # elif '' not in data_feed.value_list:
-                        self.training_context['data_feed'] = data_feed
-
-                        ctx.print('data_feed', data_feed)
-            except:
-                PrintException()
-
-        # convert to tensor
-        try:
-            data_feed = self.training_context['data_feed']
-            input_list = [data_feed['input'] if arg == 'x' and 'input' in data_feed else data_feed[arg] for arg in
-                          self._model.signature.inputs.key_list]
-            for item in train_data.key_list:
-                if train_data[item].dtype is np.str_ or train_data[item].dtype is np.str_ or train_data[
-                    item].dtype.kind in {'U', 'S'}:
-                    train_data[item] = [s.decode() for s in train_data[item]]
+            if test_data is not None and item in test_data:
+                if getattr(getattr(test_data[item], 'dtype', None), 'kind', None) in {'U', 'S'}:
+                    test_data[item] = test_data[item].astype(str).tolist()
                 else:
-                    train_data[item] = to_tensor(train_data[item], device=get_device())
+                    test_data[item] = to_tensor(test_data[item], device=get_device())
 
-                if item in input_list and 'float' in str(train_data[item].dtype):
-                    train_data[item].require_grads = True
+        self.training_context['train_data'] = train_data
+        self.training_context['test_data'] = test_data
 
-                if test_data is not None and item in test_data:
-                    if test_data[item].dtype is np.str_ or test_data[item].dtype is np.str_ or test_data[
-                        item].dtype.kind in {'U', 'S'}:
-                        test_data[item] = [s.decode() for s in test_data[item]]
-                    else:
-                        test_data[item] = to_tensor(test_data[item], device=get_device())
 
-            self.training_context['train_data'] = train_data
-            self.training_context['test_data'] = test_data
-
-        except:
-            PrintException()
         train_data, test_data = super().do_on_data_received(self.training_context['train_data'],
                                                             self.training_context['test_data'])
         self.training_context['train_data'] = train_data
@@ -818,7 +647,7 @@ class Model(ModelBase,Layer):
         data = self.training_context['train_data'] if is_training or self.training_context['test_data'] is None or len(
             self.training_context['test_data']) == 0 else \
             self.training_context['test_data']
-        data_feed = self.training_context['data_feed']
+        data_feed = self._prepare_model_fields(data, validation=not is_training)
         model = self.training_context['current_model']
         if is_tensor(model):
             data['output'] = self._model
@@ -836,20 +665,12 @@ class Model(ModelBase,Layer):
             signature = model.signature
 
             output = try_map_args_and_call(model, data, data_feed, self.is_autocast_enabled)
-            if isinstance(output, (list, tuple)):
-                for i in range(len(output)):
-                    data[signature.outputs.key_list[i]] = output[i]
-            elif isinstance(output, (OrderedDict)):
-                for k, v in output.items():
-                    data[k] = v
-
-            else:
-                data[self.signature.outputs.key_list[0]] = output
-                if is_training and self.use_output_as_loss:
-                    this_loss = output.sum()
-                    self._add_loss_term(this_loss, 'sum')
-                    self.training_context['losses'].collect(signature.outputs.key_list[0],
-                                                            self.training_context['steps'], to_scalar(this_loss.copy()))
+            self._store_forward_outputs(data, output)
+            if is_training and self.use_output_as_loss and is_tensor(output):
+                this_loss = output.sum()
+                self._add_loss_term(this_loss, 'sum')
+                self.training_context['losses'].collect(signature.outputs.key_list[0],
+                                                        self.training_context['steps'], to_scalar(this_loss))
 
     def do_on_loss_calculation_start(self):
         super().do_on_loss_calculation_start()
@@ -858,7 +679,7 @@ class Model(ModelBase,Layer):
         super().do_on_loss_calculation_end()
 
     def do_calculate_losses(self):
-        pass
+        return super().do_calculate_losses()
 
     def get_current_loss(self):
         return self.training_context['current_loss']
@@ -1158,59 +979,7 @@ class Model(ModelBase,Layer):
                         self.do_calculate_forward(is_training=True)
 
 
-                self.do_on_loss_calculation_start()
-                # confirm singleton
-                # output=unpack_singleton(output)
-
-                # losss
-                for k, v in self._losses.items():
-                    if not hasattr(v, 'start_epoch') or (
-                            hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
-
-                        loss_weight = to_tensor(1.0)
-                        if k in self.loss_weights:
-                            loss_weight = self.loss_weights[k]
-                        loss_weight = to_tensor(loss_weight, 'float32')
-                        this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
-                                                          self.is_autocast_enabled)
-
-                        if isinstance(this_loss, tuple):
-                            overall_loss = to_tensor(0.0, requires_grad=True)
-                            for i in range(len(this_loss)):
-                                if any_abnormal_number(this_loss[i]):
-                                    raise FloatingPointError("Nonfinite loss: {0}".format(k))
-                                else:
-                                    # a leaf Variable that requires grad connotused in an in-place operation.
-                                    overall_loss = overall_loss + loss_weight * this_loss[i]
-                            self._add_loss_term(overall_loss, getattr(v, 'reduction', 'mean'), k,
-                                                getattr(v, 'gradient_denominator', None))
-
-                            if hasattr(v, 'as_metric') and v.as_metric == True:
-                                self.training_context['tmp_metrics'].collect(camel2snake(k),
-                                                                             self.training_context['steps'],
-                                                                             to_numpy(overall_loss))
-
-                            self.training_context['tmp_losses'].collect(k, self.training_context['steps'],
-                                                                        overall_loss)
-
-                        else:
-                            this_loss = loss_weight * this_loss
-                            if any_abnormal_number(this_loss):
-                                raise FloatingPointError("Nonfinite loss: {0}".format(k))
-                            else:
-                                # a leaf Variable that requires grad connotused in an in-place operation.
-                                self._add_loss_term(this_loss, getattr(v, 'reduction', 'mean'), k,
-                                                    getattr(v, 'gradient_denominator', None))
-
-                            if hasattr(v, 'as_metric') and v.as_metric == True:
-                                self.training_context['tmp_metrics'].collect(camel2snake(k),
-                                                                             self.training_context['steps'],
-                                                                             to_numpy(this_loss))
-
-                            self.training_context['tmp_losses'].collect(k, self.training_context['steps'],
-                                                                        this_loss)
-
-                self.do_on_loss_calculation_end()
+                self.do_calculate_losses()
 
                 for k, v in self._regs.items():
                     this_loss = to_tensor(0.0, requires_grad=True)

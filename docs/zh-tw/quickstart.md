@@ -171,3 +171,30 @@ plan.start_now()
 
 
 
+
+## 多輸入、多輸出的欄位對應
+
+PyTorch 與 TensorFlow trainer 共用平坦的欄位名稱。模型的具名輸出可由多個 loss 或 metric 共用。以下模型的 `forward(front, side)` 回傳含 `color_logits` 和 `size_logits` 的字典，資料集另提供兩組標籤。
+
+```python
+from trident import loss, metric
+
+model.data_feed = {"front": "front_image", "side": "side_image"}
+
+@loss
+def garment_loss(color_logits, color_id, size_logits, size_id):
+    return color_criterion(color_logits, color_id) + size_criterion(size_logits, size_id)
+
+@metric(input_names={"pred": "size_logits", "truth": "size_id"})
+def head_accuracy(pred, truth):
+    return accuracy(pred, truth)
+
+model.with_loss(garment_loss, as_metric=True)
+model.with_metric(head_accuracy, name="size_accuracy")
+model.with_metric(head_accuracy, name="color_accuracy",
+                  input_names={"pred": "color_logits", "truth": "color_id"})
+```
+
+範例中的 `color_criterion`、`size_criterion` 和 `accuracy` 是使用者選定的損失與指標函式。字典左側為函式參數，右側為實際欄位。單次註冊可覆寫裝飾器的對應，其次採用 trainer 的 `data_feed`。同名欄位可直接使用；常見的 `output`、`target` 也可使用角色與形狀相容的唯一候選。若有兩個候選，例外會列出欄位名稱與指定方式。
+
+函式可用 Trident 的 `TensorSpec` 實例註解參數，例如 `pred: TensorSpec(shape=TensorShape([None, 3]))`。這表示第二維固定為 3，batch 大小可變。`as_metric=True` 會把這次運算的原始 loss 數值脫離梯度後寫入指標紀錄；`loss_weight` 僅影響訓練用的加權損失。

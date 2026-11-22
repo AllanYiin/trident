@@ -2,49 +2,42 @@
 
 ## SNAPSHOT — 當前狀態
 
-最後更新：2026-11-23T04:03+08:00
+最後更新：2026-11-23T05:14+08:00
 交接狀態：verified
 
 ### 目標與授權範圍
 
-確認活化函數及相關已提交變更已推送到 origin/master。
+提交 PyTorch 與 TensorFlow 的 loss、metric 與 data_feed 欄位綁定，並推送至 origin/master。
 
 ### 目前進度
 
-遠端 master 已包含低記憶體功能 91d6438a、活化函數 cd259666，以及三後端 loss 對齊 bf968a27。
+兩個 trainer 已通過欄位對應與損失轉存回歸。
 
 ### 下一步
 
-本次推送已完成。
+以遠端 master 的 Git 記錄確認此次功能提交。
 
 ### DECISIONS
 
-- 既有 model.pt 適用同一載入入口。分片檔使用不可變名稱與原子索引切換；預設保留舊分片給進行中的讀取。
-- 原生 NF4 以 64 個值分塊，直接載入 packed weights。HF/bitsandbytes 權重透過既有 from_huggingface。分層/offload 配置用於推論。
-- 分塊 CausalLM/SFT 在詞表投影前選取有效目標並分塊，保留原有 shift、MoE 輔助 loss、梯度正規化與舊自訂 objective。
+- 沿用平坦欄位名稱，支援裝飾器預設與單次註冊覆寫。多個形狀相容的候選須明示來源。
+- as_metric=True 記錄脫離梯度的原始 loss 數值，包含零權重的情況。
 
 ### LANDMINES
 
-- Windows 單張 RTX 5090 Laptop GPU 驗證 CPU/GPU/disk offload。跨多張實體顯卡未測。
-- 顯存結果取決於模型尺寸、序列與精度。分片目錄的舊代占用磁碟。
-- Windows 的 ToolRegistry 子程序 10 秒逾時仍存在；JAX 選用依賴本輪未啟用。
+- 本機 Hugging Face 匯出測試因 accelerate 循環匯入而失敗。
 
 ### 證據索引
 
-- trident/optims/language/pretrained.py、quantization.py、trainer.py、objectives.py、generation.py
-- trident/models/pytorch_causal_lm.py、tests/test_language_low_memory.py、tests/test_language_memory_cuda.py
-- docs/zh-tw/low-memory.md、.github/workflows/language.yml
-- git log、git ls-remote、git merge-base；tests/test_llm_activations.py、tests/test_loss_parity.py
+- trident/optims/field_binding.py
+- tests/test_legacy_field_binding.py
+- docs/zh-tw/quickstart.md
+- .pytest_cache/field-binding-full.log
 
 ### VALIDATION
 
-- CPU 與 CUDA 七項功能及尖峰顯存 — PASS：tests/test_language_low_memory.py 與 tests/test_language_memory_cuda.py 共 9 passed；單批量 512 tokens、32768 詞表、FP32，訓練增量 215543808 → 64969728 bytes，prefill 增量 68433408 → 3565568 bytes。
-- 分片載入額外尖峰工作集 — PASS：兩個獨立 Windows CPU 程序載入同一個 26,219,520 參數模型；首次推論前舊路徑增加 212975616 bytes、meta＋mmap 分片增加 1286144 bytes。映射頁面延遲讀取，未計首次 forward。
-- 分層推論與舊入口 — PASS：最終 dispatcher 的 auto、CPU/GPU/disk 與預量化分支通過 3 項；自訂 objective、HF logits/export、adapter 匯出等 5 項通過；NF4＋LoRA＋分塊 loss＋activation offload 組合 CPU/CUDA 2 項通過。舊 model.pt 載回後覆寫原目錄亦成功。
-- 語法與差異格式 — PASS：12 個變更 Python 檔通過 AST 解析，git diff --check 成功。
-- Windows tests/ 完整回歸 — FAIL：188 passed、3 skipped、1 failed。唯一失敗為先前已記錄的 test_tool_execution_timeout_and_registry。完整記錄 .pytest_cache/lowmem-all-final.log。
-- 遠端分支與提交祖先 — PASS：git ls-remote origin refs/heads/master 回傳 bf968a27；git merge-base --is-ancestor 91d6438a bf968a27 結束碼 0。
-- 遠端 master 與活化函數提交 — PASS：git push 回報 Everything up-to-date，ls-remote 與本機 HEAD 均為 bf968a27，cd259666 是其祖先。
+- PyTorch 欄位綁定、訓練、梯度與儲存回歸 — PASS：73 passed，雙輸入雙輸出、註冊順序與 loss 呼叫計數均通過。
+- TensorFlow 欄位綁定、fit 與梯度回歸 — PASS：30 passed。
+- Windows tests/ 完整回歸 — FAIL：194 passed、6 skipped、2 failed。兩個 Hugging Face 匯出案例失敗；獨立 Python 匯入亦可重現。
 
 # HISTORY
 
@@ -150,3 +143,10 @@
 <!-- devnote-review:7c1e213cb7d48e302a4cf8a3 -->
 
 核對本機及遠端 master 均為 bf968a27，並確認其包含 cd259666。
+
+
+## [2026-11-23T05:14+08:00] 雙後端欄位綁定與 loss 轉存驗證
+
+<!-- devnote-review:06fd3cd1a0fb807e5e20740d -->
+
+新增 @loss、@metric、形狀驗證與歧義提示，確認 as_metric 只使用本批已計算的 loss。

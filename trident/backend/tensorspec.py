@@ -781,6 +781,8 @@ def get_signature(fn, name=None):
                 _shape = TensorShape([None])
                 _ndim = None
             signature.inputs[k] = TensorSpec(shape=_shape, ndim=_ndim, dtype=_dtype, optional=_optional, default=_default, name=k)
+            if annotation is Tensor:
+                signature.inputs[k]._generic_tensor = True
 
     if name is not None:
         signature.name = name

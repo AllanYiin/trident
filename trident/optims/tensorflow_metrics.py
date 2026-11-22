@@ -12,6 +12,7 @@ from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import nn_ops
 from trident.backend.common import get_session,addindent,get_time_suffix,get_function,get_class,format_time,get_terminal_size,snake2camel,camel2snake
 from trident.backend.tensorflow_ops import *
+from trident.optims.field_binding import validate_classification_shapes
 from trident.optims.losses import _check_logsoftmax_logit
 
 __all__ = ['accuracy','recall','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
@@ -52,6 +53,7 @@ def accuracy(output:Tensor, target:Tensor, topk:int=1, axis:int=-1,ignore_index:
     >>> accuracy(log_softmax(output),argmax(target,-1))
     <tf.Tensor: shape=(), dtype=float32, numpy=0.6666667>
     """
+    validate_classification_shapes(output, target, axis)
 
     output_tensor = output.copy().detach()
     target_tensor = target.copy().detach()

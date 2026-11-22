@@ -33,6 +33,9 @@ import torch.nn as nn
 
 from trident import __version__
 from trident import context
+from trident.optims.field_binding import prepare_objective
+from trident.optims.losses import FunctionLoss
+from trident.optims.metrics import FunctionMetric
 from trident.backend.decorators import *
 from trident.context import split_path, make_dir_if_need, sanitize_path
 from trident.backend.common import *
@@ -275,8 +278,9 @@ class Model(model.ModelBase,Layer):
                                                                                    need_exclude_batch_axis=True,
                                                                                    is_singleton=False) if out is not None else TensorSpec(
                             shape=TensorShape([None]), optional=True, name=k)
-            elif is_instance(out,'OrderedDict'):
-                for k, v in out.__dict__.items():
+            elif isinstance(out, dict):
+                output._signature.outputs.clear()
+                for k, v in out.items():
                     if v is not None or k in output._signature.outputs:
                         spec = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True,is_singleton=False,
                                                          name=k) if v is not None else TensorSpec(
@@ -286,9 +290,11 @@ class Model(model.ModelBase,Layer):
                             spec.default = output._signature.outputs[k].default
                         output._signature.outputs[k] = spec
             elif isinstance(out, (list, tuple)):
-                for i in range(len(out)):
-                    output._signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]),
-                                                                                 name='output_{0}'.format(i))
+                specs = output._signature.outputs
+                names = list(specs) if len(specs) == len(out) else [f'output{i}' for i in range(len(out))]
+                specs.clear()
+                for key, value in zip(names, out):
+                    specs[key] = TensorSpec.tensor_to_spec(value, name=key)
 
             self._model = output
             # self._model.signature.inputs.value_list[0]=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
@@ -467,6 +473,8 @@ class Model(model.ModelBase,Layer):
         return self
 
     def _register_loss_parameters(self, loss):
+        if isinstance(loss, FunctionLoss):
+            loss = loss.__wrapped__
         if self.optimizer is None or not isinstance(loss, nn.Module):
             return
         known = {id(parameter) for group in self.optimizer.param_groups for parameter in group['params']}
@@ -476,54 +484,13 @@ class Model(model.ModelBase,Layer):
             self.optimizer.add_param_group({'params': new})
 
     def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
-        alias = name
-
-        if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
-            alias = loss.__name__
-
-        if isinstance(loss, str):
-            if loss == 'output':
-                self.use_output_as_loss = True
-                return self
-            else:
-                loss_class = get_loss(loss)
-                alias = loss if loss_class is not None else alias
-                # loss can add mutiple times.
-                if alias in self._losses:
-                    dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
-                    alias = alias + '_' + str(len(dup_keys) + 1)
-                self._losses[alias] = loss_class(**kwargs) if len(kwargs) > 0 else loss_class()
-
-        elif inspect.isclass(
-                loss) and loss.__class__.__name__ == "type":  # The loss is a class but not initialized yet.
-            alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
-            if alias in self._losses:
-                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-
-            self._losses[alias] = loss(**kwargs) if len(kwargs) > 0 else loss()
-
-
-        elif not inspect.isfunction(loss) and callable(loss):  # The loss is a class and initialized yet.
-            alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
-            if alias in self._losses:
-                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._losses[alias] = loss
-
-        elif inspect.isfunction(loss):
-            if alias in self._losses:
-                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            spec = inspect.getfullargspec(loss)
-            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2:
-                self._losses[alias] = loss
-            else:
-                self._losses[alias] = partial(loss, **kwargs)
-
-        signature = self._losses[alias].signature if hasattr(self._losses[alias], "signature") else None
-        self._losses[alias].signature = get_signature(self._losses[alias], alias) if signature is None else signature
-        ctx.print(self._losses[alias].signature)
+        if isinstance(loss, str) and loss == 'output':
+            self.use_output_as_loss = True
+            return self
+        alias, objective, bindings = prepare_objective(
+            loss, name, kwargs.pop('input_names', None), kwargs, self._losses, get_loss, FunctionLoss)
+        self._losses[alias] = objective
+        self._field_bindings['loss', alias] = bindings
 
         # check whether the model is ended by SoftMax
         if self._model is not None and isinstance(self._model, Layer):
@@ -556,55 +523,18 @@ class Model(model.ModelBase,Layer):
         self.loss_weights[alias] = float(loss_weight)
         self._losses[alias].__name__ = alias
 
+        self._loss_logging[alias] = (start_epoch, as_metric)
         self._losses[alias].start_epoch = start_epoch
         self._losses[alias].as_metric = as_metric
         self._register_loss_parameters(self._losses[alias])
         return self
 
     def with_metric(self, metric, print_only=False, name='', **kwargs):
-
-        alias = name
-
-        if (alias is None or len(alias) == 0) and hasattr(metric, '__name__'):
-            alias = metric.__name__
-
-        if isinstance(metric, str):
-            alias = metric if len(alias) == 0 else alias
-            metric_fn = get_metric(metric)
-            if alias in self._metrics:
-                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric
-
-        elif inspect.isclass(metric) and metric.__class__.__name__ == "type":
-            alias = metric.__class__.__name__ if len(alias) == 0 else alias
-            if alias in self._metrics:
-                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric(**kwargs) if len(kwargs) > 0 else metric()
-        elif not inspect.isfunction(metric) and callable(metric):
-            alias = metric.__class__.__name__ if len(alias) == 0 else alias
-            if alias in self._metrics:
-                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric
-        elif inspect.isfunction(metric):
-            if alias in self._metrics:
-                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric
-        args = get_signature(metric, alias)
-        remove_key = [k for k in kwargs.keys() if k not in args.inputs or kwargs.get(k) is None]
-        for k in remove_key:
-            kwargs.pop(k)
-
-        if len(kwargs) > 0:
-            self._metrics[alias] = partial(metric, **kwargs)
-        self._metrics[alias].signature = args
-        print(self._metrics[alias].signature)
-        self._metrics[alias].__name__ = alias
-
-        self._metrics[alias].print_only = print_only
+        alias, objective, bindings = prepare_objective(
+            metric, name, kwargs.pop('input_names', None), kwargs, self._metrics, get_metric, FunctionMetric)
+        objective.print_only = print_only
+        self._metrics[alias] = objective
+        self._field_bindings['metric', alias] = bindings
         return self
 
     def with_regularizer(self, reg, reg_weight=None, **kwargs):
@@ -758,103 +688,9 @@ class Model(model.ModelBase,Layer):
         # for i in range(len(fields)):
         if train_data is None and test_data is None:
             return self.training_context['train_data'], self.training_context['test_data']
-        if self.training_context['steps'] == 0 and (
-                'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or len(
-            [v for v in self.training_context['data_feed'].value_list if v is None]) > 0):
-            data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context[
-                'data_feed']
-            if isinstance(self._model, Layer):
-
-                inshapes = self.inputs.value_list
-                outshapes = self.targets.value_list
-                available_fields = copy.deepcopy(train_data.key_list)
-                if train_data is not None:
-                    # check input
-                    for arg in self._model.signature.inputs.key_list:
-                        if arg in data_feed and data_feed[arg] in available_fields:
-                            available_fields.remove(data_feed[arg])
-                        else:
-                            data_feed[arg] = ''
-                            if len(train_data) == 1 and len(self._model.signature.inputs.key_list) == 1:
-                                data_feed[arg] = train_data.key_list[0]
-                                available_fields.remove(train_data.key_list[0])
-                            elif arg in available_fields:
-                                data_feed[arg] = arg
-                                available_fields.remove(arg)
-                            elif arg in ['x', 'input'] and 'data' in available_fields:
-                                data_feed[arg] = 'data'
-                                available_fields.remove('data')
-                            elif arg in ['x', 'input'] and 'image' in available_fields:
-                                data_feed[arg] = 'image'
-                                available_fields.remove('image')
-                            elif arg == 'x' and 'input' in available_fields:
-                                data_feed[arg] = 'input'
-                                available_fields.remove('input')
-                            elif len(self._model.signature.inputs.key_list) == 1:
-                                for item in available_fields:
-                                    data_shape = train_data[item].shape if len(
-                                        train_data[item].shape) > 2 else TensorShape([None])
-                                    if 'target' not in item and 'output' != item and data_shape == inshapes[
-                                        0].shape:
-                                        data_feed[arg] = item
-                                        available_fields.remove(item)
-                                        break
-                            else:
-                                Warning(
-                                    'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-                                        arg))
-
-                    # check for target
-                    if len(available_fields) > 0:
-                        if len(available_fields) == 1:
-                            data_feed['target'] = available_fields[0]
-                        else:
-                            for i in range(len(self.targets)):
-                                arg = self.targets.key_list[i]
-                                data_feed[arg] = ''
-                                if len(train_data) == 1:
-                                    data_feed[self.targets.key_list[0]] = train_data.key_list[0]
-                                elif arg in available_fields:
-                                    data_feed[arg] = arg
-                                    available_fields.remove(arg)
-                                elif arg == 'target' and 'label' in available_fields:
-                                    data_feed[arg] = 'label'
-                                    available_fields.remove('label')
-                                elif arg == 'target' and len(available_fields) == 1:
-                                    data_feed[arg] = available_fields[0]
-                                    available_fields.remove(available_fields[0])
-                                elif len(available_fields) > 0:
-                                    target_shape = outshapes
-                                    for item in available_fields:
-                                        data_shape = list(train_data[item].shape) if len(
-                                            train_data[item].shape) > 1 else [None]
-                                        if target_shape == data_shape:
-                                            data_feed[arg] = item
-                                            available_fields.remove(item)
-                                        elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
-                                                train_data[item].dtype)) and target_shape[:-1] == data_shape:
-                                            data_feed[arg] = item
-                                            available_fields.remove(item)
-                                        else:
-                                            Warning(
-                                                'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-                                                    arg))
-                            # if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
-                            #     self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
-
-                    # if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
-                    #     self.training_context['data_feed'] = data_feed
-                    # elif '' not in data_feed.value_list:
-                    self.training_context['data_feed'] = data_feed
-                    print('data_feed for {0} :'.format(self.name))
-                    print(json.dumps(data_feed, indent=4, sort_keys=True))
-
-
-        # convert to tensor
-        data_feed = self.training_context['data_feed']
-        input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list] if not is_tensor(
-            self._model) else []
-        for item in train_data.key_list:
+        feed = self._prepare_model_fields(train_data)
+        input_list = {feed[k] for k in self.signature.inputs if k in feed}
+        for item in train_data:
             if getattr(getattr(train_data[item], 'dtype', None), 'kind', None) in {'U', 'S'}:
                 train_data[item] = [s.item() for s in train_data[item]]
             else:

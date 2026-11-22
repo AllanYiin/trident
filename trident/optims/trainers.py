@@ -385,136 +385,14 @@ class TrainingPlan(object):
         return self
 
     def generate_datafeed(self, data_provider):
-        if data_provider.signature is None:
-            _ = data_provider.next()
-        # data_input=data_provider.traindata.data.symbol
-        # if len(data_provider.traindata.unpair)>0:
-        #     data_unpair = data_provider.traindata.unpair
-        data_symbols = iteration_tools.flatten([data_provider.traindata.data.symbol], iterable_types=(list, tuple))
-        label_symbols = iteration_tools.flatten([data_provider.traindata.label.symbol], iterable_types=(list, tuple))
-        unpair_symbols = iteration_tools.flatten([data_provider.traindata.unpair.symbol], iterable_types=(list, tuple))
-        if "" in label_symbols:
-            label_symbols.remove("")
-        if "" in unpair_symbols:
-            unpair_symbols.remove("")
+        def symbols(group):
+            return tuple(key for key in iteration_tools.flatten([group.symbol], iterable_types=(list, tuple)) if key)
 
-        for trainingitem, trainingitem_name in zip(self.training_items.value_list, self.training_names.value_list):
-            existing_data_feed = None
-            if 'data_feed' in trainingitem.training_context and trainingitem.training_context['data_feed'] is not None:
-                existing_data_feed = trainingitem.training_context['data_feed']
-            if not is_tensor(trainingitem._model) and not hasattr(trainingitem._model,
-                                                                  '_signature') or trainingitem._model._signature is None:
-                trainingitem._model._signature = get_signature(trainingitem._model)
-
-            data_feed = OrderedDict()
-            # datasets = data_provider.traindata.get_datasets()
-
-            available_items = list(
-                set(data_symbols + label_symbols + unpair_symbols + trainingitem.signature.outputs.key_list))
-            if "" in available_items:
-                available_items.remove("")
-
-            for inp in trainingitem.signature.inputs.key_list:
-                if existing_data_feed is not None and isinstance(existing_data_feed,
-                                                                 OrderedDict) and inp in existing_data_feed:
-                    data_feed[inp] = existing_data_feed[inp]
-                elif inp in data_symbols:
-                    data_feed[inp] = inp
-                    available_items.remove(inp)
-                elif inp in unpair_symbols:
-                    data_feed[inp] = inp
-                    available_items.remove(inp)
-                else:
-                    data_feed[inp] = None
-            for k, v in trainingitem._losses.items():
-                for inp in v.signature.inputs.key_list:
-                    if existing_data_feed is not None and inp in existing_data_feed:
-                        data_feed[inp] = existing_data_feed[inp]
-                    elif inp in data_feed and data_feed[inp] is not None:
-                        pass
-                    elif inp in label_symbols:
-                        data_feed[inp] = inp
-                        available_items.remove(inp)
-                    elif inp in unpair_symbols:
-                        data_feed[inp] = inp
-                        available_items.remove(inp)
-                    else:
-                        data_feed[inp] = None
-            for k, v in trainingitem._metrics.items():
-                for inp in v.signature.inputs.key_list:
-                    if existing_data_feed is not None and inp in existing_data_feed:
-                        data_feed[inp] = existing_data_feed[inp]
-                    elif inp in data_feed and data_feed[inp] is not None:
-                        pass
-                    elif inp in label_symbols:
-                        data_feed[inp] = inp
-                        available_items.remove(inp)
-                    elif inp in unpair_symbols:
-                        data_feed[inp] = inp
-                        available_items.remove(inp)
-                    else:
-                        data_feed[inp] = None
-            if 'output' in data_feed and data_feed['output'] is None:
-                data_feed['output'] = trainingitem.signature.outputs.key_list[0]
-            if 'x' in data_feed and data_feed['x'] is None:
-                if len(data_symbols) == 1 and data_symbols[0] in available_items:
-                    data_feed['x'] = data_symbols[0]
-                    available_items.remove(data_symbols[0])
-
-                if 'x' in available_items:
-                    data_feed['x'] = 'x'
-                    available_items.remove('x')
-                elif 'input' in available_items:
-                    data_feed['x'] = 'input'
-                    available_items.remove('input')
-            if len([item for item in data_feed.value_list if item is None]) == 0:
-                pass
-            else:
-
-                if len(trainingitem.signature.inputs) == len(data_symbols) == 1:
-                    # if trainingitem.signature.inputs.value_list[0].shape.is_compatible_with(data_provider.traindata.data.element_spec.shape):
-                    data_feed[trainingitem.signature.inputs.key_list[0]] = data_provider.traindata.data.symbol
-                    if data_provider.traindata.data.symbol in available_items:
-                        available_items.remove(data_provider.traindata.data.symbol)
-
-                if len(trainingitem.signature.outputs) == 1 and len(label_symbols) == 0:
-                    data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student",
-                                                                                                             "teacher")] = data_provider.traindata.data.symbol
-                    if data_provider.traindata.label.symbol in available_items:
-                        available_items.remove(data_provider.traindata.label.symbol)
-                elif len(trainingitem.signature.outputs) == len(label_symbols) == 1:
-                    data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student",
-                                                                                                             "teacher")] = data_provider.traindata.label.symbol
-                    # if data_provider.traindata.label.symbol in available_items:
-                    #     available_items.remove(data_provider.traindata.label.symbol)
-
-                for out in trainingitem.signature.outputs.key_list:  # fill the data_feed by key
-                    if out in available_items:  # output=putput
-                        data_feed[out] = out
-                        available_items.remove(out)
-
-                if 'target' in data_feed:
-                    if len(label_symbols) == 1 and label_symbols[0] in available_items:
-                        data_feed['target'] = label_symbols[0]
-                        available_items.remove(label_symbols[0])
-
-                for key in data_feed.keys():
-                    if data_feed[key]  is None and key in available_items:
-                        data_feed[key] = key
-                        available_items.remove(key)
-                    elif data_feed[key] is None:
-                        data_feed[key] = key
-
-                # elif out.replace("output","target").replace("student","teacher") in available_items:
-                #     data_feed[out] =out.replace("output","target").replace("student","teacher")
-                #     available_items.remove(out.replace("output","target").replace("student","teacher"))
-            if existing_data_feed is not None:
-                print('existing_data_feed',existing_data_feed)
-                data_feed.update(existing_data_feed)
-                print('updated_data_feed', data_feed)
-            trainingitem.training_context['data_feed'] = data_feed
-            ctx.print('data_feed for {0} :'.format(trainingitem_name))
-            ctx.print(json.dumps(data_feed, indent=4, sort_keys=True))
+        train = data_provider.traindata
+        for item in self.training_items.values():
+            inputs, labels = symbols(train.data) + symbols(train.unpair), symbols(train.label)
+            item._provider_fields = (inputs, labels)
+            item._prepare_model_fields(dict.fromkeys(inputs + labels), preview=True)
 
     def do_on_training_start(self):
         for callback in self.callbacks:

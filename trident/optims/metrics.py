@@ -33,6 +33,9 @@ elif _backend == 'tensorflow':
 
 
 
+from trident.optims.field_binding import FunctionObjective
+
+
 class Metric(object):
     def __init__(self, *args, **kwargs):
         super().__init__()
@@ -47,17 +50,25 @@ class Metric(object):
 
 
 
-def as_metric(format=None,aggregate='mean',name=None):
-    def _f(fun):
-        m=Metric
-        m.calculate_metric = fun
-        m.__name__ = m.__qualname__ = if_none(name,fun.__name__),
-        m.format=format
-        m.aggregate=aggregate
-        m.__doc__ = m.__doc__
-        m._signature = inspect.Signature(fun)
-    return _f
+class FunctionMetric(FunctionObjective, Metric):
+    """A Python function registered as a metric with reusable field bindings."""
 
+    calculate_metric = FunctionObjective.__call__
+
+
+def metric(fn=None, *, input_names=None, name=None):
+    def decorate(func):
+        return FunctionMetric(func, input_names=input_names, name=name)
+    return decorate if fn is None else decorate(fn)
+
+
+def as_metric(format=None, aggregate='mean', name=None):
+    def decorate(fn):
+        wrapped = metric(fn, name=name)
+        wrapped.format = format
+        wrapped.aggregate = aggregate
+        return wrapped
+    return decorate
 
 
 class RunningMeanStd(object):
